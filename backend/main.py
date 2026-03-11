@@ -215,6 +215,7 @@ async def root():
             "GET /session/{session_id}/report": "Generate HTML session report",
             "GET /session/{session_id}/messages-csv": "Download session messages annotation CSV",
             "GET /health": "Health check",
+            "GET /admin/session/{session_id}/messages": "List session messages for admin evaluation",
         },
     }
 
@@ -1091,6 +1092,40 @@ async def admin_reset_db(
         _experiment_id = ""
 
     return {"status": "experiment_deleted", "experiment_id": target_id}
+
+
+@app.get("/admin/session/{session_id}/messages")
+async def admin_session_messages(
+    session_id: str,
+    experiment_id: Optional[str] = None,
+    x_admin_key: str = Header(None),
+):
+    """Return ordered session messages for admin-side evaluation UI."""
+    _require_admin(x_admin_key)
+    eid = experiment_id or get_experiment_id()
+    pool = _get_pool()
+
+    async with pool.acquire() as conn:
+        belongs = await conn.fetchval(
+            "SELECT 1 FROM sessions WHERE session_id = $1 AND experiment_id = $2",
+            session_id,
+            eid,
+        )
+    if not belongs:
+        raise HTTPException(status_code=404, detail="Session not found for experiment")
+
+    messages = await message_repo.get_session_messages(pool, session_id)
+    return {
+        "messages": [
+            {
+                "message_id": m["message_id"],
+                "sender": m["sender"],
+                "content": m["content"],
+                "timestamp": m["timestamp"],
+            }
+            for m in messages
+        ]
+    }
 
 
 @app.get("/admin/sessions")

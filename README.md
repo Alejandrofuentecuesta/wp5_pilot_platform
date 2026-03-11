@@ -89,12 +89,13 @@ You can pause and resume experiments, as well as reset or delete them, from the 
 
 ### Dashboard
 
-After saving an experiment, the admin panel switches to a monitoring dashboard with four tabs:
+After saving an experiment, the admin panel switches to a monitoring dashboard with five tabs:
 
 ![Admin Dashboard](https://github.com/user-attachments/assets/8adf5502-a030-4294-8461-ac7dd7324096)
 
 - **Overview** — live statistics, per-group enrollment, experimental configuration, CSV token download, and quick actions to edit or duplicate an experiment as a new editable draft.
 - **Sessions** — table of all sessions with status, treatment group, token, timestamps, duration, and message count, plus export links (HTML report and CSV for ended sessions).
+- **Evaluate** — annotation workspace to label session messages (incivility, hate speech, threats, impoliteness, stance, human-like, notes) and download the annotated CSV.
 - **Logs** — real-time event stream, filterable by event type, with error highlighting.
 - **Settings** — pause and resume enrollment, danger zone for resetting sessions (keeps config and tokens) or permanently deleting an experiment and all its data; both require typing the experiment ID to confirm.
 

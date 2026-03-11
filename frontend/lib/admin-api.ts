@@ -270,3 +270,25 @@ export async function deleteExperiment(
   }
   return res.json()
 }
+
+
+export interface SessionMessageForEvaluation {
+  message_id: string
+  sender: string
+  content: string
+  timestamp: string
+}
+
+export async function getSessionMessagesForEvaluation(
+  key: string,
+  sessionId: string,
+  experimentId: string,
+): Promise<{ messages: SessionMessageForEvaluation[] }> {
+  const params = new URLSearchParams({ experiment_id: experimentId })
+  const res = await adminFetch(`/admin/session/${encodeURIComponent(sessionId)}/messages?${params.toString()}`, key)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to load session messages" }))
+    throw new Error(err.detail || "Failed to load session messages")
+  }
+  return res.json()
+}

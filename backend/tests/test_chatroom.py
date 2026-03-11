@@ -299,6 +299,15 @@ class TestSessionLifecycle:
             assert call_kwargs["reason"] == "completed"
 
     @pytest.mark.asyncio
+    async def test_stop_exports_session_csv(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            await session.start()
+            with patch("platforms.chatroom.export_session_messages_csv") as mock_export:
+                await session.stop(reason="completed")
+                mock_export.assert_called_once_with(session.session_id, session.state.messages)
+
+    @pytest.mark.asyncio
     async def test_stop_cancels_clock_task(self):
         with _patch_externals() as mocks:
             session, _ = _create_session()

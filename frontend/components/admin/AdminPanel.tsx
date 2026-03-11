@@ -389,6 +389,32 @@ export default function AdminPanel() {
     }
   }, [adminKey])
 
+
+  const handleDuplicateExperiment = useCallback(async (sourceExperimentId: string) => {
+    try {
+      const { config, description: desc, starts_at, ends_at } = await getExperimentConfig(adminKey, sourceExperimentId)
+      const copyId = `${sourceExperimentId}_copy_${Date.now()}`
+
+      setSimulation(config.simulation)
+      setExperimental(config.experimental)
+      setExperimentId(copyId)
+      setDescription(desc ? `${desc} (copy)` : `Copy of ${sourceExperimentId}`)
+      setStartsAt(starts_at ? starts_at.slice(0, 16) : "")
+      setEndsAt(ends_at ? ends_at.slice(0, 16) : "")
+      setEditingExperimentId(null) // Duplicate creates a new experiment
+      // Mark LLM tests as passed since copied config was previously validated
+      setLlmTestResults({ director: true, performer: true, moderator: true })
+      setTokens({ groups: {} }) // Require generating fresh tokens for the new experiment
+      setSessionTouched(false)
+      setSaveBanner(null)
+      setSaveError("")
+      setStep(0)
+      setView("wizard")
+    } catch (e) {
+      console.error("Failed to duplicate experiment", e)
+    }
+  }, [adminKey])
+
   const handleBackToDashboard = useCallback(() => {
     setView("dashboard")
     setEditingExperimentId(null)
@@ -445,6 +471,7 @@ export default function AdminPanel() {
           adminKey={adminKey}
           onOpenWizard={handleOpenWizard}
           onEditExperiment={handleEditExperiment}
+          onDuplicateExperiment={handleDuplicateExperiment}
           saveBanner={saveBanner}
           onDismissBanner={() => setSaveBanner(null)}
           theme={theme}

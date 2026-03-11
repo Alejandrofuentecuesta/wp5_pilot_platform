@@ -19,18 +19,20 @@ import type { SessionSummary, TokenGroupStats, SimulationConfig, ExperimentalCon
 import type { ExperimentSummary, AdminEvent } from "../../lib/admin-api"
 import { API_BASE } from "../../lib/constants"
 import type { AdminTheme } from "./AdminPanel"
+import EvaluateTab from "./EvaluateTab"
 
 interface DashboardProps {
   adminKey: string
   onOpenWizard: () => void
   onEditExperiment: (experimentId: string) => void
+  onDuplicateExperiment: (experimentId: string) => void
   saveBanner: string | null
   onDismissBanner: () => void
   theme: AdminTheme
   onToggleTheme: () => void
 }
 
-type Tab = "overview" | "sessions" | "logs" | "settings"
+type Tab = "overview" | "sessions" | "evaluate" | "logs" | "settings"
 
 /* ── Theme toggle button ─────────────────────────────────────────────────── */
 
@@ -163,6 +165,7 @@ function StatusDot({ label, online }: { label: string; online: boolean | null })
 const TAB_LABELS: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
   { key: "sessions", label: "Sessions", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
+  { key: "evaluate", label: "Evaluate", icon: "M9 12h6m-6 4h6M7 4h10a2 2 0 012 2v12a2 2 0 01-2 2H7a2 2 0 01-2-2V6a2 2 0 012-2z" },
   { key: "logs", label: "Event Log", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
   { key: "settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
 ]
@@ -233,6 +236,7 @@ function OverviewTab({
   tokenStats,
   onEdit,
   onCloned,
+  onDuplicate,
 }: {
   adminKey: string
   experimentId: string
@@ -240,6 +244,7 @@ function OverviewTab({
   tokenStats: TokenGroupStats[]
   onEdit: () => void
   onCloned: (newId: string) => void
+  onDuplicate: () => void
 }) {
   const [config, setConfig] = useState<{
     simulation: SimulationConfig
@@ -384,6 +389,12 @@ function OverviewTab({
               className="text-xs font-medium text-admin-accent hover:text-admin-accent-hover transition-colors"
             >
               Clone Experiment
+            </button>
+            <button
+              onClick={onDuplicate}
+              className="text-xs font-medium text-admin-accent hover:text-admin-accent-hover transition-colors"
+            >
+              Duplicate Experiment
             </button>
             <button
               onClick={async () => {
@@ -1183,7 +1194,7 @@ function SessionTable({
               <th className="px-3 py-1.5 text-right">% Incivil</th>
               <th className="px-3 py-1.5 text-right">% Like-minded</th>
               <th className="px-3 py-1.5 text-right">{showEndReason ? "End Reason" : "Duration"}</th>
-              <th className="px-3 py-1.5 text-right">Report</th>
+              <th className="px-3 py-1.5 text-right">Exports</th>
             </tr>
           </thead>
           <tbody>
@@ -1199,14 +1210,26 @@ function SessionTable({
                   {showEndReason ? (s.end_reason || "-") : formatDuration(s.started_at, s.ended_at)}
                 </td>
                 <td className="px-3 py-1.5 text-right">
-                  <a
-                    href={`${API_BASE}/session/${s.session_id}/report`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-admin-accent hover:text-admin-accent-hover font-medium"
-                  >
-                    View
-                  </a>
+                  <div className="inline-flex items-center gap-2">
+                    <a
+                      href={`${API_BASE}/session/${s.session_id}/report`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-admin-accent hover:text-admin-accent-hover font-medium"
+                    >
+                      View
+                    </a>
+                    {s.status === "ended" || s.status === "crashed" ? (
+                      <a
+                        href={`${API_BASE}/session/${s.session_id}/messages-csv`}
+                        className="text-admin-accent hover:text-admin-accent-hover font-medium"
+                      >
+                        CSV
+                      </a>
+                    ) : (
+                      <span className="text-admin-faint">CSV</span>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -1245,7 +1268,7 @@ function TokenProgress({ stats }: { stats: TokenGroupStats[] }) {
 
 /* ── Main Dashboard ───────────────────────────────────────────────────────── */
 
-export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, saveBanner, onDismissBanner, theme, onToggleTheme }: DashboardProps) {
+export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, onDuplicateExperiment, saveBanner, onDismissBanner, theme, onToggleTheme }: DashboardProps) {
   const [experiments, setExperiments] = useState<ExperimentSummary[]>([])
   const [selectedExperimentId, setSelectedExperimentId] = useState("")
   const [sessions, setSessions] = useState<SessionSummary[]>([])
@@ -1386,6 +1409,7 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, sa
                       refreshExperiments()
                       setSelectedExperimentId(newId)
                     }}
+                    onDuplicate={() => onDuplicateExperiment(selectedExperimentId)}
                   />
                 )}
                 {activeTab === "sessions" && (
@@ -1393,6 +1417,13 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, sa
                     sessions={sessions}
                     adminKey={adminKey}
                     experimentId={selectedExperimentId}
+                  />
+                )}
+                {activeTab === "evaluate" && (
+                  <EvaluateTab
+                    adminKey={adminKey}
+                    experimentId={selectedExperimentId}
+                    sessions={sessions}
                   />
                 )}
                 {activeTab === "logs" && (

@@ -18,9 +18,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from platforms import SimulationSession
+from models import Message
 from utils.session_manager import session_manager
 from utils import token_manager
 from utils.log_viewer import generate_html_from_lines
+from utils.session_csv_exporter import export_session_messages_csv
 from db import connection as db_conn
 from cache import redis_client
 from db.repositories import message_repo, session_repo, event_repo, config_repo
@@ -211,7 +213,9 @@ async def root():
             "POST /session/start": "Start a new session",
             "WS /ws/{session_id}": "WebSocket for chat communication",
             "GET /session/{session_id}/report": "Generate HTML session report",
+            "GET /session/{session_id}/messages-csv": "Download session messages annotation CSV",
             "GET /health": "Health check",
+            "GET /admin/session/{session_id}/messages": "List session messages for admin evaluation",
         },
     }
 
@@ -485,6 +489,43 @@ async def session_report(session_id: str):
 
     html = generate_html_from_lines(buf, session_id)
     return HTMLResponse(content=html)
+
+
+@app.get("/session/{session_id}/messages-csv")
+async def session_messages_csv(session_id: str):
+    """Generate and return an annotation-ready CSV for a session's messages."""
+    pool = _get_pool()
+
+    row = await session_repo.get_session(pool, session_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    raw_messages = await message_repo.get_session_messages(pool, session_id)
+    messages = [
+        Message(
+            sender=m["sender"],
+            content=m["content"],
+            timestamp=datetime.fromisoformat(m["timestamp"]),
+            message_id=m["message_id"],
+            reply_to=m.get("reply_to"),
+            quoted_text=m.get("quoted_text"),
+            mentions=m.get("mentions"),
+            liked_by=set(m.get("liked_by", [])),
+            reported=m.get("reported", False),
+            metadata={k: v for k, v in m.items() if k not in (
+                "sender", "content", "timestamp", "message_id", "reply_to",
+                "quoted_text", "mentions", "liked_by", "reported", "likes_count",
+            )},
+        )
+        for m in raw_messages
+    ]
+
+    csv_path = export_session_messages_csv(session_id, messages)
+    with open(csv_path, "rb") as f:
+        payload = f.read()
+
+    headers = {"Content-Disposition": f'attachment; filename="{session_id}.csv"'}
+    return StreamingResponse(io.BytesIO(payload), media_type="text/csv", headers=headers)
 
 
 # ── Admin endpoints (guarded by ADMIN_PASSPHRASE env var) ────────────────────
@@ -1110,6 +1151,40 @@ async def admin_reset_db(
         _experiment_id = ""
 
     return {"status": "experiment_deleted", "experiment_id": target_id}
+
+
+@app.get("/admin/session/{session_id}/messages")
+async def admin_session_messages(
+    session_id: str,
+    experiment_id: Optional[str] = None,
+    x_admin_key: str = Header(None),
+):
+    """Return ordered session messages for admin-side evaluation UI."""
+    _require_admin(x_admin_key)
+    eid = experiment_id or get_experiment_id()
+    pool = _get_pool()
+
+    async with pool.acquire() as conn:
+        belongs = await conn.fetchval(
+            "SELECT 1 FROM sessions WHERE session_id = $1 AND experiment_id = $2",
+            session_id,
+            eid,
+        )
+    if not belongs:
+        raise HTTPException(status_code=404, detail="Session not found for experiment")
+
+    messages = await message_repo.get_session_messages(pool, session_id)
+    return {
+        "messages": [
+            {
+                "message_id": m["message_id"],
+                "sender": m["sender"],
+                "content": m["content"],
+                "timestamp": m["timestamp"],
+            }
+            for m in messages
+        ]
+    }
 
 
 @app.get("/admin/sessions")

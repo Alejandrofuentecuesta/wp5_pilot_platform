@@ -5,6 +5,7 @@ from typing import Callable, Dict, List, Optional
 
 from models import Message, Agent, SessionState
 from utils import Logger
+from utils.session_csv_exporter import export_session_messages_csv
 from utils.llm.llm_manager import LLMManager
 from agents.agent_manager import AgentManager
 from agents.STAGE.classifier import DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
@@ -225,6 +226,12 @@ class SimulationSession:
         self.logger.log_session_end(reason)
         # Flush any pending fire-and-forget log tasks before closing DB connection.
         await self.logger.drain()
+
+        try:
+            csv_path = export_session_messages_csv(self.session_id, self.state.messages)
+            print(f"Session {self.session_id} CSV exported: {csv_path}")
+        except Exception as exc:
+            print(f"[Session {self.session_id}] CSV export failed: {exc}")
 
         try:
             pool = db_conn.get_pool()

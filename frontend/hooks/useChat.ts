@@ -29,6 +29,10 @@ export function useChat() {
     {},
   )
 
+  // Session end state
+  const [sessionEnded, setSessionEnded] = useState(false)
+  const [redirectUrl, setRedirectUrl] = useState<string | null>(null)
+
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
   const [replyTo, setReplyTo] = useState<Message | null>(null)
@@ -81,6 +85,12 @@ export function useChat() {
       setTypingCount((prev) => prev + 1)
     } else if (obj && obj.event_type === "typing_stop") {
       setTypingCount((prev) => Math.max(0, prev - 1))
+    } else if (obj && obj.event_type === "session_end") {
+      const url = (obj as Record<string, unknown>).redirect_url as string | undefined
+      setSessionEnded(true)
+      setRedirectUrl(url || null)
+      // Clear session so user can't refresh back into the chatroom
+      setSessionId(null)
     } else if (obj && obj.event_type === "user_block") {
       const evt = obj as unknown as BlockEvent
       if (evt.blocked && typeof evt.blocked === "object") {
@@ -90,7 +100,7 @@ export function useChat() {
       const message = obj as unknown as Message
       setMessages((prev) => [...prev, message])
     }
-  }, [setBlockedSenders])
+  }, [setBlockedSenders, setSessionId])
 
   const handleSessionInvalid = useCallback(() => {
     setSessionId(null)
@@ -303,5 +313,8 @@ export function useChat() {
     blockedSenders,
     // Typing indicator
     typingCount,
+    // Session end
+    sessionEnded,
+    redirectUrl,
   }
 }

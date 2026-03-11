@@ -48,6 +48,7 @@ export interface TreatmentGroup {
 
 export interface ExperimentalConfig {
   chatroom_context: string
+  redirect_url: string
   groups: Record<string, TreatmentGroup>
 }
 

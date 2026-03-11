@@ -22,6 +22,8 @@ already seeded), and resumes the clock loop.
 from __future__ import annotations
 
 import asyncio
+import json as _json
+from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 
 from platforms import SimulationSession
@@ -149,31 +151,50 @@ class SessionManager:
           → reconstruct from DB and resume.
         - Crash recovery: DB shows 'active' but Redis has no entry
           → reconstruct from DB.
+
+        If the session expired during downtime it is marked ended in the DB
+        and None is returned so the frontend falls through to the login screen.
         """
         # Fast path — already live in this process.
         session = await self.get_session(session_id)
         if session:
             return session
 
-        # Check Redis for cross-worker metadata.
-        r = redis_client.get_redis()
-        cached = await redis_client.get_cached_session(r, session_id)
-        if cached and cached.get("status") == "active":
-            return await self._reconstruct_session(session_id, websocket_send, cached)
-
-        # Fall back to DB (covers crash-recovery scenario).
+        # Both the Redis and DB paths need the DB row to check expiry and
+        # restore the original start time.
         pool = db_conn.get_pool()
         row = await session_repo.get_session(pool, session_id)
-        if row and row["status"] == "active":
-            meta = {
-                "treatment_group": row["treatment_group"],
-                "user_name": row["user_name"],
-                "experiment_id": row["experiment_id"],
-                "status": row["status"],
-            }
-            return await self._reconstruct_session(session_id, websocket_send, meta)
+        if not row or row["status"] != "active":
+            return None
 
-        return None
+        # Check if the session already expired during downtime.
+        started_at = row.get("started_at")
+        if started_at:
+            sim_cfg = row.get("simulation_config")
+            if isinstance(sim_cfg, str):
+                sim_cfg = _json.loads(sim_cfg)
+            duration = (sim_cfg or {}).get("session_duration_minutes", 15)
+            elapsed = (datetime.now(timezone.utc) - started_at).total_seconds() / 60
+            if elapsed >= duration:
+                await session_repo.end_session(
+                    pool,
+                    session_id=session_id,
+                    reason="duration_expired_on_recovery",
+                    ended_at=datetime.now(timezone.utc),
+                )
+                r = redis_client.get_redis()
+                await redis_client.invalidate_session(r, session_id)
+                print(f"Session {session_id} expired during downtime — marked ended")
+                return None
+
+        meta = {
+            "treatment_group": row["treatment_group"],
+            "user_name": row["user_name"],
+            "experiment_id": row["experiment_id"],
+            "status": row["status"],
+            "started_at": started_at,
+        }
+        return await self._reconstruct_session(session_id, websocket_send, meta)
 
     async def _reconstruct_session(
         self,
@@ -211,6 +232,7 @@ class SessionManager:
                 _preloaded_messages=msg_rows,
                 _preloaded_blocks=block_rows,
                 _config=config,
+                _started_at=meta.get("started_at"),
             )
             self._sessions[session_id] = session
 

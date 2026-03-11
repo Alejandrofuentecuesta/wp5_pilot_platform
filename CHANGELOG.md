@@ -1,5 +1,36 @@
 # Changelog
 
+## [1.3.0] - 2026-03-10
+
+### Upstream Merge: Session End Redirect + UX Improvements
+
+Merged changes from the upstream repository ([what-if-horizon/wp5_pilot_platform](https://github.com/what-if-horizon/wp5_pilot_platform)) to align the codebase.
+
+**What upstream changed:**
+
+- **Completion redirect URL**: Experiments can now specify a URL to redirect participants to after their session ends (e.g. a Qualtrics survey). Configured in Step 1 of the wizard.
+- **ThankYouScreen**: New post-session screen that shows "Thank you for participating!" and auto-redirects to the survey URL after 2 seconds.
+- **Session end event via Redis**: Backend publishes a `session_end` event through Redis when a session expires or stops, including the `redirect_url`.
+- **Sequential turns**: Upstream reverted from concurrent to sequential agent turns (`asyncio.Lock`) for research validity — each Director invocation sees all prior messages in order.
+- **Crash recovery fix**: Session timer accuracy preserved on container restart via `_started_at` parameter passed to `SimulationSession`.
+- **WebSocket reconnect fix**: Client no longer reconnects after a clean session-end close (code 1000, reason `session_ended`).
+
+**Files replaced or merged:**
+| File | Action |
+|------|--------|
+| `backend/platforms/chatroom.py` | Merged: added redirect_url, sequential turns, `_publish_session_end()` |
+| `backend/utils/session_manager.py` | Replaced with upstream (crash recovery fix) |
+| `frontend/components/ThankYouScreen.tsx` | New file from upstream |
+| `frontend/components/ChatApp.tsx` | Replaced with upstream (shows ThankYouScreen on session end) |
+| `frontend/hooks/useChat.ts` | Merged: added `sessionEnded` / `redirectUrl` state handling |
+| `frontend/hooks/useWebSocket.ts` | Merged: added reconnect-on-clean-close fix |
+| `frontend/lib/admin-types.ts` | Added `redirect_url` field to `ExperimentalConfig` |
+| `frontend/components/admin/AdminPanel.tsx` | Added `redirect_url` default and wizard prop |
+| `frontend/components/admin/steps/StepExperiment.tsx` | Added redirect URL input field |
+| `frontend/components/admin/steps/StepReview.tsx` | Added "Completion redirect" review row |
+
+---
+
 ## [1.2.0] - 2026-03-10
 
 ### New Feature: Clone Experiment

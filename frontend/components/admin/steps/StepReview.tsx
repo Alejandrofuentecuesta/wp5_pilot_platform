@@ -70,6 +70,7 @@ export default function StepReview({
         <KV label="Experiment ID" value={experimentId || "(not set)"} />
         <KV label="Starts at" value={startsAt ? new Date(startsAt).toLocaleString() : "(not set)"} />
         <KV label="Ends at" value={endsAt ? new Date(endsAt).toLocaleString() : "(not set)"} />
+        <KV label="Completion redirect" value={experimental.redirect_url || "(built-in thank-you page)"} />
       </Section>
 
       <Section title="Session & Agents">

@@ -12,6 +12,8 @@ interface StepExperimentProps {
   setStartsAt: (v: string) => void
   endsAt: string
   setEndsAt: (v: string) => void
+  redirectUrl: string
+  setRedirectUrl: (v: string) => void
   adminKey: string
   isEditing?: boolean
 }
@@ -25,6 +27,8 @@ export default function StepExperiment({
   setStartsAt,
   endsAt,
   setEndsAt,
+  redirectUrl,
+  setRedirectUrl,
   adminKey,
   isEditing = false,
 }: StepExperimentProps) {
@@ -90,6 +94,23 @@ export default function StepExperiment({
             placeholder="Brief description of this experiment run..."
             className="w-full px-3 py-2 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30 resize-vertical"
           />
+        </div>
+
+        <div>
+          <label htmlFor="redirect-url" className="block text-sm font-medium text-admin-text mb-1">
+            Completion Redirect URL <span className="text-admin-faint font-normal">(optional)</span>
+          </label>
+          <input
+            id="redirect-url"
+            type="url"
+            value={redirectUrl}
+            onChange={(e) => setRedirectUrl(e.target.value)}
+            placeholder="https://your-survey-tool.com/survey?id=..."
+            className="w-full px-3 py-2 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30"
+          />
+          <p className="text-xs text-admin-faint mt-1">
+            Participants will be redirected here after their session ends. Leave blank to show the built-in thank-you page.
+          </p>
         </div>
       </div>
 

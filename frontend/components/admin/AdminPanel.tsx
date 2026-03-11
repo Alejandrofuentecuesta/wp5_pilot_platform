@@ -79,6 +79,7 @@ Return ONLY a JSON object with keys:
 
 const DEFAULT_EXPERIMENTAL: ExperimentalConfig = {
   chatroom_context: "Chatroom de discusion sobre temas politicos y sociales de actualidad. Los participantes son ciudadanos adultos con interes en el debate publico. El tono es informal, similar a Reddit o Twitter.",
+  redirect_url: "",
   groups: {
     civil_pro: {
       features: [],
@@ -467,6 +468,8 @@ export default function AdminPanel() {
       setStartsAt={setStartsAt}
       endsAt={endsAt}
       setEndsAt={setEndsAt}
+      redirectUrl={experimental.redirect_url}
+      setRedirectUrl={(v) => setExperimental((prev) => ({ ...prev, redirect_url: v }))}
       adminKey={adminKey}
       isEditing={!!editingExperimentId}
     />,

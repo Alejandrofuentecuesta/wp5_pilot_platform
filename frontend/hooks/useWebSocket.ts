@@ -54,8 +54,13 @@ export function useWebSocket({
       ws.onclose = (event: CloseEvent) => {
         setIsConnected(false)
 
-        if (event && event.code === 1008) {
+        if (event && (event.code === 1008 || event.code === 1011)) {
           onSessionInvalidRef.current()
+          return
+        }
+
+        // Don't reconnect if the session ended normally.
+        if (event && event.code === 1000 && event.reason === "session_ended") {
           return
         }
 

@@ -403,7 +403,7 @@ export default function AdminPanel() {
       setEndsAt(ends_at ? ends_at.slice(0, 16) : "")
       setEditingExperimentId(null) // Duplicate creates a new experiment
       // Mark LLM tests as passed since copied config was previously validated
-      setLlmTestResults({ director: true, performer: true, moderator: true })
+      setLlmTestResults({ director: true, performer: true, moderator: true, classifier: true })
       setTokens({ groups: {} }) // Require generating fresh tokens for the new experiment
       setSessionTouched(false)
       setSaveBanner(null)

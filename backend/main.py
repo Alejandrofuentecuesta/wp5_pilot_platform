@@ -609,6 +609,10 @@ class TestLLMRequest(BaseModel):
     max_tokens: int = 64
 
 
+def _bsc_startup_retry_message() -> str:
+    return "The BSC model may still be starting on MareNostrum 5. Please wait 10 minutes and try again."
+
+
 @app.post("/admin/test-llm")
 async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
     """Send a short test prompt to an LLM provider and return the raw call details.
@@ -669,9 +673,17 @@ async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
         )
     except Exception as e:
         response_text = None
-        error_msg = str(e)
+        error_msg = (
+            _bsc_startup_retry_message()
+            if provider == "bsc"
+            else str(e)
+        )
     else:
-        error_msg = None if response_text else "No response returned (model may be unavailable)"
+        error_msg = None if response_text else (
+            _bsc_startup_retry_message()
+            if provider == "bsc"
+            else "No response returned (model may be unavailable)"
+        )
     finally:
         # Clean up client resources.
         if hasattr(client, "aclose"):

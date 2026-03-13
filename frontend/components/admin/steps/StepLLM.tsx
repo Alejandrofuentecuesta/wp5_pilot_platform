@@ -27,6 +27,18 @@ const ROLE_DESCRIPTIONS: Record<Role, string> = {
 
 const inputClass = "w-full px-3 py-2 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30"
 
+function providersForRole(role: Role, llmProviders: string[], currentProvider: string): string[] {
+  if (role === "performer") {
+    return llmProviders
+  }
+
+  const filtered = llmProviders.filter((provider) => provider !== "bsc")
+  if (currentProvider === "bsc") {
+    return ["bsc", ...filtered]
+  }
+  return filtered
+}
+
 function LLMRoleConfig({
   role,
   config,
@@ -58,6 +70,7 @@ function LLMRoleConfig({
   const maxTokens = config[`${prefix}_max_tokens` as keyof SimulationConfig] as number
 
   const suggestedModels = providerModels[provider] ?? []
+  const availableProviders = providersForRole(role, llmProviders, provider)
   const isCustomModel = suggestedModels.length > 0 && !suggestedModels.includes(model)
   const [showCustomInput, setShowCustomInput] = useState(isCustomModel)
 
@@ -141,6 +154,11 @@ function LLMRoleConfig({
       {expanded && (
         <div className="px-5 pb-4 border-t border-admin-border pt-3 space-y-3">
           <p className="text-xs text-admin-muted">{ROLE_DESCRIPTIONS[role]}</p>
+          {provider === "bsc" && (
+            <p className="text-xs text-admin-faint">
+              BSC Incivility is tuned for short social-media style replies and is recommended for the Performer role.
+            </p>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -150,7 +168,7 @@ function LLMRoleConfig({
                 onChange={(e) => handleProviderChange(e.target.value)}
                 className={inputClass}
               >
-                {llmProviders.map((p) => (
+                {availableProviders.map((p) => (
                   <option key={p} value={p}>{p}</option>
                 ))}
               </select>

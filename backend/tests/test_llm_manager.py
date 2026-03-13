@@ -223,3 +223,9 @@ class TestCreateClient:
             MockGemini.return_value = MagicMock()
             client = _create_client(None)
             MockGemini.assert_called_once()
+
+    def test_bsc_provider_routes_to_bsc_client(self):
+        with patch("utils.llm.provider.llm_bsc.BSCClient") as MockBSC:
+            MockBSC.return_value = MagicMock()
+            client = _create_client("bsc", model="incivility")
+            MockBSC.assert_called_once_with(model_name="incivility")

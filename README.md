@@ -40,6 +40,16 @@ docker compose up
 
 The backend will be available at `http://localhost:8000` and the frontend at `http://localhost:3000`.
 
+### BSC performer integration
+
+The platform now includes the BSC WHAT-IF incivility API as an LLM provider for the `Performer` role.
+
+- Provider id in the admin wizard: `bsc`
+- Suggested model: `incivility`
+- Environment variables: `BSC_API_KEY` and optional `BSC_API_BASE_URL`
+
+Use this when you want short, social-media style replies from the performer while keeping a stronger general model for the Director. Integration notes and API behavior are documented in [docs/BSC-INCIVILITY-API.md](docs/BSC-INCIVILITY-API.md).
+
 ### Arranque directo desde el escritorio
 
 Si quieres iniciar la plataforma con doble clic desde el escritorio, usa los launchers incluidos:
@@ -101,6 +111,13 @@ If no experiment is currently active, the admin panel will direct you to a setup
 Once an experiment is saved, its configuration is locked in and cannot be changed.
 
 You can pause and resume experiments, as well as reset or delete them, from the dashboard (see below).
+
+If you want to try the BSC model first, set the LLM pipeline like this:
+
+- `Director`: a strong general model such as Anthropic or Mistral
+- `Performer`: `bsc` / `incivility`
+- `Moderator`: a reliable extraction model
+- `Classifier`: a reliable structured-output model
 
 
 ### Dashboard

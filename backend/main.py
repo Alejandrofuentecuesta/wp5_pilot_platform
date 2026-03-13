@@ -3,6 +3,7 @@ import io
 import json
 import os
 import secrets
+import socket
 import string
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
@@ -52,6 +53,26 @@ ADMIN_PASSPHRASE = os.environ.get("ADMIN_PASSPHRASE", "")
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "")  # comma-separated, e.g. "https://example.com"
 
 
+
+async def _retry_startup_dependency(name: str, connect_coro_factory, attempts: int = 20, delay_seconds: float = 1.0):
+    """Retry a startup dependency connection to tolerate transient DNS/network errors."""
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return await connect_coro_factory()
+        except (socket.gaierror, OSError, ConnectionError, TimeoutError) as e:
+            last_error = e
+            print(f"{name} connection attempt {attempt}/{attempts} failed: {type(e).__name__}: {e}")
+            if attempt < attempts:
+                await asyncio.sleep(delay_seconds)
+        except Exception as e:
+            last_error = e
+            print(f"{name} connection attempt {attempt}/{attempts} failed: {type(e).__name__}: {e}")
+            if attempt < attempts:
+                await asyncio.sleep(delay_seconds)
+
+    raise RuntimeError(f"Failed to connect to {name} after {attempts} attempts: {last_error}")
+
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
 
 @asynccontextmanager
@@ -63,12 +84,19 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
             "please set ADMIN_PASSPHRASE in your .env file."
         )
 
-    # Connect to PostgreSQL and apply schema.
-    pool = await db_conn.init_pool(DATABASE_URL)
+    # Connect to PostgreSQL and apply schema (with retries for transient DNS issues).
+    pool = await _retry_startup_dependency(
+        "PostgreSQL",
+        lambda: db_conn.init_pool(DATABASE_URL),
+    )
     print(f"DB pool ready ({DATABASE_URL})")
 
-    # Connect to Redis.
-    await redis_client.init_redis(REDIS_URL)
+    # Connect to Redis (with retries for transient DNS issues) and verify with PING.
+    r = await _retry_startup_dependency(
+        "Redis",
+        lambda: redis_client.init_redis(REDIS_URL),
+    )
+    await r.ping()
     print(f"Redis ready ({REDIS_URL})")
 
     # Warn about missing LLM API keys (they're only needed at runtime,

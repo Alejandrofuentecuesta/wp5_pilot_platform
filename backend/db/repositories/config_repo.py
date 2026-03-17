@@ -58,7 +58,7 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         if len(set(name.strip() for name in anames)) != na:
             raise ValueError("Agent names must be unique")
 
-    agent_personas = out.get("agent_personas", [""] * na)
+    agent_personas = out.get("agent_personas") or [""] * na
     if not isinstance(agent_personas, list) or not all(isinstance(x, str) for x in agent_personas):
         raise ValueError("'agent_personas' must be a list of strings")
     if len(agent_personas) != na:

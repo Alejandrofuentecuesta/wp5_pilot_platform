@@ -34,11 +34,18 @@ def _create_client(provider: str, model: str = None, temperature: float = None, 
     elif provider == "konstanz":
         from .provider.llm_konstanz import KonstanzClient
         return KonstanzClient(**kwargs)
+    elif provider == "bsc":
+        from .provider.llm_bsc import BSCClient
+        return BSCClient(**kwargs)
     elif provider == "none":
         from .local.llm_salamandra import SalamandraClient
         return SalamandraClient(**kwargs)
     else:
-        raise RuntimeError(f"Unknown llm_provider: '{provider}'. Supported: 'gemini', 'huggingface', 'anthropic', 'mistral', 'konstanz', 'None' (local)")
+        raise RuntimeError(
+            "Unknown llm_provider: "
+            f"'{provider}'. Supported: 'gemini', 'huggingface', 'anthropic', "
+            "'mistral', 'konstanz', 'bsc', 'None' (local)"
+        )
 
 
 def _create_client_from_config(simulation_config: dict):

@@ -11,7 +11,6 @@ import StepTreatments from "./steps/StepTreatments"
 import StepTokens from "./steps/StepTokens"
 import StepReview from "./steps/StepReview"
 import { getMeta, saveConfig, updateConfig, listExperiments, getExperimentConfig } from "../../lib/admin-api"
-import { createExperimental3x3Preset } from "../../lib/treatment-presets"
 import type {
   SimulationConfig,
   ExperimentalConfig,
@@ -68,6 +67,22 @@ const DEFAULT_EXPERIMENTAL: ExperimentalConfig = {
 }
 
 const DEFAULT_TOKENS: TokenConfig = { groups: {} }
+
+function getDefaultExperimentalConfig(): ExperimentalConfig {
+  return {
+    ...DEFAULT_EXPERIMENTAL,
+    groups: Object.fromEntries(
+      Object.entries(DEFAULT_EXPERIMENTAL.groups).map(([name, group]) => [
+        name,
+        {
+          ...group,
+          features: [...(group.features ?? [])],
+          seed: group.seed ? { ...group.seed } : undefined,
+        },
+      ])
+    ),
+  }
+}
 
 /** Format a Date as a `datetime-local` input value (YYYY-MM-DDTHH:MM). */
 function toLocalDatetimeString(d: Date): string {
@@ -128,7 +143,7 @@ export default function AdminPanel() {
 
   // Config state — initialized with frontend defaults for new experiments
   const [simulation, setSimulation] = useState<SimulationConfig>(DEFAULT_SIMULATION)
-  const [experimental, setExperimental] = useState<ExperimentalConfig>(DEFAULT_EXPERIMENTAL)
+  const [experimental, setExperimental] = useState<ExperimentalConfig>(getDefaultExperimentalConfig())
   const [tokens, setTokens] = useState<TokenConfig>(DEFAULT_TOKENS)
   const [meta, setMeta] = useState<AdminMeta | null>(null)
 
@@ -308,7 +323,7 @@ export default function AdminPanel() {
   const handleOpenWizard = useCallback(() => {
     // Reset wizard to fresh defaults for a new experiment
     setSimulation({ ...DEFAULT_SIMULATION })
-    setExperimental(createExperimental3x3Preset())
+    setExperimental(getDefaultExperimentalConfig())
     setTokens({ ...DEFAULT_TOKENS })
     setExperimentId("")
     setDescription("")

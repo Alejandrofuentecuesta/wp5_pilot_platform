@@ -170,7 +170,7 @@ export default function StepTreatments({ config, onChange, availableFeatures }: 
       ...config,
       groups: {
         ...config.groups,
-        [newName]: { features: [], internal_validity_criteria: "" },
+        [newName]: { features: ["news_article", "gate_until_user_post"], internal_validity_criteria: "" },
       },
     })
   }
@@ -205,7 +205,7 @@ export default function StepTreatments({ config, onChange, availableFeatures }: 
       for (const b of dimB.levels) {
         const slug = `${a}_${b}`.toLowerCase().replace(/[^a-z0-9_]/g, "_")
         groups[slug] = {
-          features: [],
+          features: ["news_article", "gate_until_user_post"],
           internal_validity_criteria: "",
         }
       }

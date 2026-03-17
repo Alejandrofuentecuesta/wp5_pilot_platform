@@ -63,7 +63,7 @@ const DEFAULT_EXPERIMENTAL: ExperimentalConfig = {
   ecological_validity_criteria: "The conversation should be dialogic: agents should react to the state of the conversation, rather than talking past each other. There should be a mix of action types: approx. 30% message, 30% likes, 20% replies, 20% @mentions. Messages must be short (1-2 sentences, under 30 words) — brief, punchy contributions like in a real group chat. Tone and style should vary, with some containing emojis or punctuation. Messages should be 'reddit-like': informal, self-aware, and sometimes include internet humour, slang, and abbreviations.",
   redirect_url: "",
   groups: {
-    condition_1: { features: [], internal_validity_criteria: "" },
+    condition_1: { features: ["news_article", "gate_until_user_post"], internal_validity_criteria: "" },
   },
 }
 

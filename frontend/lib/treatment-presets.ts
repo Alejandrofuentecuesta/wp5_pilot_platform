@@ -279,7 +279,7 @@ export function createExperimental3x3Preset(): ExperimentalConfig {
 
   for (const [groupName, internal_validity_criteria] of Object.entries(GROUP_TREATMENTS)) {
     groups[groupName] = {
-      features: [],
+      features: ["news_article", "gate_until_user_post"],
       internal_validity_criteria,
     }
   }

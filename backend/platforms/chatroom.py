@@ -156,6 +156,14 @@ class SimulationSession:
             director_evaluate_prompt_template=self.simulation_config.get("director_evaluate_prompt_template") or None,
             moderator_prompt_template=self.simulation_config.get("moderator_prompt_template") or None,
             humanize_output=bool(self.simulation_config.get("humanize_output", False)),
+            humanize_rules={
+                "strip_hashtags":       self.simulation_config.get("humanize_strip_hashtags", True),
+                "strip_inverted_punct": self.simulation_config.get("humanize_strip_inverted_punct", True),
+                "word_subs":            self.simulation_config.get("humanize_word_subs", True),
+                "drop_accents":         self.simulation_config.get("humanize_drop_accents", True),
+                "comma_spacing":        self.simulation_config.get("humanize_comma_spacing", True),
+                "max_emoji":            int(self.simulation_config.get("humanize_max_emoji", 1)),
+            },
             rng=self._rng,
         )
 

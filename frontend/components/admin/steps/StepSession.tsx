@@ -230,18 +230,6 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
             />
             <p className="text-xs text-admin-faint mt-1">Number of the performer&apos;s own recent messages included in its prompt. Helps avoid repetition. Set to 0 to disable.</p>
           </div>
-          <div className="col-span-2">
-            <label className="flex items-center gap-3 cursor-pointer">
-              <div
-                onClick={() => onChange({ humanize_output: !config.humanize_output })}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${config.humanize_output ? "bg-admin-accent" : "bg-admin-border"}`}
-              >
-                <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${config.humanize_output ? "translate-x-4" : "translate-x-1"}`} />
-              </div>
-              <span className="text-sm font-medium text-admin-text">Humanize output</span>
-            </label>
-            <p className="text-xs text-admin-faint mt-1 ml-12">Applies informal Spanish chatroom style to agent messages: removes hashtags, drops ¿/¡, contracts words (que→q, porque→xq), strips accents randomly, limits emoji.</p>
-          </div>
         </div>
       </div>
     </div>

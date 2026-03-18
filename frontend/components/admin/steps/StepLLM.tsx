@@ -424,6 +424,72 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
         </button>
       </div>
 
+      {/* ── Post-processing ─────────────────────────────────────────── */}
+      <div className="bg-admin-surface rounded-lg border border-admin-border overflow-hidden">
+        <div className="px-5 py-3 flex items-center justify-between">
+          <div>
+            <span className="text-sm font-semibold text-admin-text">Post-processing</span>
+            <span className="text-xs text-admin-faint ml-2">Humanizer — applied after Moderator, before Classifier</span>
+          </div>
+          {/* Master toggle */}
+          <button
+            onClick={() => onChange({ humanize_output: !config.humanize_output })}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${config.humanize_output ? "bg-admin-accent" : "bg-admin-border"}`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${config.humanize_output ? "translate-x-4" : "translate-x-1"}`} />
+          </button>
+        </div>
+
+        {config.humanize_output && (
+          <div className="px-5 pb-4 border-t border-admin-border pt-3 space-y-3">
+            <p className="text-xs text-admin-muted">Select which transformations to apply to every agent message.</p>
+
+            <div className="grid grid-cols-2 gap-x-6 gap-y-2.5">
+              {([
+                { key: "humanize_strip_hashtags",       label: "Strip hashtags",             desc: "Removes #hashtag tokens" },
+                { key: "humanize_strip_inverted_punct", label: "Remove ¿ / ¡",               desc: "Drops Spanish inverted punctuation" },
+                { key: "humanize_word_subs",            label: "Word contractions",           desc: "que→q, porque→xq, también→tb, para→pa…" },
+                { key: "humanize_drop_accents",         label: "Drop accents randomly",       desc: "~40% chance to strip all accents" },
+                { key: "humanize_comma_spacing",        label: "Remove space after comma",    desc: "hola,como estás instead of hola, como" },
+              ] as { key: keyof SimulationConfig; label: string; desc: string }[]).map(({ key, label, desc }) => {
+                const val = config[key] !== false  // default true when master is on
+                return (
+                  <label key={key} className="flex items-start gap-2.5 cursor-pointer">
+                    <button
+                      onClick={() => onChange({ [key]: !val } as Partial<SimulationConfig>)}
+                      className={`mt-0.5 flex-shrink-0 relative inline-flex h-4 w-7 items-center rounded-full transition-colors ${val ? "bg-admin-accent" : "bg-admin-border"}`}
+                    >
+                      <span className={`inline-block h-3 w-3 rounded-full bg-white shadow transition-transform ${val ? "translate-x-3" : "translate-x-0.5"}`} />
+                    </button>
+                    <div>
+                      <p className="text-xs font-medium text-admin-text leading-tight">{label}</p>
+                      <p className="text-xs text-admin-faint">{desc}</p>
+                    </div>
+                  </label>
+                )
+              })}
+
+              {/* Emoji limit — numeric input */}
+              <div className="flex items-start gap-2.5">
+                <div className="mt-0.5 flex-shrink-0 w-7" />
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-admin-text leading-tight">Max emoji per message</p>
+                  <input
+                    type="number"
+                    min={-1}
+                    max={10}
+                    value={config.humanize_max_emoji ?? 1}
+                    onChange={(e) => onChange({ humanize_max_emoji: parseInt(e.target.value) ?? 1 })}
+                    className="mt-1 w-20 px-2 py-1 border border-admin-border rounded text-xs bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent"
+                  />
+                  <p className="text-xs text-admin-faint mt-0.5">-1 = unlimited, 0 = none</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
     </div>
   )
 }

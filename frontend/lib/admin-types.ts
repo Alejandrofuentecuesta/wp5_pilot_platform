@@ -28,6 +28,10 @@ export interface SimulationConfig {
   classifier_top_p: number
   classifier_max_tokens: number
   classifier_prompt_template?: string
+  performer_prompt_template?: string
+  director_action_prompt_template?: string
+  director_evaluate_prompt_template?: string
+  moderator_prompt_template?: string
   evaluate_interval: number
   action_window_size: number
   performer_memory_size: number

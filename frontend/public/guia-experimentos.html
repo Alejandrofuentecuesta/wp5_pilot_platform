@@ -1,0 +1,2351 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Guia interactiva de experimentos | WP5 / STAGElab</title>
+  <style>
+    :root {
+      --bg: #f6efe4;
+      --bg-2: #ead9c4;
+      --paper: rgba(255, 251, 246, 0.76);
+      --paper-strong: rgba(255, 248, 240, 0.94);
+      --ink: #201915;
+      --muted: #63564b;
+      --line: rgba(32, 25, 21, 0.12);
+      --accent: #b3472e;
+      --accent-soft: rgba(179, 71, 46, 0.11);
+      --teal: #0f7a72;
+      --teal-soft: rgba(15, 122, 114, 0.1);
+      --gold: #b78c1d;
+      --gold-soft: rgba(183, 140, 29, 0.11);
+      --shadow: 0 18px 45px rgba(49, 29, 14, 0.12);
+      --radius-xl: 26px;
+      --radius-lg: 18px;
+      --radius-md: 14px;
+      --radius-sm: 10px;
+      --max: 1220px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Avenir Next", "Segoe UI Variable", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(183, 140, 29, 0.18), transparent 26%),
+        radial-gradient(circle at 88% 12%, rgba(15, 122, 114, 0.18), transparent 24%),
+        linear-gradient(180deg, #f9f3ea 0%, #f4ecdf 48%, #ecdfcc 100%);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(32, 25, 21, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(32, 25, 21, 0.03) 1px, transparent 1px);
+      background-size: 34px 34px;
+      mask-image: linear-gradient(180deg, rgba(0, 0, 0, 0.55), transparent 88%);
+    }
+
+    a {
+      color: inherit;
+    }
+
+    main {
+      width: min(calc(100vw - 32px), var(--max));
+      margin: 0 auto 72px;
+    }
+
+    .hero {
+      width: min(calc(100vw - 32px), var(--max));
+      margin: 22px auto 18px;
+      padding: 34px;
+      border: 1px solid rgba(32, 25, 21, 0.08);
+      border-radius: calc(var(--radius-xl) + 6px);
+      background:
+        radial-gradient(circle at top right, rgba(15, 122, 114, 0.16), transparent 28%),
+        radial-gradient(circle at left center, rgba(179, 71, 46, 0.14), transparent 22%),
+        linear-gradient(135deg, rgba(255, 250, 244, 0.93), rgba(248, 239, 228, 0.88));
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -44px;
+      bottom: -44px;
+      width: 180px;
+      height: 180px;
+      border-radius: 50%;
+      border: 1px solid rgba(32, 25, 21, 0.08);
+      background: rgba(255, 255, 255, 0.35);
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 0.76rem;
+      color: var(--accent);
+      font-weight: 700;
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin: 0;
+      font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+      line-height: 1.02;
+      letter-spacing: -0.03em;
+    }
+
+    h1 {
+      font-size: clamp(2.2rem, 5vw, 4.7rem);
+      max-width: 10.8ch;
+    }
+
+    h2 {
+      font-size: clamp(1.55rem, 2vw, 2.15rem);
+      margin-bottom: 12px;
+    }
+
+    h3 {
+      font-size: 1.24rem;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.62;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.55fr 1fr;
+      gap: 26px;
+      margin-top: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-copy {
+      display: grid;
+      gap: 16px;
+      max-width: 70ch;
+    }
+
+    .badge-row,
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .badge,
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 9px 13px;
+      border-radius: 999px;
+      border: 1px solid rgba(32, 25, 21, 0.09);
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--ink);
+      font-size: 0.92rem;
+      font-weight: 600;
+      box-shadow: 0 6px 18px rgba(49, 29, 14, 0.06);
+    }
+
+    .hero-panel,
+    .panel,
+    .callout,
+    .detail,
+    .prompt-panel,
+    .search-panel {
+      border: 1px solid var(--line);
+      background: var(--paper);
+      border-radius: var(--radius-xl);
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-panel {
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .hero-stats {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .stat {
+      padding: 14px;
+      border-radius: var(--radius-lg);
+      background: rgba(255, 255, 255, 0.6);
+      border: 1px solid rgba(32, 25, 21, 0.07);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 1.5rem;
+      color: var(--ink);
+      margin-bottom: 4px;
+      letter-spacing: -0.04em;
+    }
+
+    .stat span {
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    .section-nav {
+      width: min(calc(100vw - 32px), var(--max));
+      margin: 0 auto 18px;
+      position: sticky;
+      top: 10px;
+      z-index: 15;
+      border: 1px solid rgba(32, 25, 21, 0.08);
+      border-radius: 999px;
+      background: rgba(253, 249, 243, 0.78);
+      backdrop-filter: blur(18px);
+      box-shadow: 0 14px 28px rgba(49, 29, 14, 0.08);
+      padding: 10px 12px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+
+    .section-nav a,
+    .switcher button,
+    .prompt-tab,
+    .pipeline-tab,
+    .pipeline-step {
+      appearance: none;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font: inherit;
+      cursor: pointer;
+      transition: transform 180ms ease, background-color 180ms ease, color 180ms ease, border-color 180ms ease;
+    }
+
+    .section-nav a {
+      text-decoration: none;
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.94rem;
+    }
+
+    .section-nav a:hover,
+    .section-nav a:focus-visible {
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.84);
+      outline: none;
+      transform: translateY(-1px);
+    }
+
+    section {
+      margin-top: 28px;
+      scroll-margin-top: 88px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: end;
+      margin-bottom: 18px;
+    }
+
+    .section-head p {
+      max-width: 74ch;
+    }
+
+    .search-panel {
+      padding: 18px;
+      margin-bottom: 16px;
+      display: grid;
+      gap: 12px;
+    }
+
+    .search-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .search-row input {
+      width: 100%;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(32, 25, 21, 0.12);
+      background: rgba(255, 255, 255, 0.82);
+      color: var(--ink);
+      font: inherit;
+      outline: none;
+      transition: border-color 180ms ease, box-shadow 180ms ease;
+    }
+
+    .search-row input:focus {
+      border-color: rgba(179, 71, 46, 0.45);
+      box-shadow: 0 0 0 4px rgba(179, 71, 46, 0.08);
+    }
+
+    .search-status {
+      color: var(--muted);
+      font-size: 0.92rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .grid.cols-2 {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .grid.cols-3 {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .panel {
+      padding: 22px;
+      display: grid;
+      gap: 14px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .panel::before {
+      content: "";
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 5px;
+      background: linear-gradient(90deg, var(--accent), var(--gold), var(--teal));
+      opacity: 0.8;
+    }
+
+    .panel.kicker-teal::before {
+      background: linear-gradient(90deg, var(--teal), #3eb38e, var(--gold));
+    }
+
+    .panel.kicker-gold::before {
+      background: linear-gradient(90deg, var(--gold), #cba748, var(--accent));
+    }
+
+    .mini-label {
+      text-transform: uppercase;
+      letter-spacing: 0.16em;
+      font-size: 0.74rem;
+      font-weight: 800;
+      color: var(--accent);
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+      padding: 0;
+      margin: 0;
+      list-style: none;
+    }
+
+    .list li {
+      position: relative;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .list li::before {
+      content: "";
+      position: absolute;
+      top: 0.7em;
+      left: 0;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 5px rgba(179, 71, 46, 0.12);
+    }
+
+    .soft-box {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid rgba(32, 25, 21, 0.07);
+    }
+
+    .soft-box strong {
+      color: var(--ink);
+    }
+
+    .callout {
+      padding: 22px;
+      margin-top: 16px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .callout.warn {
+      background: linear-gradient(135deg, rgba(183, 140, 29, 0.14), rgba(255, 251, 246, 0.82));
+    }
+
+    .callout.info {
+      background: linear-gradient(135deg, rgba(15, 122, 114, 0.12), rgba(255, 251, 246, 0.82));
+    }
+
+    .callout.alert {
+      background: linear-gradient(135deg, rgba(179, 71, 46, 0.14), rgba(255, 251, 246, 0.82));
+    }
+
+    .switcher {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 6px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.64);
+      border: 1px solid rgba(32, 25, 21, 0.08);
+    }
+
+    .switcher button,
+    .prompt-tab,
+    .pipeline-tab {
+      padding: 10px 14px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+
+    .switcher button.active,
+    .prompt-tab.active,
+    .pipeline-tab.active {
+      background: var(--ink);
+      color: #fff8ef;
+      box-shadow: 0 8px 20px rgba(32, 25, 21, 0.12);
+    }
+
+    .wizard-steps {
+      display: grid;
+      gap: 16px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .step-card {
+      padding: 22px;
+      border-radius: var(--radius-xl);
+      border: 1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255, 251, 246, 0.88), rgba(247, 238, 228, 0.78));
+      box-shadow: var(--shadow);
+      display: grid;
+      gap: 12px;
+    }
+
+    .step-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      align-items: start;
+    }
+
+    .step-num {
+      min-width: 42px;
+      min-height: 42px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--ink);
+      color: #fff8ef;
+      font-weight: 800;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      border-spacing: 0;
+      overflow: hidden;
+      border-radius: 14px;
+    }
+
+    thead th {
+      text-align: left;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--muted);
+      padding: 12px 12px;
+      background: rgba(255, 255, 255, 0.76);
+      border-bottom: 1px solid var(--line);
+    }
+
+    tbody td {
+      padding: 12px;
+      border-bottom: 1px solid rgba(32, 25, 21, 0.08);
+      vertical-align: top;
+      color: var(--muted);
+      line-height: 1.5;
+      background: rgba(255, 255, 255, 0.42);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    code,
+    .code {
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+      font-size: 0.93em;
+      background: rgba(32, 25, 21, 0.06);
+      color: var(--ink);
+      border-radius: 8px;
+      padding: 2px 6px;
+    }
+
+    .path {
+      display: inline-block;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: rgba(32, 25, 21, 0.05);
+      border: 1px solid rgba(32, 25, 21, 0.08);
+      color: var(--ink);
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+      font-size: 0.82rem;
+      overflow-wrap: anywhere;
+    }
+
+    .pipeline-shell {
+      display: grid;
+      gap: 16px;
+    }
+
+    .pipeline-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pipeline-grid {
+      display: grid;
+      grid-template-columns: 320px minmax(0, 1fr);
+      gap: 16px;
+    }
+
+    .pipeline-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .pipeline-step {
+      text-align: left;
+      padding: 14px 16px;
+      border-radius: 16px;
+      border: 1px solid rgba(32, 25, 21, 0.1);
+      background: rgba(255, 255, 255, 0.64);
+      display: grid;
+      gap: 4px;
+    }
+
+    .pipeline-step strong {
+      color: var(--ink);
+      font-size: 0.98rem;
+    }
+
+    .pipeline-step span {
+      color: var(--muted);
+      font-size: 0.88rem;
+    }
+
+    .pipeline-step.active {
+      background: linear-gradient(135deg, rgba(179, 71, 46, 0.14), rgba(255, 255, 255, 0.9));
+      border-color: rgba(179, 71, 46, 0.28);
+      transform: translateX(4px);
+    }
+
+    .detail {
+      padding: 22px;
+      display: grid;
+      gap: 18px;
+    }
+
+    .detail-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .detail-card {
+      padding: 14px 16px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.64);
+      border: 1px solid rgba(32, 25, 21, 0.08);
+    }
+
+    .detail-card h4 {
+      font-size: 0.97rem;
+      margin-bottom: 6px;
+    }
+
+    .prompt-tabs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 14px;
+    }
+
+    .prompt-panel {
+      display: none;
+      padding: 22px;
+      gap: 16px;
+    }
+
+    .prompt-panel.active {
+      display: grid;
+      animation: fadeIn 240ms ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(6px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .prompt-meta {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .tag-cloud {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 7px 10px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.72);
+      border: 1px solid rgba(32, 25, 21, 0.08);
+      font-size: 0.84rem;
+      color: var(--ink);
+      font-weight: 700;
+    }
+
+    details {
+      border-radius: 16px;
+      border: 1px solid rgba(32, 25, 21, 0.1);
+      background: rgba(255, 255, 255, 0.58);
+      overflow: hidden;
+    }
+
+    summary {
+      cursor: pointer;
+      padding: 14px 16px;
+      font-weight: 800;
+      color: var(--ink);
+      list-style: none;
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    summary::after {
+      content: "+";
+      float: right;
+      color: var(--accent);
+      font-size: 1.15rem;
+      line-height: 1;
+    }
+
+    details[open] summary::after {
+      content: "-";
+    }
+
+    pre {
+      margin: 0;
+      padding: 0 16px 16px;
+      overflow-x: auto;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: var(--ink);
+      line-height: 1.52;
+      font-family: "SFMono-Regular", "Menlo", "Consolas", monospace;
+      font-size: 0.85rem;
+    }
+
+    .source-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .source-card {
+      padding: 16px;
+      border-radius: 18px;
+      border: 1px solid rgba(32, 25, 21, 0.1);
+      background: rgba(255, 255, 255, 0.66);
+      display: grid;
+      gap: 8px;
+    }
+
+    .muted-note {
+      font-size: 0.92rem;
+    }
+
+    .filterable.is-hidden {
+      display: none;
+    }
+
+    footer {
+      width: min(calc(100vw - 32px), var(--max));
+      margin: 32px auto 42px;
+      padding: 18px 20px;
+      border-radius: 22px;
+      background: rgba(255, 251, 246, 0.7);
+      border: 1px solid rgba(32, 25, 21, 0.08);
+      color: var(--muted);
+      box-shadow: 0 12px 28px rgba(49, 29, 14, 0.06);
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .grid.cols-2,
+      .grid.cols-3,
+      .pipeline-grid,
+      .source-grid,
+      .prompt-meta,
+      .detail-grid,
+      .wizard-steps {
+        grid-template-columns: 1fr;
+      }
+
+      .hero {
+        padding: 24px;
+      }
+
+      .section-head {
+        align-items: start;
+        flex-direction: column;
+      }
+
+      .search-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 640px) {
+      main,
+      .hero,
+      .section-nav,
+      footer {
+        width: min(calc(100vw - 20px), var(--max));
+      }
+
+      .hero-stats {
+        grid-template-columns: 1fr;
+      }
+
+      .panel,
+      .callout,
+      .detail,
+      .prompt-panel,
+      .step-card {
+        padding: 18px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <p class="eyebrow">WP5 / STAGElab</p>
+    <div class="hero-grid">
+      <div class="hero-copy">
+        <h1>Variables que puedes cambiar y workflow que sigue antes de contestar</h1>
+        <p>
+          Esta guia esta enfocada en dos preguntas operativas: que variables puedes tocar en tu experimento
+          y que hace exactamente el sistema antes de producir una respuesta visible. El objetivo no es tanto
+          explicar arquitectura general como dejar claro que controla cada capa, que decide cada paso y que
+          cosas no puede hacer cada etapa del pipeline.
+        </p>
+        <div class="badge-row">
+          <span class="badge">Matriz de variables configurables</span>
+          <span class="badge">Workflow previo a cada respuesta</span>
+          <span class="badge">Puede / no puede por etapa</span>
+          <span class="badge">UI, API y codigo separados</span>
+        </div>
+        <div class="chip-row">
+          <span class="chip">Fecha del snapshot: 17 de marzo de 2026</span>
+          <span class="chip">Archivo: <span class="code">frontend/public/guia-experimentos.html</span></span>
+        </div>
+      </div>
+      <aside class="hero-panel">
+        <h3>Lectura rapida</h3>
+        <p>
+          Lo importante para operar el sistema es esto: el experimento se guarda como JSON por experimento,
+          pero la respuesta visible no la decide un unico prompt. Antes de salir al chat pasa por gating,
+          evaluacion, seleccion de accion, redaccion, moderacion y clasificacion, y cada paso tiene limites distintos.
+        </p>
+        <div class="hero-stats">
+          <div class="stat">
+            <strong>4</strong>
+            <span>roles LLM configurables desde la UI</span>
+          </div>
+          <div class="stat">
+            <strong>2</strong>
+            <span>niveles practicos de cambio: variables visibles y variables ocultas</span>
+          </div>
+          <div class="stat">
+            <strong>1s</strong>
+            <span>tick loop base del runtime</span>
+          </div>
+          <div class="stat">
+            <strong>8</strong>
+            <span>pasos relevantes antes de que salga un mensaje de agente</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </header>
+
+  <nav class="section-nav">
+    <a href="#snapshot">Snapshot</a>
+    <a href="#variables">Variables</a>
+    <a href="#pipeline">Antes de responder</a>
+    <a href="#wizard">Wizard</a>
+    <a href="#prompts">Prompts</a>
+    <a href="#changes">Avanzado</a>
+    <a href="#sources">Fuentes</a>
+  </nav>
+
+  <main>
+    <section id="snapshot">
+      <div class="section-head">
+        <div>
+          <h2>Snapshot del estado actual</h2>
+          <p>
+            Usa el buscador para filtrar hallazgos, campos, prompts o notas de implementacion.
+          </p>
+        </div>
+      </div>
+
+      <div class="search-panel">
+        <div class="search-row">
+          <input id="searchInput" type="search" placeholder="Busca: classifier_prompt_template, personas, evaluate_interval, 3x3, news_article...">
+          <div id="searchStatus" class="search-status">Mostrando todo</div>
+        </div>
+        <div class="chip-row">
+          <span class="chip">Pistas utiles: <span class="code">agent_personas</span></span>
+          <span class="chip"><span class="code">classifier_prompt_template</span></span>
+          <span class="chip"><span class="code">PUT /admin/config/{experiment_id}</span></span>
+          <span class="chip"><span class="code">createExperimental3x3Preset()</span></span>
+        </div>
+      </div>
+
+      <div class="grid cols-2">
+        <article class="panel filterable" data-tags="config experimento db json wizard save admin config immutable update">
+          <p class="mini-label">Donde nace el experimento</p>
+          <h3>El experimento se guarda como un blob JSON por experimento</h3>
+          <p>
+            El backend valida <span class="code">simulation</span>, <span class="code">experimental</span> y
+            los tokens, y luego persiste <span class="code">{ simulation, experimental }</span> dentro de la
+            tabla <span class="code">experiments</span>. La sesion no lee defaults del backend en tiempo real:
+            lee el JSON ya guardado.
+          </p>
+          <div class="tag-cloud">
+            <span class="tag">POST /admin/config</span>
+            <span class="tag">tabla experiments</span>
+            <span class="tag">config JSONB</span>
+          </div>
+          <div class="path">backend/db/repositories/config_repo.py</div>
+          <div class="path">backend/main.py</div>
+        </article>
+
+        <article class="panel kicker-teal filterable" data-tags="wizard defaults 3x3 preset treatments experimental chatroom ecological low medium high favor against mixed">
+          <p class="mini-label">Default real del wizard nuevo</p>
+          <h3>No arranca con un grupo vacio: precarga un preset experimental 3x3</h3>
+          <p>
+            Aunque existe un <span class="code">DEFAULT_EXPERIMENTAL</span> minimo, el flujo real para
+            "nuevo experimento" llama a <span class="code">createExperimental3x3Preset()</span>. Eso deja listos
+            contexto, ecological validity y 9 grupos:
+            <span class="code">low|medium|high × against|mixed|favor</span>.
+          </p>
+          <ul class="list">
+            <li>Contexto inicial: Telegram en espanol, basado en Espana.</li>
+            <li>Mensajes en espanol, con reglas de consistencia ideologica por agente.</li>
+            <li>Ecological validity inicial: mensajes cortos, naturales y chat-like.</li>
+          </ul>
+          <div class="path">frontend/components/admin/AdminPanel.tsx</div>
+          <div class="path">frontend/lib/treatment-presets.ts</div>
+        </article>
+
+        <article class="panel kicker-gold filterable" data-tags="prompts director performer moderator classifier anonymization chat log profile omd">
+          <p class="mini-label">Que ve cada rol</p>
+          <h3>Los prompts no ven lo mismo</h3>
+          <ul class="list">
+            <li><strong>Director:</strong> ve chat log anonimizado, perfiles acumulados y evaluaciones de validez.</li>
+            <li><strong>Performer:</strong> no ve el chat log completo; solo perfil, sus mensajes recientes, O/M/D y target.</li>
+            <li><strong>Moderator:</strong> solo limpia la salida del Performer.</li>
+            <li><strong>Classifier:</strong> clasifica el mensaje final del agente tras moderacion.</li>
+          </ul>
+          <div class="path">backend/agents/STAGE/orchestrator.py</div>
+          <div class="path">backend/agents/STAGE/director.py</div>
+          <div class="path">backend/agents/STAGE/performer.py</div>
+        </article>
+
+        <article class="panel filterable" data-tags="hidden config api code persona classifier prompt template mutable edit update mismatch">
+          <p class="mini-label">Hallazgos que conviene saber</p>
+          <h3>Hay varios puntos menos obvios que la UI no explica</h3>
+          <ul class="list">
+            <li><strong>agent_personas</strong> se guarda, pero no aparece inyectado en la cadena de prompts STAGE.</li>
+            <li><strong>classifier_prompt_template</strong> esta soportado por backend y runtime, pero no tiene campo visible en el wizard.</li>
+            <li>El repo sigue diciendo que la configuracion es inmutable, pero hoy existe <span class="code">PUT /admin/config/{experiment_id}</span> y el panel permite editar.</li>
+            <li>La validacion del wizard exige test LLM exitoso para Director, Performer y Moderator, no para Classifier.</li>
+          </ul>
+          <div class="path">frontend/components/admin/AdminPanel.tsx</div>
+          <div class="path">backend/platforms/chatroom.py</div>
+          <div class="path">backend/db/repositories/config_repo.py</div>
+        </article>
+      </div>
+
+      <div class="callout info filterable" data-tags="anonymization participant privacy user name performer 1 2 3">
+        <h3>Privacidad y anonimizado</h3>
+        <p>
+          El participante real no se expone al backend con su nombre visible. La sesion lo trata como
+          <span class="code">participant</span> y el orquestador lo reetiqueta junto con los agentes como
+          <span class="code">Performer 1</span>, <span class="code">Performer 2</span>, etc. El mapeo se
+          baraja con <span class="code">random_seed</span> y se mantiene estable toda la sesion.
+        </p>
+      </div>
+    </section>
+
+    <section id="wizard">
+      <div class="section-head">
+        <div>
+          <h2>Wizard de configuracion</h2>
+          <p>
+            La UI de administracion vive en Next.js y divide la configuracion en 6 pasos. Los defaults del
+            wizard son frontend-owned, mientras que las opciones disponibles de proveedores y modelos se piden al backend por <span class="code">/admin/meta</span>.
+            Si buscas solo las palancas reales del experimento, la seccion siguiente de <a href="#variables">Variables</a> es la vista mas directa.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout warn filterable" data-tags="mutable immutable edit put save review warning mismatch">
+        <h3>Punto de consistencia</h3>
+        <p>
+          README, StepReview y el modal de guardado siguen hablando de configuracion "locked" o inmutable.
+          La implementacion actual ya soporta edicion de experimentos existentes por <span class="code">PUT /admin/config/{experiment_id}</span>.
+          Si quieres documentacion estrictamente fiel al codigo actual, conviene mencionar ambos hechos.
+        </p>
+      </div>
+
+      <div class="wizard-steps">
+        <article class="step-card filterable" data-tags="step experiment identity id description starts ends redirect url">
+          <div class="step-header">
+            <div>
+              <p class="mini-label">Paso 1</p>
+              <h3>Experiment Identity</h3>
+            </div>
+            <span class="step-num">1</span>
+          </div>
+          <p>Define el identificador del experimento, la descripcion interna, la ventana temporal y el redirect final.</p>
+          <ul class="list">
+            <li><span class="code">experiment_id</span> debe ser unico al crear un experimento nuevo.</li>
+            <li><span class="code">description</span> es obligatoria en la validacion del frontend.</li>
+            <li><span class="code">starts_at</span> y <span class="code">ends_at</span> se envian en ISO al backend.</li>
+            <li><span class="code">redirect_url</span> vive dentro de <span class="code">experimental</span>.</li>
+          </ul>
+        </article>
+
+        <article class="step-card filterable" data-tags="step session agents defaults duration random seed messages minute evaluate interval action window memory personas">
+          <div class="step-header">
+            <div>
+              <p class="mini-label">Paso 2</p>
+              <h3>Session &amp; Agents</h3>
+            </div>
+            <span class="step-num">2</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Campo</th>
+                <th>Default</th>
+                <th>Efecto real</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="code">session_duration_minutes</span></td>
+                <td>5</td>
+                <td>Cuando expira, se publica <span class="code">session_end</span> y se corta la sesion.</td>
+              </tr>
+              <tr>
+                <td><span class="code">num_agents</span></td>
+                <td>5</td>
+                <td>Numero de agentes visibles en la sala.</td>
+              </tr>
+              <tr>
+                <td><span class="code">agent_names</span></td>
+                <td>5 strings vacios</td>
+                <td>La UI obliga a rellenarlos antes de avanzar.</td>
+              </tr>
+              <tr>
+                <td><span class="code">random_seed</span></td>
+                <td>42</td>
+                <td>Controla el shuffle anonimo y la aleatoriedad del pacing.</td>
+              </tr>
+              <tr>
+                <td><span class="code">messages_per_minute</span></td>
+                <td>6</td>
+                <td>Se convierte en <span class="code">post_probability = 6/60</span> por tick de 1 segundo.</td>
+              </tr>
+              <tr>
+                <td><span class="code">evaluate_interval</span></td>
+                <td>5</td>
+                <td>Cadencia del Director Evaluate y tamano de su ventana reciente.</td>
+              </tr>
+              <tr>
+                <td><span class="code">action_window_size</span></td>
+                <td>5</td>
+                <td>Ventana que usa el Director para Update/Action y para detectar el ultimo mensaje humano.</td>
+              </tr>
+              <tr>
+                <td><span class="code">performer_memory_size</span></td>
+                <td>3</td>
+                <td>Cuantos mensajes propios recientes ve el Performer para no repetirse.</td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="soft-box">
+            <strong>Nota:</strong> <span class="code">agent_personas</span> tiene UI y se valida en backend,
+            pero en el runtime actual no se ve conectado a los prompts de STAGE.
+          </div>
+        </article>
+
+        <article class="step-card filterable" data-tags="step llm director performer moderator classifier defaults provider model temp top_p max tokens test llm">
+          <div class="step-header">
+            <div>
+              <p class="mini-label">Paso 3</p>
+              <h3>LLM Pipeline</h3>
+            </div>
+            <span class="step-num">3</span>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Rol</th>
+                <th>Provider / model por defecto</th>
+                <th>Sampling por defecto</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Director</td>
+                <td><span class="code">anthropic / claude-haiku-4-5</span></td>
+                <td><span class="code">temp=0.8 top_p=0.8 max=1024</span></td>
+              </tr>
+              <tr>
+                <td>Performer</td>
+                <td><span class="code">mistral / mistral-large-latest</span></td>
+                <td><span class="code">temp=0.8 top_p=0.8 max=256</span></td>
+              </tr>
+              <tr>
+                <td>Moderator</td>
+                <td><span class="code">anthropic / claude-haiku-4-5</span></td>
+                <td><span class="code">temp=0.2 top_p=1.0 max=256</span></td>
+              </tr>
+              <tr>
+                <td>Classifier</td>
+                <td><span class="code">anthropic / claude-haiku-4-5</span></td>
+                <td><span class="code">temp=0.2 top_p=1.0 max=256</span></td>
+              </tr>
+            </tbody>
+          </table>
+          <ul class="list">
+            <li>La lista real de providers y modelos sugeridos llega desde <span class="code">/admin/meta</span>.</li>
+            <li>La UI muestra warnings cuando un provider no acepta a la vez <span class="code">temperature</span> y <span class="code">top_p</span>.</li>
+            <li>Hay botones de copia rapida: Director -&gt; Performer y Moderator -&gt; Classifier.</li>
+          </ul>
+        </article>
+
+        <article class="step-card filterable" data-tags="step treatments context ecological internal validity features 2x2 3x3 news article gate until user post">
+          <div class="step-header">
+            <div>
+              <p class="mini-label">Paso 4</p>
+              <h3>Treatment Groups</h3>
+            </div>
+            <span class="step-num">4</span>
+          </div>
+          <p>
+            Aqui se define el marco experimental: un <span class="code">chatroom_context</span> global,
+            una <span class="code">ecological_validity_criteria</span> global y, por cada grupo, su
+            <span class="code">internal_validity_criteria</span> y features activas.
+          </p>
+          <div class="tag-cloud">
+            <span class="tag">Features: news_article</span>
+            <span class="tag">Features: gate_until_user_post</span>
+            <span class="tag">Builder 2x2</span>
+            <span class="tag">Preset 3x3</span>
+          </div>
+          <div class="soft-box">
+            <strong>Nota clave:</strong> el tratamiento lo conduce sobre todo la
+            <span class="code">internal_validity_criteria</span> del grupo activo. Esa cadena entra al
+            Director Evaluate y condiciona todas las decisiones siguientes.
+          </div>
+        </article>
+
+        <article class="step-card filterable" data-tags="step tokens participants per group default 10 csv access codes">
+          <div class="step-header">
+            <div>
+              <p class="mini-label">Paso 5</p>
+              <h3>Participant Tokens</h3>
+            </div>
+            <span class="step-num">5</span>
+          </div>
+          <ul class="list">
+            <li>La UI propone <span class="code">10</span> participantes por grupo por defecto.</li>
+            <li>Los tokens se generan aleatoriamente y quedan preasignados al treatment group.</li>
+            <li>Se puede descargar un CSV local antes de guardar el experimento.</li>
+          </ul>
+          <div class="path">frontend/components/admin/steps/StepTokens.tsx</div>
+        </article>
+
+        <article class="step-card filterable" data-tags="step review save lock post put edit activate dashboard">
+          <div class="step-header">
+            <div>
+              <p class="mini-label">Paso 6</p>
+              <h3>Review &amp; Save</h3>
+            </div>
+            <span class="step-num">6</span>
+          </div>
+          <ul class="list">
+            <li>Nuevo experimento: <span class="code">POST /admin/config</span>, se siembran tokens y se activa el experimento.</li>
+            <li>Edicion de experimento existente: <span class="code">PUT /admin/config/{experiment_id}</span>.</li>
+            <li>Al volver al dashboard, el backend puede autoactivar el experimento mas reciente no pausado al reiniciar.</li>
+          </ul>
+          <div class="path">backend/main.py</div>
+        </article>
+      </div>
+    </section>
+
+    <section id="variables">
+      <div class="section-head">
+        <div>
+          <h2>Variables que puedes cambiar</h2>
+          <p>
+            Esta tabla separa variables de sesion, pipeline LLM, tratamiento y ajustes ocultos.
+            Usa los filtros para ver solo las que te interesan.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout info filterable" data-tags="variables ui api codigo visible hidden cadence content experiment">
+        <h3>Como leer esta matriz</h3>
+        <ul class="list">
+          <li><strong>Donde se cambia:</strong> distingue entre wizard, API/JSON o codigo.</li>
+          <li><strong>Impacta:</strong> resume si cambia el ritmo, la seleccion de acciones, el contenido o el postproceso.</li>
+          <li><strong>Limite:</strong> aclara hasta donde llega ese control y donde deja de tener efecto.</li>
+        </ul>
+      </div>
+
+      <div class="switcher" id="varFilters" style="margin: 0 0 16px;">
+        <button type="button" class="active" data-var-button="all">Todas</button>
+        <button type="button" data-var-button="ui">Solo UI</button>
+        <button type="button" data-var-button="cadence">Cadencia</button>
+        <button type="button" data-var-button="content">Contenido</button>
+        <button type="button" data-var-button="hidden">Ocultas / API</button>
+      </div>
+
+      <div class="panel filterable" data-tags="variables matrix session llm treatment hidden api">
+        <table>
+          <thead>
+            <tr>
+              <th>Variable</th>
+              <th>Donde se cambia</th>
+              <th>Impacta</th>
+              <th>Limite real</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr class="var-row" data-var-filter="ui cadence">
+              <td><span class="code">session_duration_minutes</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Duracion de la sesion.</td>
+              <td>No cambia el contenido; solo cuando termina el experimento y cuando se envia <span class="code">session_end</span>.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">num_agents</span> y <span class="code">agent_names</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Numero de performers disponibles y nombres visibles.</td>
+              <td>No define por si mismo personalidad, tono ni stance.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui hidden content">
+              <td><span class="code">agent_personas</span></td>
+              <td>Wizard / JSON</td>
+              <td>En teoria personalidad por agente.</td>
+              <td>En el runtime actual no aparece conectada a los prompts STAGE principales.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui cadence">
+              <td><span class="code">random_seed</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Shuffle anonimo y partes aleatorias del pacing.</td>
+              <td>No fija un guion; solo hace mas reproducible la aleatoriedad compatible con el runtime.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui cadence">
+              <td><span class="code">messages_per_minute</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Probabilidad de que se dispare un turno por tick.</td>
+              <td>No garantiza ritmo exacto porque la latencia LLM y los waits tambien limitan la salida real.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui cadence content">
+              <td><span class="code">evaluate_interval</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Cada cuanto el Director reevalua validez.</td>
+              <td>No cambia directamente el texto; cambia cuan a menudo el Director corrige deriva.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">action_window_size</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Cuantos mensajes recientes ve el Director en Action.</td>
+              <td>Afecta contexto de decision, no el estilo literal del mensaje final.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">performer_memory_size</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Cuantos mensajes propios recientes ve el Performer.</td>
+              <td>Ayuda a evitar repeticion; no le da acceso al chat log completo.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">chatroom_context</span></td>
+              <td>Wizard, <span class="code">experimental</span></td>
+              <td>Marco global del escenario.</td>
+              <td>Orienta a todos los roles, pero no sustituye criterios de tratamiento.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">ecological_validity_criteria</span></td>
+              <td>Wizard, <span class="code">experimental</span></td>
+              <td>Naturalidad, estilo y dinamica que debe preservar el Director.</td>
+              <td>No dicta una frase exacta; condiciona Evaluate y luego Action.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">groups.*.internal_validity_criteria</span></td>
+              <td>Wizard, por grupo</td>
+              <td>Manipulacion experimental real.</td>
+              <td>Es la variable mas fuerte para cambiar el comportamiento agregado del chat, pero sigue siendo una guia de control, no un script determinista.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">groups.*.features</span> y <span class="code">seed</span></td>
+              <td>Wizard, por grupo</td>
+              <td>Semilla inicial y gating de agentes.</td>
+              <td>Solo hay dos features activas en registry: <span class="code">news_article</span> y <span class="code">gate_until_user_post</span>.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui cadence">
+              <td><span class="code">redirect_url</span></td>
+              <td>Wizard, dentro de <span class="code">experimental</span></td>
+              <td>Destino tras <span class="code">session_end</span>.</td>
+              <td>No afecta ninguna decision del pipeline conversacional.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="ui content">
+              <td><span class="code">director_* / performer_* / moderator_* / classifier_*</span></td>
+              <td>Wizard, <span class="code">simulation</span></td>
+              <td>Modelo, temperatura, top_p y max_tokens por rol.</td>
+              <td>Si cambias modelo o sampling puedes cambiar mucho el comportamiento, pero cada rol sigue limitado a su propio prompt y responsabilidad.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="hidden content">
+              <td><span class="code">classifier_prompt_template</span></td>
+              <td>API / JSON / codigo</td>
+              <td>Prompt user del classifier.</td>
+              <td>No se expone en el wizard; solo cambia como se etiquetan mensajes, no el texto generado.</td>
+            </tr>
+            <tr class="var-row" data-var-filter="hidden content">
+              <td>Prompts Markdown base</td>
+              <td>Codigo</td>
+              <td>Instrucciones estructurales de cada rol.</td>
+              <td>Esto ya no es parametrizacion de experimento: cambia el comportamiento global de la plataforma.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="grid cols-2" style="margin-top: 16px;">
+        <article class="panel filterable" data-tags="variables strongest levers internal ecological llm">
+          <p class="mini-label">Si quieres cambiar de verdad el experimento</p>
+          <h3>Las tres palancas con mas impacto</h3>
+          <ul class="list">
+            <li><strong>internal_validity_criteria:</strong> cambia la manipulacion experimental.</li>
+            <li><strong>ecological_validity_criteria:</strong> cambia el estilo y naturalidad que se intenta preservar.</li>
+            <li><strong>role models:</strong> cambia la calidad, coste y tendencia de cada etapa del pipeline.</li>
+          </ul>
+        </article>
+
+        <article class="panel kicker-gold filterable" data-tags="variables weaker levers names duration redirect tokens">
+          <p class="mini-label">Variables utiles pero menos transformadoras</p>
+          <h3>Cambian la operativa mas que la semantica</h3>
+          <ul class="list">
+            <li><span class="code">session_duration_minutes</span>, tokens y redirect.</li>
+            <li><span class="code">messages_per_minute</span> y <span class="code">evaluate_interval</span>.</li>
+            <li>Nombres de agentes y numero de participantes por grupo.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="pipeline">
+      <div class="section-head">
+        <div>
+          <h2>Workflow antes de cada respuesta</h2>
+          <p>
+            Si lo que quieres saber es “que pasa antes de que el sistema conteste”, mira primero la pestaña
+            de turno. La pestaña de arranque de sesion queda como apoyo para entender el contexto.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout warn filterable" data-tags="workflow who writes response action performer moderator classifier">
+        <h3>Resumen en una linea</h3>
+        <p>
+          El texto visible lo redacta el <span class="code">Performer</span>. Antes de eso, el sistema decide
+          si hay turno, resume contexto, evalua validez y escoge accion; despues del Performer, solo se limpia,
+          etiqueta y persiste.
+        </p>
+      </div>
+
+      <div class="chip-row" style="margin-bottom: 16px;">
+        <span class="chip">Tick base: <span class="code">1.0s</span></span>
+        <span class="chip">Pacing: <span class="code">messages_per_minute / 60</span></span>
+        <span class="chip">Typing speed: <span class="code">7 chars/s</span></span>
+        <span class="chip">Delay typing: <span class="code">0.5s - 8.0s</span></span>
+        <span class="chip">Retries Performer: <span class="code">3</span></span>
+      </div>
+
+      <div class="pipeline-shell">
+        <div class="pipeline-tabs">
+          <button class="pipeline-tab" data-pipeline-tab="session">Arranque de sesion</button>
+          <button class="pipeline-tab active" data-pipeline-tab="turn">Antes de cada respuesta</button>
+        </div>
+        <div class="pipeline-grid">
+          <div id="pipelineList" class="pipeline-list"></div>
+          <article class="detail">
+            <div>
+              <p id="pipelineKicker" class="mini-label">Workflow</p>
+              <h3 id="pipelineTitle">Cargando...</h3>
+              <p id="pipelineBody"></p>
+            </div>
+            <div class="detail-grid">
+              <div class="detail-card">
+                <h4>Inputs</h4>
+                <p id="pipelineInputs"></p>
+              </div>
+              <div class="detail-card">
+                <h4>Outputs</h4>
+                <p id="pipelineOutputs"></p>
+              </div>
+              <div class="detail-card">
+                <h4>Puede hacer</h4>
+                <p id="pipelineCan"></p>
+              </div>
+              <div class="detail-card">
+                <h4>No puede hacer</h4>
+                <p id="pipelineCannot"></p>
+              </div>
+              <div class="detail-card">
+                <h4>Notas</h4>
+                <p id="pipelineNotes"></p>
+              </div>
+              <div class="detail-card">
+                <h4>Archivos clave</h4>
+                <p id="pipelineSource"></p>
+              </div>
+            </div>
+          </article>
+        </div>
+      </div>
+
+      <div class="callout alert filterable" data-tags="like wait human participant evaluate interval warmup productive turns">
+        <h3>Detalles de control que afectan el comportamiento</h3>
+        <ul class="list">
+          <li>Si el Director selecciona al humano, el turno se convierte en <span class="code">wait</span> y no cuenta como turno productivo.</li>
+          <li>Los <span class="code">like</span> no llaman al Performer ni al Moderator.</li>
+          <li>Durante warm-up, <span class="code">Evaluate</span> corre en cada turno; luego pasa a cada <span class="code">evaluate_interval</span> turnos productivos.</li>
+          <li>La clasificacion de incivility / like-mindedness ocurre despues de la moderacion, sobre el mensaje final del agente.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="prompts">
+      <div class="section-head">
+        <div>
+          <h2>Prompts por defecto</h2>
+          <p>
+            Los prompts base viven en Markdown dentro de <span class="code">backend/agents/STAGE/prompts</span>.
+            Director, Performer y Moderator usan plantillas unificadas con bloques <span class="code">{#SYSTEM}</span>,
+            <span class="code">{#USER}</span> y, en el Performer, <span class="code">{#ACTION_TYPE: ...}</span>.
+          </p>
+        </div>
+      </div>
+
+      <div class="callout info filterable" data-tags="prompts english spanish placeholders render action_type system user">
+        <h3>Dos cosas importantes sobre los prompts</h3>
+        <ul class="list">
+          <li>Los textos base de prompt estan escritos en ingles, aunque el experimento por defecto precargue contexto y mensajes en espanol.</li>
+          <li>La mayor parte de la personalizacion no cambia el markdown base: entra por placeholders como <span class="code">{CHATROOM_CONTEXT}</span>, <span class="code">{INTERNAL_VALIDITY_CRITERIA}</span> o <span class="code">{OBJECTIVE}</span>.</li>
+        </ul>
+      </div>
+
+      <div class="prompt-tabs">
+        <button class="prompt-tab active" data-prompt-tab="director-update">Director / Update</button>
+        <button class="prompt-tab" data-prompt-tab="director-evaluate">Director / Evaluate</button>
+        <button class="prompt-tab" data-prompt-tab="director-action">Director / Action</button>
+        <button class="prompt-tab" data-prompt-tab="performer">Performer</button>
+        <button class="prompt-tab" data-prompt-tab="moderator">Moderator</button>
+        <button class="prompt-tab" data-prompt-tab="classifier-system">Classifier / system</button>
+        <button class="prompt-tab" data-prompt-tab="classifier-user">Classifier / user</button>
+      </div>
+
+      <article class="prompt-panel active filterable" data-prompt-panel="director-update" data-tags="director update profile last action last agent chatroom context prompt">
+        <h3>Director - Update Performer Profile</h3>
+        <p>
+          Reescribe el perfil acumulado del ultimo performer que actuo. Sirve para que el Director mantenga
+          memoria condensada de posiciones, interacciones y estilo.
+        </p>
+        <div class="prompt-meta">
+          <div class="detail-card">
+            <h4>Variables inyectadas</h4>
+            <div class="tag-cloud">
+              <span class="tag">{CHATROOM_CONTEXT}</span>
+              <span class="tag">{LAST_AGENT}</span>
+              <span class="tag">{LAST_AGENT_PROFILE}</span>
+              <span class="tag">{LAST_ACTION}</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Contrato de salida</h4>
+            <p>JSON con una sola clave: <span class="code">performer_profile_update</span>.</p>
+          </div>
+          <div class="detail-card">
+            <h4>Que se puede cambiar sin tocar el prompt</h4>
+            <p>Solo el <span class="code">chatroom_context</span> y, de forma emergente, el contenido de la conversacion.</p>
+          </div>
+          <div class="detail-card">
+            <h4>Fuente</h4>
+            <p class="path">backend/agents/STAGE/prompts/director_update_prompt.md</p>
+          </div>
+        </div>
+        <details>
+          <summary>Ver prompt base</summary>
+          <pre># Director - Update Performer Profile
+
+You are the 'Director' in a social-scientific experiment simulating a realistic online chatroom. Your role is strictly behind the scenes. In this step, you must update the profile of the performer that acted most recently.
+
+## Chatroom Context
+
+Here is the chatroom context, as described by the researcher for this experiment:
+
+`{CHATROOM_CONTEXT}`
+
+{#SYSTEM}
+The name of the last-acting performer, their current profile, and their most recent action will be provided in the user message below.
+{/SYSTEM}
+
+## Your Task
+
+Read the performer's most recent action and update their profile accordingly.
+
+A performer profile is a running characterisation of how that performer has behaved so far: positions taken, significant interactions, and communication style. Profiles describe what the performer has *done*, not who they *are*. They are the emergent record of each performer's participation. Each update should be a complete revision that replaces the previous profile, retaining important earlier information while incorporating what is new. Prioritise the performer's most recent positions and most significant interactions. Keep the profile concise (1-5 sentences).
+
+## Output Format
+
+Respond with a JSON object using exactly this structure:
+
+```json
+{
+  "performer_profile_update": "Updated profile for the last-acting performer (1-5 sentences)."
+}
+```</pre>
+        </details>
+      </article>
+
+      <article class="prompt-panel filterable" data-prompt-panel="director-evaluate" data-tags="director evaluate validity internal ecological action summary participation summary recent chat log">
+        <h3>Director - Evaluate Validity</h3>
+        <p>
+          Revisa dos ejes: <span class="code">internal_validity</span> y <span class="code">ecological_validity</span>.
+          Ese resumen alimenta la decision de la siguiente accion.
+        </p>
+        <div class="prompt-meta">
+          <div class="detail-card">
+            <h4>Variables inyectadas</h4>
+            <div class="tag-cloud">
+              <span class="tag">{CHATROOM_CONTEXT}</span>
+              <span class="tag">{INTERNAL_VALIDITY_CRITERIA}</span>
+              <span class="tag">{ECOLOGICAL_VALIDITY_CRITERIA}</span>
+              <span class="tag">{ACTION_SUMMARY}</span>
+              <span class="tag">{PARTICIPATION_SUMMARY}</span>
+              <span class="tag">{RECENT_CHAT_LOG}</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Contrato de salida</h4>
+            <p>
+              JSON con <span class="code">internal_validity_evaluation</span> y
+              <span class="code">ecological_validity_evaluation</span>.
+            </p>
+          </div>
+          <div class="detail-card">
+            <h4>Que lo mueve</h4>
+            <p>
+              El contenido del grupo activo, el contexto del chatroom y la cadencia
+              definida por <span class="code">evaluate_interval</span>.
+            </p>
+          </div>
+          <div class="detail-card">
+            <h4>Fuente</h4>
+            <p class="path">backend/agents/STAGE/prompts/director_evaluate_prompt.md</p>
+          </div>
+        </div>
+        <details>
+          <summary>Ver prompt base</summary>
+          <pre># Director - Evaluate Validity
+
+You are the 'Director' in a social-scientific experiment simulating a realistic online chatroom. Your role is strictly behind the scenes. In this step, you revise your running evaluation of the chatroom against two researcher-defined validity criteria.
+
+## Chatroom Context
+
+Here is the chatroom context, as described by the researcher for this experiment:
+
+`{CHATROOM_CONTEXT}`
+
+## Researcher-Defined Criteria
+
+### Internal Validity
+
+`{INTERNAL_VALIDITY_CRITERIA}`
+
+### Ecological Validity
+
+`{ECOLOGICAL_VALIDITY_CRITERIA}`
+
+## Output Format
+
+Respond with a JSON object using exactly this structure:
+```json
+{
+  "internal_validity_evaluation": "Your revised assessment of internal validity (1-4 sentences).",
+  "ecological_validity_evaluation": "Your revised assessment of ecological validity (1-4 sentences)."
+}
+```</pre>
+        </details>
+      </article>
+
+      <article class="prompt-panel filterable" data-prompt-panel="director-action" data-tags="director action omd objective motivation directive performer instruction action types reply mention like">
+        <h3>Director - Design Action</h3>
+        <p>
+          Selecciona performer, action type, target y crea la instruccion O/M/D
+          (<span class="code">objective</span>, <span class="code">motivation</span>, <span class="code">directive</span>).
+        </p>
+        <div class="prompt-meta">
+          <div class="detail-card">
+            <h4>Variables inyectadas</h4>
+            <div class="tag-cloud">
+              <span class="tag">{INTERNAL_VALIDITY_SUMMARY}</span>
+              <span class="tag">{ECOLOGICAL_VALIDITY_SUMMARY}</span>
+              <span class="tag">{AGENT_PROFILES}</span>
+              <span class="tag">{PARTICIPATION_SUMMARY}</span>
+              <span class="tag">{CHAT_LOG}</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Contrato de salida</h4>
+            <p>
+              JSON con <span class="code">next_performer</span>, <span class="code">action_type</span>,
+              target y <span class="code">performer_instruction</span> salvo en likes.
+            </p>
+          </div>
+          <div class="detail-card">
+            <h4>Action types disponibles</h4>
+            <div class="tag-cloud">
+              <span class="tag">message</span>
+              <span class="tag">reply</span>
+              <span class="tag">@mention</span>
+              <span class="tag">like</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Fuente</h4>
+            <p class="path">backend/agents/STAGE/prompts/director_action_prompt.md</p>
+          </div>
+        </div>
+        <details>
+          <summary>Ver prompt base</summary>
+          <pre># Director - Design Action
+
+You are the 'Director' in a social-scientific experiment. Your purpose is to ensure the simulated chatroom achieves two goals: **internal validity** and **ecological validity**. You pursue these goals by deciding which performer should act next and shaping their action through structured instructions.
+
+### Step 1: Identify the Priority
+Read the validity evaluations.
+
+### Step 2: Select a Performer
+Read the performer profiles and participation counts.
+
+### Step 3: Select an Action
+Read the recent chat log and choose exactly one:
+- `message`
+- `reply`
+- `@mention`
+- `like`
+
+### Step 4: Write the Performer Instruction
+For non-like actions provide:
+- Objective
+- Motivation
+- Directive
+
+## Output Format
+
+```json
+{
+  "priority": "...",
+  "performer_rationale": "...",
+  "action_rationale": "...",
+  "next_performer": "performer_name",
+  "action_type": "message | reply | @mention | like",
+  "target_user": "username or null",
+  "target_message_id": "msg_id or null",
+  "performer_instruction": {
+    "objective": "...",
+    "motivation": "...",
+    "directive": "..."
+  }
+}
+```</pre>
+        </details>
+      </article>
+
+      <article class="prompt-panel filterable" data-prompt-panel="performer" data-tags="performer prompt objective motivation directive recent messages target message action type">
+        <h3>Performer</h3>
+        <p>
+          Genera el mensaje visible. Importante: no recibe el chat log completo, solo una version condensada
+          de lo necesario para actuar.
+        </p>
+        <div class="prompt-meta">
+          <div class="detail-card">
+            <h4>Variables inyectadas</h4>
+            <div class="tag-cloud">
+              <span class="tag">{CHATROOM_CONTEXT}</span>
+              <span class="tag">{AGENT_PROFILE}</span>
+              <span class="tag">{RECENT_MESSAGES}</span>
+              <span class="tag">{OBJECTIVE}</span>
+              <span class="tag">{MOTIVATION}</span>
+              <span class="tag">{DIRECTIVE}</span>
+              <span class="tag">{TARGET_USER}</span>
+              <span class="tag">{TARGET_MESSAGE}</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Output esperado</h4>
+            <p>Solo el texto del mensaje, sin razonamiento ni envoltorio.</p>
+          </div>
+          <div class="detail-card">
+            <h4>Que se puede cambiar</h4>
+            <p>
+              Modelo, sampling, memory size y todo lo que altere la instruccion del Director o el contexto del experimento.
+            </p>
+          </div>
+          <div class="detail-card">
+            <h4>Fuente</h4>
+            <p class="path">backend/agents/STAGE/prompts/performer_prompt.md</p>
+          </div>
+        </div>
+        <details>
+          <summary>Ver prompt base</summary>
+          <pre>You are a 'Performer' in a social-scientific experiment simulating a realistic online chatroom. Read the instructions below, which will guide you to write a short message for character. Follow the instructions exactly. Output ONLY the message.
+
+## About the Chatroom:
+
+{CHATROOM_CONTEXT}
+
+## Your Participation So Far:
+
+{AGENT_PROFILE}
+
+## Your Most Recent Messages:
+
+{RECENT_MESSAGES}
+
+## What you Want to Achieve With Your Message:
+
+You want to: {OBJECTIVE}
+
+This matters to you because: {MOTIVATION}
+
+Your message must be: {DIRECTIVE}
+
+## How to Write Your Message:
+
+Action-specific blocks are rendered according to:
+- message
+- message_targeted
+- reply
+- @mention</pre>
+        </details>
+      </article>
+
+      <article class="prompt-panel filterable" data-prompt-panel="moderator" data-tags="moderator prompt no_content extraction clean content retries">
+        <h3>Moderator</h3>
+        <p>
+          Es un filtro de extraccion. Si el Performer devuelve razonamiento, markdown o texto basura,
+          intenta quedarse solo con el contenido del mensaje. Si falla, devuelve <span class="code">NO_CONTENT</span>.
+        </p>
+        <div class="prompt-meta">
+          <div class="detail-card">
+            <h4>Input</h4>
+            <div class="tag-cloud">
+              <span class="tag">{PERFORMER_OUTPUT}</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Output</h4>
+            <p>Mensaje limpio o <span class="code">NO_CONTENT</span>.</p>
+          </div>
+          <div class="detail-card">
+            <h4>Consecuencia runtime</h4>
+            <p>Si no extrae nada, el bloque Performer + Moderator se reintenta hasta 3 veces.</p>
+          </div>
+          <div class="detail-card">
+            <h4>Fuente</h4>
+            <p class="path">backend/agents/STAGE/prompts/moderator_prompt.md</p>
+          </div>
+        </div>
+        <details>
+          <summary>Ver prompt base</summary>
+          <pre>You must extract the chatroom message from the text below. The text should contain a chatroom message, but may include extra content.
+
+Strip all extra content. Return ONLY the chatroom message itself. No quotation marks. Preserve the original language exactly.
+
+If no identifiable chatroom message is present, output exactly: NO_CONTENT</pre>
+        </details>
+      </article>
+
+      <article class="prompt-panel filterable" data-prompt-panel="classifier-system" data-tags="classifier system civility incivil like minded participant stance rationale">
+        <h3>Classifier / system prompt</h3>
+        <p>
+          Define el contrato de clasificacion posterior al mensaje y fija los dos ejes:
+          incivility y like-mindedness respecto al stance inferido del participante.
+        </p>
+        <div class="prompt-meta">
+          <div class="detail-card">
+            <h4>Dimensiones</h4>
+            <div class="tag-cloud">
+              <span class="tag">is_incivil</span>
+              <span class="tag">is_like_minded</span>
+              <span class="tag">inferred_participant_stance</span>
+              <span class="tag">rationale</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Fuente</h4>
+            <p class="path">backend/agents/STAGE/prompts/system/classifier_prompt.md</p>
+          </div>
+        </div>
+        <details>
+          <summary>Ver prompt base</summary>
+          <pre># Classifier Prompt
+
+You are a strict message classifier in a social-science chatroom simulation.
+Your job is to classify each AGENT message on two dimensions:
+
+1. Civility
+2. Like-mindedness with the human participant
+
+## Output Contract
+
+Return ONLY a JSON object with exactly these keys:
+
+```json
+{
+  "is_incivil": true,
+  "is_like_minded": false,
+  "inferred_participant_stance": "short summary",
+  "rationale": "one short sentence"
+}
+```</pre>
+        </details>
+      </article>
+
+      <article class="prompt-panel filterable" data-prompt-panel="classifier-user" data-tags="classifier user prompt template participant messages agent message configurable hidden api">
+        <h3>Classifier / user prompt</h3>
+        <p>
+          Esta plantilla es la que se usa como <span class="code">DEFAULT_CLASSIFIER_PROMPT_TEMPLATE</span>.
+          A diferencia de los demas prompts, este template puede sustituirse por config usando
+          <span class="code">simulation.classifier_prompt_template</span>.
+        </p>
+        <div class="prompt-meta">
+          <div class="detail-card">
+            <h4>Variables inyectadas</h4>
+            <div class="tag-cloud">
+              <span class="tag">{PARTICIPANT_MESSAGES}</span>
+              <span class="tag">{AGENT_MESSAGE}</span>
+              <span class="tag">{CHATROOM_CONTEXT}</span>
+            </div>
+          </div>
+          <div class="detail-card">
+            <h4>Configurable desde UI</h4>
+            <p>No. Hoy solo aparece en backend / API / JSON.</p>
+          </div>
+          <div class="detail-card">
+            <h4>Fuente base</h4>
+            <p class="path">backend/agents/STAGE/prompts/user/classifier_prompt.md</p>
+          </div>
+          <div class="detail-card">
+            <h4>Uso runtime</h4>
+            <p>Se aplica tras la moderacion, sobre el mensaje final que se va a persistir.</p>
+          </div>
+        </div>
+        <details>
+          <summary>Ver prompt base</summary>
+          <pre># Classifier Task
+
+Infer the participant's stance from the participant messages below and classify the agent message.
+
+## Participant Messages
+
+{PARTICIPANT_MESSAGES}
+
+## Agent Message To Classify
+
+{AGENT_MESSAGE}
+
+## Response
+
+Return ONLY this JSON object:
+
+```json
+{
+  "is_incivil": true|false,
+  "is_like_minded": true|false|null,
+  "inferred_participant_stance": "short summary",
+  "rationale": "one short sentence"
+}
+```</pre>
+        </details>
+      </article>
+    </section>
+
+    <section id="changes">
+      <div class="section-head">
+        <div>
+          <h2>Controles avanzados y limites</h2>
+          <p>
+            Esta seccion ya no resume todas las variables, sino las zonas menos visibles: API, codigo
+            y diferencias entre lo que parece configurable y lo que realmente afecta al runtime.
+          </p>
+        </div>
+      </div>
+
+      <div class="grid cols-2">
+        <article class="panel filterable" data-tags="wizard ui editable experiment session llm treatments tokens">
+          <p class="mini-label">Desde el wizard</p>
+          <h3>Casi todo lo operativo del experimento</h3>
+          <ul class="list">
+            <li>Identidad: <span class="code">experiment_id</span>, descripcion, fechas, redirect.</li>
+            <li>Sesion: duracion, numero de agentes, nombres, pacing, seed, evaluate interval, action window, performer memory.</li>
+            <li>LLMs: provider, model, temperature, top_p y max_tokens para Director, Performer, Moderator y Classifier.</li>
+            <li>Tratamientos: contexto, ecological validity, grupos, internal validity, features y seed article.</li>
+            <li>Tokens: cantidad por grupo y CSV.</li>
+          </ul>
+        </article>
+
+        <article class="panel kicker-teal filterable" data-tags="api json hidden config classifier prompt template put update edit">
+          <p class="mini-label">Por API o JSON</p>
+          <h3>Campos soportados que la UI no expone del todo</h3>
+          <ul class="list">
+            <li><span class="code">simulation.classifier_prompt_template</span> si quieres cambiar la plantilla user del classifier sin tocar codigo.</li>
+            <li><span class="code">PUT /admin/config/{experiment_id}</span> si quieres actualizar un experimento ya existente.</li>
+            <li>Cualquier payload que monte directamente <span class="code">{ simulation, experimental }</span> mientras pase la validacion del backend.</li>
+          </ul>
+          <div class="soft-box">
+            <strong>Ojo:</strong> si guardas por el wizard, siempre se enviaran los defaults frontend ya resueltos.
+          </div>
+        </article>
+
+        <article class="panel kicker-gold filterable" data-tags="code only prompts feature registry provider registry typing retries source code">
+          <p class="mini-label">Solo tocando codigo</p>
+          <h3>Comportamientos globales y defaults estructurales</h3>
+          <ul class="list">
+            <li>Los prompts markdown de Director, Performer y Moderator.</li>
+            <li>El prompt system del Classifier y el user template base por defecto.</li>
+            <li>El registro de features disponibles y sus labels.</li>
+            <li>El registro de providers/modelos sugeridos.</li>
+            <li>Constantes runtime como <span class="code">MAX_PERFORMER_RETRIES</span> o la velocidad de typing.</li>
+            <li>El preset 3x3 que precarga el wizard al abrir un experimento nuevo.</li>
+          </ul>
+        </article>
+
+        <article class="panel filterable" data-tags="not wired personas classifier test mismatch review immutable">
+          <p class="mini-label">Puntos a vigilar</p>
+          <h3>Cosas que parecen una cosa pero hoy se comportan de otra</h3>
+          <ul class="list">
+            <li><span class="code">agent_personas</span>: existe en config y UI, pero no aparece usada en la cadena de prompts del runtime actual.</li>
+            <li><span class="code">Classifier</span>: configurable y testeable, pero el wizard no bloquea el guardado si su test no se ha ejecutado.</li>
+            <li>La copia textual de "Save &amp; Lock" no refleja el soporte actual de edicion por <span class="code">PUT</span>.</li>
+            <li>Para Director, Performer y Moderator, el runtime carga las plantillas unificadas de la raiz de <span class="code">prompts/</span>; los archivos separados en <span class="code">prompts/system</span> y <span class="code">prompts/user</span> parecen legacy.</li>
+          </ul>
+        </article>
+      </div>
+
+      <details style="margin-top: 16px;" class="filterable" data-tags="json payload schema save config simulation experimental tokens">
+        <summary>Ver esquema mental del payload guardado</summary>
+        <pre>{
+  "experiment_id": "pilot_2026_civility",
+  "description": "nota interna",
+  "starts_at": "2026-03-17T10:00:00.000Z",
+  "ends_at": "2026-03-18T10:00:00.000Z",
+  "simulation": {
+    "random_seed": 42,
+    "session_duration_minutes": 5,
+    "num_agents": 5,
+    "agent_names": ["A", "B", "C", "D", "E"],
+    "agent_personas": ["", "", "", "", ""],
+    "messages_per_minute": 6,
+    "director_llm_provider": "anthropic",
+    "director_llm_model": "claude-haiku-4-5",
+    "director_temperature": 0.8,
+    "director_top_p": 0.8,
+    "director_max_tokens": 1024,
+    "performer_llm_provider": "mistral",
+    "performer_llm_model": "mistral-large-latest",
+    "performer_temperature": 0.8,
+    "performer_top_p": 0.8,
+    "performer_max_tokens": 256,
+    "moderator_llm_provider": "anthropic",
+    "moderator_llm_model": "claude-haiku-4-5",
+    "moderator_temperature": 0.2,
+    "moderator_top_p": 1.0,
+    "moderator_max_tokens": 256,
+    "classifier_llm_provider": "anthropic",
+    "classifier_llm_model": "claude-haiku-4-5",
+    "classifier_temperature": 0.2,
+    "classifier_top_p": 1.0,
+    "classifier_max_tokens": 256,
+    "evaluate_interval": 5,
+    "action_window_size": 5,
+    "performer_memory_size": 3
+  },
+  "experimental": {
+    "chatroom_context": "...",
+    "ecological_validity_criteria": "...",
+    "redirect_url": "",
+    "groups": {
+      "condition_a": {
+        "features": ["news_article"],
+        "internal_validity_criteria": "...",
+        "seed": {
+          "type": "news_article",
+          "headline": "...",
+          "source": "...",
+          "body": "..."
+        }
+      }
+    }
+  },
+  "tokens": {
+    "groups": {
+      "condition_a": ["xK9m-Rw2p", "...."]
+    }
+  }
+}</pre>
+      </details>
+    </section>
+
+    <section id="sources">
+      <div class="section-head">
+        <div>
+          <h2>Archivos fuente clave</h2>
+          <p>
+            Si quieres ampliar o cambiar el sistema, estos son los puntos de entrada mas utiles del repo.
+          </p>
+        </div>
+      </div>
+
+      <div class="source-grid">
+        <article class="source-card filterable" data-tags="admin panel defaults wizard new experiment">
+          <h3>Frontend wizard</h3>
+          <p class="path">frontend/components/admin/AdminPanel.tsx</p>
+          <p class="muted-note">Defaults reales del wizard, validacion por paso y guardado POST/PUT.</p>
+        </article>
+        <article class="source-card filterable" data-tags="wizard steps session llm treatments tokens review">
+          <h3>Pasos de configuracion</h3>
+          <p class="path">frontend/components/admin/steps/*.tsx</p>
+          <p class="muted-note">Campos visibles, defaults de cada paso y restricciones del frontend.</p>
+        </article>
+        <article class="source-card filterable" data-tags="preset 3x3 groups spanish telegram">
+          <h3>Preset 3x3</h3>
+          <p class="path">frontend/lib/treatment-presets.ts</p>
+          <p class="muted-note">Contexto, ecological validity y los 9 grupos precargados.</p>
+        </article>
+        <article class="source-card filterable" data-tags="backend config validation repo">
+          <h3>Validacion de config</h3>
+          <p class="path">backend/db/repositories/config_repo.py</p>
+          <p class="muted-note">Normaliza y valida simulation, experimental, tokens y availability.</p>
+        </article>
+        <article class="source-card filterable" data-tags="admin endpoints meta save update clone">
+          <h3>API de admin</h3>
+          <p class="path">backend/main.py</p>
+          <p class="muted-note">Endpoints meta, save, update, clone, pause/resume, tokens y sesiones.</p>
+        </article>
+        <article class="source-card filterable" data-tags="chatroom runtime session loop pacing typing">
+          <h3>Runtime de sesion</h3>
+          <p class="path">backend/platforms/chatroom.py</p>
+          <p class="muted-note">Carga config, crea LLM managers, aplica features y corre el tick loop.</p>
+        </article>
+        <article class="source-card filterable" data-tags="orchestrator update evaluate action performer moderator classifier">
+          <h3>Orquestacion STAGE</h3>
+          <p class="path">backend/agents/STAGE/orchestrator.py</p>
+          <p class="muted-note">Orden real de llamadas, anonimizado, waits, likes, retries y clasificacion.</p>
+        </article>
+        <article class="source-card filterable" data-tags="prompt templates renderer">
+          <h3>Prompts</h3>
+          <p class="path">backend/agents/STAGE/prompts/</p>
+          <p class="muted-note">Markdown base y renderer con bloques SYSTEM / USER / ACTION_TYPE.</p>
+        </article>
+        <article class="source-card filterable" data-tags="features registry news article gate until user post">
+          <h3>Features</h3>
+          <p class="path">backend/features/</p>
+          <p class="muted-note">Registry, seed de noticia y gating hasta primer post del usuario.</p>
+        </article>
+        <article class="source-card filterable" data-tags="validation inspect exact prompts pipeline">
+          <h3>Inspeccion manual</h3>
+          <p class="path">backend/agents/STAGE/validation/validate_pipeline.py</p>
+          <p class="muted-note">Script para imprimir prompts exactos y respuestas LLM turno a turno.</p>
+        </article>
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    Esta guia resume el estado del repositorio local inspeccionado el 17 de marzo de 2026. Si cambias prompts,
+    preset, registry de features o defaults del wizard, este HTML deberia actualizarse para seguir siendo fiel al codigo.
+  </footer>
+
+  <script>
+    const pipelines = {
+      session: [
+        {
+          kicker: "Arranque de sesion",
+          title: "1. Token -> reserva de sesion",
+          summary: "El participante llama a POST /session/start con un token de un solo uso. El backend consume el token, resuelve experiment_id y treatment_group y deja una sesion pendiente.",
+          inputs: "Token de participante, DB de tokens, availability del experimento.",
+          outputs: "session_id, reserva pending y grupo de tratamiento asociado.",
+          canDo: "Validar acceso, fijar treatment_group y bloquear reutilizacion del token.",
+          cannotDo: "No genera mensajes ni decide contenido conversacional.",
+          notes: "Si el experimento esta fuera de fecha o pausado, el consumo del token se revierte.",
+          source: "backend/main.py, utils/token_manager, config_repo.check_experiment_availability"
+        },
+        {
+          kicker: "Arranque de sesion",
+          title: "2. WebSocket -> creacion o reconstruccion",
+          summary: "Cuando se abre /ws/{session_id}, la app intenta reconstruir una sesion existente; si no, consume la reserva pending y crea una SimulationSession nueva.",
+          inputs: "session_id, pending metadata, DB/Redis para recovery.",
+          outputs: "SimulationSession viva con attach del WebSocket.",
+          canDo: "Reanudar sesiones, reenganchar WebSocket y recuperar historial.",
+          cannotDo: "No redefine el experimento ni cambia el treatment_group asignado por el token.",
+          notes: "La sesion soporta reconnects y replay de historial desde base de datos.",
+          source: "backend/main.py, utils/session_manager.py"
+        },
+        {
+          kicker: "Arranque de sesion",
+          title: "3. Carga de config y montaje de runtime",
+          summary: "SimulationSession descompone el JSON guardado, selecciona el group activo, monta LLMManager por rol, construye SessionState, carga features y crea el Orchestrator.",
+          inputs: "Config guardada del experimento, treatment_group, user_name=participant.",
+          outputs: "State, Orchestrator, AgentManager y FeatureRunner listos.",
+          canDo: "Materializar el experimento guardado en objetos runtime listos para usarse.",
+          cannotDo: "No inventa defaults nuevos fuera del JSON ya guardado, salvo fallbacks validados por backend.",
+          notes: "Aqui se extraen internal_validity_criteria, chatroom_context y ecological_criteria.",
+          source: "backend/platforms/chatroom.py"
+        },
+        {
+          kicker: "Arranque de sesion",
+          title: "4. Seed inicial y feature gating",
+          summary: "Al arrancar, las features pueden sembrar contenido o impedir que actuen agentes hasta cierta condicion.",
+          inputs: "FeatureRunner y config del grupo.",
+          outputs: "Mensajes seed opcionales como [news] o gating activo.",
+          canDo: "Inyectar una noticia inicial o bloquear agentes hasta primer post humano.",
+          cannotDo: "No reescribe prompts ni decide texto de respuestas futuras salvo por el contexto que deja sembrado.",
+          notes: "news_article inyecta un mensaje; gate_until_user_post hace que los agentes esperen el primer mensaje humano.",
+          source: "backend/features/runner.py, backend/features/news_article.py, backend/features/gate_until_user_post.py"
+        },
+        {
+          kicker: "Arranque de sesion",
+          title: "5. Tick loop y control de sesion",
+          summary: "El runtime entra en un loop de 1 segundo. En cada tick comprueba expiracion, gating de features y la probabilidad de disparar un turno.",
+          inputs: "messages_per_minute, reloj, estado de la sesion.",
+          outputs: "Turnos STAGE secuenciales o espera hasta el siguiente tick.",
+          canDo: "Regular frecuencia maxima, parar por expiracion y serializar turnos.",
+          cannotDo: "No redacta mensajes ni decide quien habla; solo decide si se entra o no al pipeline.",
+          notes: "La sesion publica typing events y session_end por Redis para la UI.",
+          source: "backend/platforms/chatroom.py"
+        },
+        {
+          kicker: "Arranque de sesion",
+          title: "6. Persistencia y entrega al frontend",
+          summary: "Mensajes, likes y eventos se guardan en PostgreSQL y se publican por Redis pub/sub para que el WebSocket los reenvie al navegador.",
+          inputs: "Mensajes del usuario o de agentes, likes, eventos de sistema.",
+          outputs: "Historial persistido, replayable y visible en tiempo real.",
+          canDo: "Guardar, retransmitir y permitir recovery posterior.",
+          cannotDo: "No modifica el contenido semantico del mensaje una vez ya salio del pipeline.",
+          notes: "El cierre por expiracion puede incluir redirect_url para mover al participante a un cuestionario.",
+          source: "backend/agents/agent_manager.py, backend/platforms/chatroom.py, db/repositories/message_repo.py"
+        }
+      ],
+      turn: [
+        {
+          kicker: "Turno STAGE",
+          title: "1. Guard de pacing",
+          summary: "Solo si el gating de features lo permite y la tirada aleatoria cae bajo post_probability, se entra en un turno.",
+          inputs: "messages_per_minute, random_seed, estado de features.",
+          outputs: "Entrada al turno o skip.",
+          canDo: "Decidir si hay oportunidad de respuesta en este tick.",
+          cannotDo: "No elige actor, target ni texto.",
+          notes: "Los turnos son secuenciales bajo lock, no concurrentes.",
+          source: "backend/platforms/chatroom.py"
+        },
+        {
+          kicker: "Turno STAGE",
+          title: "2. Director Update",
+          summary: "Si existe un ultimo actor y la accion previa no fue like, el Director actualiza su performer profile.",
+          inputs: "Ultima accion, perfil anterior, chatroom_context.",
+          outputs: "Nuevo profile condensado.",
+          canDo: "Resumir historial conductual del ultimo actor para memoria interna del Director.",
+          cannotDo: "No emite mensajes al chat, no selecciona proxima accion y no cambia directamente el texto final.",
+          notes: "Si el ultimo mensaje fue del humano, tambien puede actualizarse su perfil anonimizado.",
+          source: "backend/agents/STAGE/orchestrator.py, backend/agents/STAGE/director.py"
+        },
+        {
+          kicker: "Turno STAGE",
+          title: "3. Director Evaluate",
+          summary: "Revisa internal y ecological validity. Durante warm-up corre en cada turno; despues, cada evaluate_interval turnos productivos.",
+          inputs: "Recent chat log, evaluaciones previas, action summary, participation summary.",
+          outputs: "Dos resúmenes que guiaran la accion siguiente.",
+          canDo: "Diagnosticar deriva experimental y naturalidad conversacional.",
+          cannotDo: "No escoge wording final ni target exacto; solo deja orientacion para Action.",
+          notes: "La ventana reciente usada aqui tiene longitud evaluate_interval.",
+          source: "backend/agents/STAGE/orchestrator.py, backend/agents/STAGE/director.py"
+        },
+        {
+          kicker: "Turno STAGE",
+          title: "4. Director Action",
+          summary: "Selecciona performer, tipo de accion, target y produce la instruccion O/M/D para el Performer.",
+          inputs: "Profiles, chat log, resúmenes de validez, participacion.",
+          outputs: "JSON con action_type, target y performer_instruction.",
+          canDo: "Elegir quien actua, que tipo de accion ocurre y con que objetivo general.",
+          cannotDo: "No redacta el mensaje visible final; solo lo encuadra con O/M/D.",
+          notes: "Si el Director elige al humano, el resultado se trata como wait.",
+          source: "backend/agents/STAGE/orchestrator.py, backend/agents/STAGE/director.py"
+        },
+        {
+          kicker: "Turno STAGE",
+          title: "5. Ramas cortas: wait o like",
+          summary: "Si el resultado es wait, el turno no avanza. Si es like, no hay llamada a Performer ni Moderator: solo se aplica el like.",
+          inputs: "action_type y target_message_id.",
+          outputs: "No mensaje nuevo o evento de like.",
+          canDo: "Abortar turno improductivo o ejecutar endorsement no verbal.",
+          cannotDo: "No puede producir un mensaje textual nuevo en la rama like o wait.",
+          notes: "Se evita like duplicado sobre el mismo mensaje por el mismo agente.",
+          source: "backend/agents/STAGE/orchestrator.py, backend/agents/agent_manager.py"
+        },
+        {
+          kicker: "Turno STAGE",
+          title: "6. Performer",
+          summary: "Genera un borrador de mensaje a partir de O/M/D, perfil, sus propios mensajes recientes y target.",
+          inputs: "Instruction O/M/D, recent_messages, target_user/target_message.",
+          outputs: "Texto bruto del Performer.",
+          canDo: "Redactar el mensaje visible en bruto.",
+          cannotDo: "No ve el chat log completo, no elige autonomamente actor/accion y no persiste nada.",
+          notes: "No recibe el chat log completo.",
+          source: "backend/agents/STAGE/performer.py"
+        },
+        {
+          kicker: "Turno STAGE",
+          title: "7. Moderator + retries",
+          summary: "Extrae el mensaje limpio. Si no hay contenido usable, el bloque Performer + Moderator se reintenta hasta 3 veces.",
+          inputs: "Salida bruta del Performer.",
+          outputs: "Mensaje final limpio o fallo tras reintentos.",
+          canDo: "Quitar razonamiento, formato o basura y dejar solo el mensaje.",
+          cannotDo: "No deberia inventar una nueva intencion conversacional ni replanificar el turno.",
+          notes: "Un fallo agotado se trata como wait invisible para el resto del pipeline.",
+          source: "backend/agents/STAGE/moderator.py, backend/agents/STAGE/orchestrator.py"
+        },
+        {
+          kicker: "Turno STAGE",
+          title: "8. Deanonimizacion, clasificacion y persistencia",
+          summary: "Se deanomiza el texto, se materializan @mentions o reply metadata, se clasifica el mensaje final y luego se persiste y publica.",
+          inputs: "Mensaje limpio, reverse map, classifier prompt, target metadata.",
+          outputs: "Message final con flags de incivility y like-mindedness.",
+          canDo: "Materializar metadata final, etiquetar el mensaje y enviarlo al historial.",
+          cannotDo: "No vuelve a decidir el contenido semantico principal salvo limpieza menor de @mention canonica.",
+          notes: "Despues se aplica un retraso de typing en funcion de la longitud del mensaje.",
+          source: "backend/agents/STAGE/orchestrator.py, backend/agents/agent_manager.py"
+        }
+      ]
+    };
+
+    const pipelineList = document.getElementById("pipelineList");
+    const pipelineKicker = document.getElementById("pipelineKicker");
+    const pipelineTitle = document.getElementById("pipelineTitle");
+    const pipelineBody = document.getElementById("pipelineBody");
+    const pipelineInputs = document.getElementById("pipelineInputs");
+    const pipelineOutputs = document.getElementById("pipelineOutputs");
+    const pipelineCan = document.getElementById("pipelineCan");
+    const pipelineCannot = document.getElementById("pipelineCannot");
+    const pipelineNotes = document.getElementById("pipelineNotes");
+    const pipelineSource = document.getElementById("pipelineSource");
+
+    let currentPipeline = "turn";
+    let currentIndex = 0;
+
+    function renderPipelineTabs() {
+      document.querySelectorAll("[data-pipeline-tab]").forEach((button) => {
+        button.classList.toggle("active", button.dataset.pipelineTab === currentPipeline);
+      });
+    }
+
+    function renderPipelineList() {
+      pipelineList.innerHTML = "";
+      pipelines[currentPipeline].forEach((step, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "pipeline-step";
+        if (index === currentIndex) button.classList.add("active");
+        button.innerHTML = "<strong>" + step.title + "</strong><span>" + step.summary + "</span>";
+        button.addEventListener("click", () => {
+          currentIndex = index;
+          renderPipelineList();
+          renderPipelineDetail();
+        });
+        pipelineList.appendChild(button);
+      });
+    }
+
+    function renderPipelineDetail() {
+      const step = pipelines[currentPipeline][currentIndex];
+      pipelineKicker.textContent = step.kicker;
+      pipelineTitle.textContent = step.title;
+      pipelineBody.textContent = step.summary;
+      pipelineInputs.textContent = step.inputs;
+      pipelineOutputs.textContent = step.outputs;
+      pipelineCan.textContent = step.canDo;
+      pipelineCannot.textContent = step.cannotDo;
+      pipelineNotes.textContent = step.notes;
+      pipelineSource.textContent = step.source;
+    }
+
+    document.querySelectorAll("[data-pipeline-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        currentPipeline = button.dataset.pipelineTab;
+        currentIndex = 0;
+        renderPipelineTabs();
+        renderPipelineList();
+        renderPipelineDetail();
+      });
+    });
+
+    renderPipelineTabs();
+    renderPipelineList();
+    renderPipelineDetail();
+
+    document.querySelectorAll("[data-prompt-tab]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const target = button.dataset.promptTab;
+        document.querySelectorAll("[data-prompt-tab]").forEach((tab) => {
+          tab.classList.toggle("active", tab === button);
+        });
+        document.querySelectorAll("[data-prompt-panel]").forEach((panel) => {
+          panel.classList.toggle("active", panel.dataset.promptPanel === target);
+        });
+      });
+    });
+
+    const varButtons = Array.from(document.querySelectorAll("[data-var-button]"));
+    const varRows = Array.from(document.querySelectorAll(".var-row"));
+    let currentVarFilter = "all";
+
+    function applyVarFilter() {
+      varButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.varButton === currentVarFilter);
+      });
+
+      varRows.forEach((row) => {
+        const filters = (row.dataset.varFilter || "").split(/\s+/).filter(Boolean);
+        const match = currentVarFilter === "all" || filters.includes(currentVarFilter);
+        row.classList.toggle("is-hidden", !match);
+      });
+    }
+
+    varButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        currentVarFilter = button.dataset.varButton || "all";
+        applyVarFilter();
+      });
+    });
+
+    applyVarFilter();
+
+    const searchInput = document.getElementById("searchInput");
+    const searchStatus = document.getElementById("searchStatus");
+    const filterables = Array.from(document.querySelectorAll(".filterable"));
+
+    function applySearch() {
+      const query = searchInput.value.trim().toLowerCase();
+      let visible = 0;
+
+      filterables.forEach((item) => {
+        const tags = (item.dataset.tags || "").toLowerCase();
+        const text = item.textContent.toLowerCase();
+        const match = !query || tags.includes(query) || text.includes(query);
+        item.classList.toggle("is-hidden", !match);
+        if (match) visible += 1;
+      });
+
+      searchStatus.textContent = query
+        ? "Coincidencias visibles: " + visible
+        : "Mostrando todo";
+    }
+
+    searchInput.addEventListener("input", applySearch);
+  </script>
+</body>
+</html>

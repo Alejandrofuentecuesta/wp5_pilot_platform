@@ -606,6 +606,26 @@ async def admin_get_meta(x_admin_key: str = Header(None)):
     }
 
 
+@app.get("/admin/prompt-defaults")
+async def admin_prompt_defaults(x_admin_key: str = Header(None)):
+    """Return the default prompt template file contents for all roles."""
+    _require_admin(x_admin_key)
+    from pathlib import Path
+    prompts_dir = Path(__file__).parent / "agents" / "STAGE" / "prompts"
+    def _read(filename: str) -> str:
+        try:
+            return (prompts_dir / filename).read_text(encoding="utf-8")
+        except Exception:
+            return ""
+    return {
+        "performer_prompt_template": _read("performer_prompt.md"),
+        "director_action_prompt_template": _read("director_action_prompt.md"),
+        "director_evaluate_prompt_template": _read("director_evaluate_prompt.md"),
+        "moderator_prompt_template": _read("moderator_prompt.md"),
+        "classifier_prompt_template": _read("system/classifier_prompt.md") + "\n---\n" + _read("user/classifier_prompt.md"),
+    }
+
+
 class TestLLMRequest(BaseModel):
     provider: str
     model: str

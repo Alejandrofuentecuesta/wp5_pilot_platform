@@ -16,16 +16,18 @@ _UNIFIED_TEMPLATE = (_PROMPTS_DIR / "moderator_prompt.md").read_text(encoding="u
 from agents.STAGE.prompts.prompt_renderer import render as _render_prompt
 
 
-def build_moderator_system_prompt(chatroom_context: str = "") -> str:
+def build_moderator_system_prompt(chatroom_context: str = "", template: Optional[str] = None) -> str:
     """Build the Moderator system prompt (session-static)."""
-    prompt = _render_prompt(_UNIFIED_TEMPLATE, "system")
+    raw = template if (isinstance(template, str) and template.strip()) else _UNIFIED_TEMPLATE
+    prompt = _render_prompt(raw, "system")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
     return prompt
 
 
-def build_moderator_user_prompt(performer_output: str) -> str:
+def build_moderator_user_prompt(performer_output: str, template: Optional[str] = None) -> str:
     """Build the per-turn user prompt with the Performer's raw output."""
-    prompt = _render_prompt(_UNIFIED_TEMPLATE, "user")
+    raw = template if (isinstance(template, str) and template.strip()) else _UNIFIED_TEMPLATE
+    prompt = _render_prompt(raw, "user")
     prompt = prompt.replace("{PERFORMER_OUTPUT}", performer_output)
     return prompt
 

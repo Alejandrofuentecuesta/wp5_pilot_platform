@@ -135,9 +135,11 @@ def build_evaluate_system_prompt(
     internal_validity_criteria: str,
     ecological_criteria: str,
     chatroom_context: str = "",
+    template: Optional[str] = None,
 ) -> str:
     """Build the Director Evaluate system prompt (session-static)."""
-    prompt = _render_prompt(_EVALUATE_TEMPLATE, "system")
+    raw = template if (isinstance(template, str) and template.strip()) else _EVALUATE_TEMPLATE
+    prompt = _render_prompt(raw, "system")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
     prompt = prompt.replace("{INTERNAL_VALIDITY_CRITERIA}", internal_validity_criteria)
     prompt = prompt.replace("{ECOLOGICAL_VALIDITY_CRITERIA}", ecological_criteria)
@@ -192,6 +194,7 @@ def build_evaluate_user_prompt(
     action_counts: Optional[Dict[str, int]] = None,
     performer_counts: Optional[Dict[str, int]] = None,
     exclude_performer: Optional[str] = None,
+    template: Optional[str] = None,
 ) -> str:
     """Build the Director Evaluate user prompt with dynamic data."""
     chat_log = format_chat_log(messages)
@@ -200,7 +203,8 @@ def build_evaluate_user_prompt(
     action_summary = format_action_summary(action_counts) if action_counts else "(No actions yet)"
     participation_summary = format_participation_summary(performer_counts, exclude_performer=exclude_performer) if performer_counts else "(No actions yet)"
 
-    prompt = _render_prompt(_EVALUATE_TEMPLATE, "user")
+    raw = template if (isinstance(template, str) and template.strip()) else _EVALUATE_TEMPLATE
+    prompt = _render_prompt(raw, "user")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
     prompt = prompt.replace("{INTERNAL_VALIDITY_CRITERIA}", internal_validity_criteria)
     prompt = prompt.replace("{ECOLOGICAL_VALIDITY_CRITERIA}", ecological_criteria)
@@ -236,13 +240,14 @@ def parse_evaluate_response(raw: str) -> dict:
 
 # ── Action prompts (Call 3) ─────────────────────────────────────────────────
 
-def build_action_system_prompt(chatroom_context: str = "") -> str:
+def build_action_system_prompt(chatroom_context: str = "", template: Optional[str] = None) -> str:
     """Build the Director Action system prompt (session-static).
 
     The Action call does NOT receive raw validity criteria —
     it receives the evaluations from Call 2 instead.
     """
-    prompt = _render_prompt(_ACTION_TEMPLATE, "system")
+    raw = template if (isinstance(template, str) and template.strip()) else _ACTION_TEMPLATE
+    prompt = _render_prompt(raw, "system")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
     return prompt
 
@@ -255,13 +260,15 @@ def build_action_user_prompt(
     chatroom_context: str = "",
     performer_counts: Optional[Dict[str, int]] = None,
     exclude_performer: Optional[str] = None,
+    template: Optional[str] = None,
 ) -> str:
     """Build the Director Action user prompt with dynamic data."""
     chat_log = format_chat_log(messages)
     profiles_str = format_agent_profiles(agent_profiles)
     participation_summary = format_participation_summary(performer_counts, exclude_performer=exclude_performer) if performer_counts else "(No actions yet)"
 
-    prompt = _render_prompt(_ACTION_TEMPLATE, "user")
+    raw = template if (isinstance(template, str) and template.strip()) else _ACTION_TEMPLATE
+    prompt = _render_prompt(raw, "user")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
     prompt = prompt.replace("{INTERNAL_VALIDITY_SUMMARY}", internal_validity_summary)
     prompt = prompt.replace("{ECOLOGICAL_VALIDITY_SUMMARY}", ecological_validity_summary)

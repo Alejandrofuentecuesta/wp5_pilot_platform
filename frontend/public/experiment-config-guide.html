@@ -1,0 +1,1979 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WP5 Experiments Guide</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --bg-2: #efe6d8;
+      --panel: rgba(255, 251, 245, 0.82);
+      --panel-strong: rgba(255, 248, 238, 0.95);
+      --ink: #1f2b2d;
+      --muted: #59686a;
+      --accent: #0f766e;
+      --accent-soft: rgba(15, 118, 110, 0.12);
+      --accent-2: #c45d2d;
+      --accent-2-soft: rgba(196, 93, 45, 0.12);
+      --line: rgba(31, 43, 45, 0.12);
+      --ok: #2f6f4f;
+      --warn: #9d4b2e;
+      --shadow: 0 18px 60px rgba(44, 34, 22, 0.12);
+      --mono: "Menlo", "Consolas", "Liberation Mono", monospace;
+      --body: "Trebuchet MS", "Segoe UI", sans-serif;
+      --title: "Georgia", "Times New Roman", serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      font-family: var(--body);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at top left, rgba(196, 93, 45, 0.16), transparent 32%),
+        radial-gradient(circle at bottom right, rgba(15, 118, 110, 0.16), transparent 28%),
+        linear-gradient(180deg, var(--bg) 0%, var(--bg-2) 100%);
+      min-height: 100vh;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.08)),
+        repeating-linear-gradient(
+          0deg,
+          transparent 0,
+          transparent 19px,
+          rgba(31, 43, 45, 0.025) 20px
+        );
+      opacity: 0.55;
+    }
+
+    .shell {
+      position: relative;
+      width: min(1200px, calc(100vw - 32px));
+      margin: 0 auto;
+      padding: 28px 0 56px;
+    }
+
+    .hero {
+      display: grid;
+      gap: 20px;
+      background: linear-gradient(135deg, rgba(255, 251, 245, 0.9), rgba(248, 241, 231, 0.86));
+      border: 1px solid var(--line);
+      border-radius: 28px;
+      box-shadow: var(--shadow);
+      padding: 26px;
+      backdrop-filter: blur(12px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      right: -80px;
+      top: -80px;
+      width: 220px;
+      height: 220px;
+      border-radius: 999px;
+      background: radial-gradient(circle, rgba(15, 118, 110, 0.18) 0%, transparent 72%);
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.35fr 0.95fr;
+      gap: 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    h1, h2, h3 {
+      margin: 0;
+      line-height: 1.08;
+      font-family: var(--title);
+      font-weight: 700;
+    }
+
+    h1 {
+      font-size: clamp(2rem, 5vw, 4rem);
+      max-width: 10ch;
+    }
+
+    h2 {
+      font-size: clamp(1.45rem, 2vw, 2rem);
+      margin-bottom: 10px;
+    }
+
+    h3 {
+      font-size: 1.05rem;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .hero p.lead {
+      font-size: 1rem;
+      max-width: 62ch;
+      color: #304143;
+    }
+
+    .badge-row,
+    .button-row,
+    .pill-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .badge,
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.68);
+      color: var(--ink);
+      font-size: 0.9rem;
+    }
+
+    .badge strong,
+    .pill strong {
+      color: var(--ink);
+    }
+
+    .mini-panel {
+      background: rgba(255, 251, 245, 0.88);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 18px;
+    }
+
+    .mini-panel strong {
+      color: var(--ink);
+    }
+
+    .nav {
+      position: sticky;
+      top: 16px;
+      z-index: 20;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 18px 0 20px;
+      padding: 10px;
+      background: rgba(255, 248, 238, 0.84);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      box-shadow: 0 10px 28px rgba(44, 34, 22, 0.08);
+      backdrop-filter: blur(12px);
+    }
+
+    .tab-button,
+    .selector button,
+    .filter-button {
+      border: 0;
+      border-radius: 999px;
+      padding: 11px 15px;
+      font: inherit;
+      cursor: pointer;
+      background: transparent;
+      color: var(--muted);
+      transition: 160ms ease;
+    }
+
+    .tab-button:hover,
+    .selector button:hover,
+    .filter-button:hover {
+      background: rgba(15, 118, 110, 0.08);
+      color: var(--ink);
+    }
+
+    .tab-button.active,
+    .selector button.active,
+    .filter-button.active {
+      background: linear-gradient(135deg, var(--accent), #155e75);
+      color: #fff;
+      box-shadow: 0 10px 22px rgba(15, 118, 110, 0.2);
+    }
+
+    .panel {
+      display: none;
+      gap: 18px;
+    }
+
+    .panel.active {
+      display: grid;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1.1fr 0.9fr;
+      gap: 18px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 14px;
+    }
+
+    .card,
+    .stage-detail,
+    .prompt-card,
+    .data-card,
+    .table-wrap {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(10px);
+    }
+
+    .card strong,
+    .stage-detail strong,
+    .prompt-card strong,
+    .data-card strong,
+    .table-wrap strong {
+      color: var(--ink);
+    }
+
+    .section-copy {
+      margin-bottom: 6px;
+    }
+
+    .section-copy + .section-copy {
+      margin-top: 8px;
+    }
+
+    .number {
+      display: inline-grid;
+      place-items: center;
+      width: 34px;
+      height: 34px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-weight: 700;
+      font-family: var(--mono);
+    }
+
+    .stack {
+      display: grid;
+      gap: 12px;
+    }
+
+    .architecture {
+      display: grid;
+      gap: 12px;
+    }
+
+    .arch-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 12px;
+      align-items: start;
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid rgba(15, 118, 110, 0.12);
+      background: rgba(255, 255, 255, 0.46);
+    }
+
+    .arch-item .role {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+    }
+
+    .note-grid {
+      display: grid;
+      gap: 10px;
+    }
+
+    .note {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.46);
+    }
+
+    .note.warn {
+      border-color: rgba(196, 93, 45, 0.2);
+      background: rgba(196, 93, 45, 0.08);
+    }
+
+    .note.ok {
+      border-color: rgba(47, 111, 79, 0.2);
+      background: rgba(47, 111, 79, 0.08);
+    }
+
+    .metrics {
+      display: grid;
+      gap: 12px;
+    }
+
+    .metric {
+      padding: 14px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.62);
+      border: 1px solid var(--line);
+    }
+
+    .metric .value {
+      display: block;
+      font-size: 1.8rem;
+      color: var(--ink);
+      font-family: var(--title);
+      margin-bottom: 4px;
+    }
+
+    .controls {
+      display: grid;
+      gap: 12px;
+    }
+
+    .control-row {
+      display: grid;
+      gap: 8px;
+    }
+
+    .control-row label {
+      color: var(--ink);
+      font-weight: 700;
+      font-size: 0.92rem;
+    }
+
+    input[type="range"] {
+      width: 100%;
+      accent-color: var(--accent);
+    }
+
+    input[type="search"] {
+      width: 100%;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      padding: 12px 14px;
+      font: inherit;
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--ink);
+    }
+
+    .accordion {
+      display: grid;
+      gap: 12px;
+    }
+
+    details {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.52);
+      overflow: hidden;
+    }
+
+    details[open] {
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 16px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-weight: 700;
+      color: var(--ink);
+    }
+
+    summary::-webkit-details-marker {
+      display: none;
+    }
+
+    .details-body {
+      padding: 0 18px 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    ul {
+      margin: 0;
+      padding-left: 18px;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    li + li {
+      margin-top: 4px;
+    }
+
+    .selector {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .stage-detail,
+    .prompt-card {
+      display: none;
+    }
+
+    .stage-detail.active,
+    .prompt-card.active {
+      display: grid;
+      gap: 14px;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .meta {
+      padding: 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.58);
+      border: 1px solid var(--line);
+    }
+
+    .meta .label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      margin-bottom: 6px;
+    }
+
+    code,
+    pre,
+    .path {
+      font-family: var(--mono);
+    }
+
+    code {
+      padding: 0.16rem 0.32rem;
+      border-radius: 6px;
+      background: rgba(15, 118, 110, 0.1);
+      color: #0b5c55;
+    }
+
+    pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      color: #253334;
+      background: rgba(22, 38, 40, 0.06);
+      border: 1px solid rgba(22, 38, 40, 0.08);
+      padding: 14px;
+      border-radius: 16px;
+      font-size: 0.84rem;
+      line-height: 1.5;
+    }
+
+    .chip-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.68);
+      font-size: 0.85rem;
+      color: var(--ink);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.94rem;
+    }
+
+    thead th {
+      text-align: left;
+      padding: 12px 10px;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      position: sticky;
+      top: 0;
+      background: rgba(255, 248, 238, 0.98);
+      backdrop-filter: blur(8px);
+      z-index: 1;
+    }
+
+    tbody td {
+      padding: 12px 10px;
+      vertical-align: top;
+      border-bottom: 1px solid rgba(31, 43, 45, 0.08);
+      color: var(--muted);
+    }
+
+    tbody tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .table-scroll {
+      max-height: 620px;
+      overflow: auto;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.4);
+    }
+
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 5px 9px;
+      border-radius: 999px;
+      font-size: 0.76rem;
+      border: 1px solid var(--line);
+      color: var(--ink);
+      background: rgba(255, 255, 255, 0.7);
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    .tag.api {
+      background: var(--accent-soft);
+      color: var(--accent);
+    }
+
+    .tag.fixed {
+      background: var(--accent-2-soft);
+      color: var(--accent-2);
+    }
+
+    .tag.group {
+      background: rgba(47, 111, 79, 0.1);
+      color: var(--ok);
+    }
+
+    .sources {
+      display: grid;
+      gap: 12px;
+    }
+
+    .source-item {
+      padding: 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.52);
+    }
+
+    .source-item .path {
+      display: block;
+      color: var(--ink);
+      margin-bottom: 6px;
+      font-size: 0.9rem;
+    }
+
+    .footer {
+      margin-top: 18px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+
+    .hidden {
+      display: none !important;
+    }
+
+    @media (max-width: 980px) {
+      .hero-grid,
+      .grid-2,
+      .grid-3,
+      .meta-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .shell {
+        width: min(100vw - 18px, 1200px);
+        padding-top: 12px;
+      }
+
+      .hero,
+      .card,
+      .stage-detail,
+      .prompt-card,
+      .data-card,
+      .table-wrap {
+        border-radius: 20px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header class="hero">
+      <div class="hero-grid">
+        <div class="stack">
+          <div class="badge-row">
+            <span class="badge"><strong>Ground truth</strong> repo actual, no README idealizado</span>
+            <span class="badge"><strong>Ubicacion</strong> <code>frontend/public/experiment-config-guide.html</code></span>
+          </div>
+          <div class="stack">
+            <h1>Como esta montado un experimento en WP5</h1>
+            <p class="lead">
+              Esta guia resume la configuracion real del repositorio: que define un experimento,
+              como entra un participante, como corre el pipeline STAGE, que prompts se usan por
+              defecto y que cosas puedes cambiar desde wizard, API o solo tocando codigo.
+            </p>
+          </div>
+          <div class="pill-row">
+            <span class="pill"><strong>Director</strong> Update + Evaluate + Action</span>
+            <span class="pill"><strong>Performer</strong> genera el mensaje</span>
+            <span class="pill"><strong>Moderator</strong> limpia salida</span>
+            <span class="pill"><strong>Classifier</strong> etiqueta incivility + like-mindedness</span>
+          </div>
+        </div>
+        <div class="mini-panel stack">
+          <h3>Lo mas importante</h3>
+          <div class="note-grid">
+            <div class="note warn">
+              <strong>La config no es realmente inmutable hoy.</strong>
+              El backend expone <code>PUT /admin/config/{experiment_id}</code>, asi que un experimento ya guardado se puede editar.
+            </div>
+            <div class="note">
+              <strong>El prompt configurable de verdad es el classifier user template.</strong>
+              Existe en tipos/backend, pero el wizard actual no lo muestra.
+            </div>
+            <div class="note ok">
+              <strong>El display name del humano no viaja al backend.</strong>
+              En runtime el backend solo conoce a la persona como <code>participant</code>.
+            </div>
+            <div class="note">
+              <strong>Hay prompts legacy en <code>prompts/system</code> y <code>prompts/user</code>.</strong>
+              El runtime actual usa sobre todo los templates unificados y los tres prompts del Director.
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <nav class="nav" aria-label="Navegacion principal">
+      <button class="tab-button active" data-tab="overview">Mapa</button>
+      <button class="tab-button" data-tab="wizard">Wizard y defaults</button>
+      <button class="tab-button" data-tab="runtime">Workflow runtime</button>
+      <button class="tab-button" data-tab="prompts">Prompts</button>
+      <button class="tab-button" data-tab="controls">Que se puede cambiar</button>
+      <button class="tab-button" data-tab="sources">Fuentes</button>
+    </nav>
+
+    <section class="panel active" id="panel-overview">
+      <div class="grid-2">
+        <article class="card stack">
+          <div>
+            <h2>Mapa rapido</h2>
+            <p class="section-copy">
+              Un experimento guarda dos blobs JSON en la tabla <code>experiments</code>:
+              <code>simulation</code> y <code>experimental</code>. Cada sesion carga ambos,
+              pero el bloque <code>experimental.groups[treatment_group]</code> decide el tratamiento
+              concreto de cada participante.
+            </p>
+          </div>
+          <div class="architecture">
+            <div class="arch-item">
+              <span class="number">1</span>
+              <div>
+                <div class="role">Admin</div>
+                <strong>Define el experimento</strong>
+                <p>ID, descripcion, ventana temporal, LLMs, grupos, features, tokens.</p>
+              </div>
+            </div>
+            <div class="arch-item">
+              <span class="number">2</span>
+              <div>
+                <div class="role">Token</div>
+                <strong>Consume un acceso de un solo uso</strong>
+                <p>El token fija a que <code>treatment_group</code> entra la sesion.</p>
+              </div>
+            </div>
+            <div class="arch-item">
+              <span class="number">3</span>
+              <div>
+                <div class="role">Session</div>
+                <strong>SimulationSession crea el runtime</strong>
+                <p>Carga config desde DB, inicializa agentes, features, LLM managers y clock loop.</p>
+              </div>
+            </div>
+            <div class="arch-item">
+              <span class="number">4</span>
+              <div>
+                <div class="role">Stage</div>
+                <strong>El orquestador decide y ejecuta</strong>
+                <p>Update, Evaluate, Action, Performer, Moderator y luego Classifier.</p>
+              </div>
+            </div>
+            <div class="arch-item">
+              <span class="number">5</span>
+              <div>
+                <div class="role">Output</div>
+                <strong>Se persiste y se emite por Redis/WebSocket</strong>
+                <p>Mensajes, likes, eventos, bloqueos y labels quedan en DB.</p>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card stack">
+          <div>
+            <h2>Estimador rapido</h2>
+            <p class="section-copy">
+              El loop corre cada segundo. La probabilidad de disparar un turno es
+              <code>messages_per_minute / 60</code>. El valor siguiente es una expectativa teorica,
+              no una garantia, porque la latencia del pipeline y los features tambien frenan.
+            </p>
+          </div>
+          <div class="controls">
+            <div class="control-row">
+              <label for="durationRange">Duracion de sesion: <span id="durationValue">5</span> min</label>
+              <input id="durationRange" type="range" min="1" max="30" step="1" value="5">
+            </div>
+            <div class="control-row">
+              <label for="mpmRange">Messages per minute: <span id="mpmValue">6</span></label>
+              <input id="mpmRange" type="range" min="0" max="20" step="1" value="6">
+            </div>
+          </div>
+          <div class="metrics">
+            <div class="metric">
+              <span class="value" id="expectedTurns">30</span>
+              <strong>turnos esperados</strong>
+              <p>Formula simple: duracion * messages_per_minute.</p>
+            </div>
+            <div class="metric">
+              <span class="value" id="tickProbability">10%</span>
+              <strong>probabilidad por tick</strong>
+              <p>Cada segundo el sistema decide si intenta un turno nuevo.</p>
+            </div>
+            <div class="metric">
+              <span class="value">5</span>
+              <strong>defaults actuales del wizard</strong>
+              <p>Duracion 5 min, 5 agentes, semilla 42, ventana de accion 5.</p>
+            </div>
+          </div>
+        </article>
+      </div>
+
+      <div class="grid-3">
+        <article class="card stack">
+          <h3>Configuracion persistida</h3>
+          <ul>
+            <li><code>experiments.config.simulation</code> guarda pacing, nombres, modelos y sampling.</li>
+            <li><code>experiments.config.experimental</code> guarda contexto, criterios y grupos.</li>
+            <li><code>tokens</code> asocia cada codigo a un grupo experimental.</li>
+            <li><code>sessions</code> congela la config usada al arrancar la sesion.</li>
+          </ul>
+        </article>
+        <article class="card stack">
+          <h3>Privacidad y anonimato</h3>
+          <ul>
+            <li>El nombre visible del humano vive en localStorage del navegador.</li>
+            <li>Backend usa siempre <code>participant</code> como remitente real.</li>
+            <li>LLM ve alias anonimizados tipo <code>Performer 1</code>, <code>Performer 2</code>.</li>
+            <li>La anonimizacion usa <code>random_seed</code> para que el shuffle sea estable por sesion.</li>
+          </ul>
+        </article>
+        <article class="card stack">
+          <h3>Features por grupo</h3>
+          <ul>
+            <li><code>news_article</code>: siembra un mensaje <code>[news]</code> al inicio.</li>
+            <li><code>gate_until_user_post</code>: silencia agentes hasta que el participante escriba.</li>
+            <li>Las features se definen por grupo, no globalmente.</li>
+            <li>Compat legacy: el viejo escenario <code>news_article</code> equivale a ambas features.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-wizard">
+      <article class="card stack">
+        <div>
+          <h2>Wizard y defaults</h2>
+          <p class="section-copy">
+            Los valores iniciales salen del frontend, pero el backend vuelve a validar y en algunos
+            casos aplica fallbacks si faltan claves. Eso significa que el default visible en el wizard
+            y el fallback de API no siempre coinciden.
+          </p>
+        </div>
+        <div class="accordion">
+          <details open>
+            <summary>
+              <span>Step 1. Experiment Identity</span>
+              <span class="tag">scope: experimento</span>
+            </summary>
+            <div class="details-body">
+              <p>
+                Define el contenedor del experimento: <code>experiment_id</code>, <code>description</code>,
+                <code>starts_at</code>, <code>ends_at</code> y <code>redirect_url</code>.
+              </p>
+              <div class="chip-list">
+                <span class="chip">ID sin default</span>
+                <span class="chip">Descripcion obligatoria</span>
+                <span class="chip">Start default = ahora</span>
+                <span class="chip">End default = +24h</span>
+                <span class="chip">Redirect default = vacio</span>
+              </div>
+              <ul>
+                <li>Si <code>redirect_url</code> esta vacio, el frontend muestra la thank-you page interna.</li>
+                <li>La ventana temporal afecta al consumo de tokens antes de arrancar sesion.</li>
+                <li>Al editar un experimento, el ID queda bloqueado en UI.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>Step 2. Session &amp; Agents</span>
+              <span class="tag">scope: simulation</span>
+            </summary>
+            <div class="details-body">
+              <div class="chip-list">
+                <span class="chip">duration = 5</span>
+                <span class="chip">random_seed = 42</span>
+                <span class="chip">num_agents = 5</span>
+                <span class="chip">agent_names = ["", "", "", "", ""]</span>
+                <span class="chip">messages_per_minute = 6</span>
+                <span class="chip">evaluate_interval = 5</span>
+                <span class="chip">action_window_size = 5</span>
+                <span class="chip">performer_memory_size = 3</span>
+              </div>
+              <ul>
+                <li><code>agent_personas</code> es opcional y arranca vacio; solo aparece si lo activas.</li>
+                <li>Los nombres son obligatorios antes de guardar, pero el wizard empieza con placeholders vacios.</li>
+                <li><code>evaluate_interval</code> no solo marca cadencia; tambien fija la longitud del contexto para Evaluate.</li>
+                <li>El backend aceptaria <code>action_window_size = 10</code> como fallback si la API no lo manda, aunque el wizard mande 5.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>Step 3. LLM Pipeline</span>
+              <span class="tag">scope: por rol</span>
+            </summary>
+            <div class="details-body">
+              <div class="chip-list">
+                <span class="chip">Director: anthropic / claude-haiku-4-5 / 0.8 / 0.8 / 1024</span>
+                <span class="chip">Performer: mistral / mistral-large-latest / 0.8 / 0.8 / 256</span>
+                <span class="chip">Moderator: anthropic / claude-haiku-4-5 / 0.2 / 1.0 / 256</span>
+                <span class="chip">Classifier: anthropic / claude-haiku-4-5 / 0.2 / 1.0 / 256</span>
+              </div>
+              <ul>
+                <li>El wizard deja copiar Director -&gt; Performer y Moderator -&gt; Classifier.</li>
+                <li>El test LLM usa el prompt fijo <code>Reply with exactly one sentence: The quick brown fox</code>.</li>
+                <li>El backend soporta proveedor <code>none</code> local, pero el admin meta no lo anuncia.</li>
+                <li>Si llamas por API sin <code>classifier_*</code>, hereda provider/model del moderator.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>Step 4. Treatment Groups</span>
+              <span class="tag group">scope: experimental.groups</span>
+            </summary>
+            <div class="details-body">
+              <div class="chip-list">
+                <span class="chip">chatroom_context = ""</span>
+                <span class="chip">redirect_url = ""</span>
+                <span class="chip">groups.condition_1.features = []</span>
+                <span class="chip">groups.condition_1.internal_validity_criteria = ""</span>
+              </div>
+              <p>
+                El unico default fuerte aqui es <code>ecological_validity_criteria</code>, que arranca
+                con una descripcion larga del estilo "dialogic + mix de acciones + mensajes cortos +
+                tono reddit-like".
+              </p>
+              <ul>
+                <li>El criterio ecologico es global al experimento.</li>
+                <li>El criterio interno es por grupo y es obligatorio para guardar.</li>
+                <li>El builder 2x2 y el preset 3x3 son ayudas de frontend, no reglas del backend.</li>
+                <li>Si activas <code>news_article</code>, ese grupo puede llevar un seed article.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>Step 5. Participant Tokens</span>
+              <span class="tag">scope: enrolment</span>
+            </summary>
+            <div class="details-body">
+              <div class="chip-list">
+                <span class="chip">participants per group UI default = 10</span>
+                <span class="chip">tokens cryptographically random</span>
+                <span class="chip">single use</span>
+              </div>
+              <ul>
+                <li>El numero por grupo es un estado del wizard, no parte del config JSON persistido.</li>
+                <li>Guardar requiere que existan tokens y que sus grupos coincidan exactamente con los grupos del experimento.</li>
+              </ul>
+            </div>
+          </details>
+
+          <details>
+            <summary>
+              <span>Step 6. Review &amp; Save</span>
+              <span class="tag">save</span>
+            </summary>
+            <div class="details-body">
+              <ul>
+                <li><code>POST /admin/config</code> valida, guarda config y siembra tokens en DB.</li>
+                <li>La UI antigua y parte del README hablan de "lock", pero el codigo actual tambien soporta editar con <code>PUT</code>.</li>
+                <li>Despues el dashboard permite activar, pausar, clonar, resetear sesiones, borrar y exportar.</li>
+              </ul>
+            </div>
+          </details>
+        </div>
+      </article>
+
+      <div class="grid-3">
+        <article class="card stack">
+          <h3>Default que mas impacta el comportamiento</h3>
+          <ul>
+            <li><code>ecological_validity_criteria</code> ya empuja a mezcla de tipos de accion y mensajes cortos.</li>
+            <li><code>messages_per_minute = 6</code> hace un experimento bastante activo para 5 minutos.</li>
+            <li><code>performer_memory_size = 3</code> es la principal barrera anti-repeticion en el Performer.</li>
+          </ul>
+        </article>
+        <article class="card stack">
+          <h3>Diferencias wizard vs fallback backend</h3>
+          <ul>
+            <li><code>performer_max_tokens</code>: wizard 256, fallback backend 512 si falta.</li>
+            <li><code>action_window_size</code>: wizard 5, fallback backend 10 si falta.</li>
+            <li><code>classifier_prompt_template</code>: no se edita en UI, pero backend exige uno no vacio y usa un default de fichero.</li>
+          </ul>
+        </article>
+        <article class="card stack">
+          <h3>Providers sugeridos en meta</h3>
+          <ul>
+            <li><code>anthropic</code>, <code>gemini</code>, <code>huggingface</code>, <code>mistral</code>, <code>konstanz</code>, <code>bsc</code>.</li>
+            <li>El doc de BSC recomienda usar <code>bsc/incivility</code> como Performer, no como Director.</li>
+            <li>El wizard avisa si un provider no tolera <code>temperature</code> y <code>top_p</code> a la vez.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-runtime">
+      <div class="grid-2">
+        <article class="card stack">
+          <div>
+            <h2>Workflow runtime</h2>
+            <p class="section-copy">
+              Aqui esta el flujo completo, desde el token del participante hasta el cierre de la sesion.
+              Los botones cambian el detalle del paso activo.
+            </p>
+          </div>
+          <div class="selector" data-selector="stage">
+            <button class="active" data-target="join">Join</button>
+            <button data-target="session">Session</button>
+            <button data-target="update">Update</button>
+            <button data-target="evaluate">Evaluate</button>
+            <button data-target="action">Action</button>
+            <button data-target="performer">Performer</button>
+            <button data-target="moderator">Moderator</button>
+            <button data-target="classifier">Classifier</button>
+            <button data-target="end">End</button>
+          </div>
+
+          <div class="stage-detail active" data-stage="join">
+            <h3>1. Token -&gt; pending session</h3>
+            <p>
+              El frontend llama <code>POST /session/start</code> con el token. El backend lo consume
+              de forma atomica, resuelve <code>treatment_group</code> y <code>experiment_id</code>,
+              comprueba ventana temporal y pausa, y reserva una sesion pendiente.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Input</span>
+                token de un solo uso
+              </div>
+              <div class="meta">
+                <span class="label">Output</span>
+                <code>session_id</code>
+              </div>
+              <div class="meta">
+                <span class="label">Persistencia</span>
+                <code>sessions.status = pending</code>
+              </div>
+            </div>
+            <ul>
+              <li>Si el experimento no esta disponible, el token se desmarca como usado para que la persona pueda reintentar.</li>
+              <li>El nombre visible del participante no se envia aqui.</li>
+            </ul>
+          </div>
+
+          <div class="stage-detail" data-stage="session">
+            <h3>2. WebSocket -&gt; create/reconstruct session</h3>
+            <p>
+              Al conectar al WebSocket, el sistema recupera la pending session o reconstruye una sesion activa
+              desde DB/Redis si hubo reconexion o crash recovery.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Carga</span>
+                config del experimento + mensajes previos + agent blocks
+              </div>
+              <div class="meta">
+                <span class="label">Inicializa</span>
+                <code>SimulationSession</code>, LLM managers, features, orchestrator
+              </div>
+              <div class="meta">
+                <span class="label">Arranque</span>
+                seed features + clock loop + Redis pub/sub
+              </div>
+            </div>
+            <ul>
+              <li>Los agentes se crean a partir de <code>agent_names</code> y <code>agent_personas</code>.</li>
+              <li>Si la feature <code>news_article</code> esta activa, mete un mensaje <code>[news]</code> al empezar.</li>
+              <li>El clock loop es secuencial; solo un turno de agente a la vez.</li>
+            </ul>
+          </div>
+
+          <div class="stage-detail" data-stage="update">
+            <h3>3. Director Update</h3>
+            <p>
+              Si ya hubo actividad previa y no fue un like, el Director actualiza el perfil del ultimo performer
+              que actuo. Ese perfil es un resumen emergente de posiciones, estilo e interacciones.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Mira</span>
+                ultimo performer + su perfil previo + su ultima accion
+              </div>
+              <div class="meta">
+                <span class="label">Devuelve</span>
+                <code>performer_profile_update</code>
+              </div>
+              <div class="meta">
+                <span class="label">Editable</span>
+                no desde UI
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-detail" data-stage="evaluate">
+            <h3>4. Director Evaluate</h3>
+            <p>
+              Evalua dos ejes: validez interna del tratamiento y validez ecologica del chat. Durante el warm-up
+              corre en cada turno; despues corre cada <code>evaluate_interval</code> turnos productivos.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Contexto</span>
+                ultimos <code>evaluate_interval</code> mensajes
+              </div>
+              <div class="meta">
+                <span class="label">Mira tambien</span>
+                action counts + participation counts
+              </div>
+              <div class="meta">
+                <span class="label">Devuelve</span>
+                dos summaries textuales
+              </div>
+            </div>
+            <ul>
+              <li>El humano se excluye de la presion por equidad de participacion.</li>
+              <li>Si el Director "espera" al humano, el contador de evaluate se revierte.</li>
+            </ul>
+          </div>
+
+          <div class="stage-detail" data-stage="action">
+            <h3>5. Director Action</h3>
+            <p>
+              A partir de evaluaciones + perfiles + chat log, el Director elige <code>next_performer</code>,
+              <code>action_type</code>, target y una instruccion O/M/D: objective, motivation y directive.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Action types</span>
+                <code>message</code>, <code>reply</code>, <code>@mention</code>, <code>like</code>
+              </div>
+              <div class="meta">
+                <span class="label">Ventana</span>
+                ultimos <code>action_window_size</code> mensajes
+              </div>
+              <div class="meta">
+                <span class="label">Caso especial</span>
+                si elige al humano, el turno pasa a <code>wait</code>
+              </div>
+            </div>
+            <ul>
+              <li>Si el Director pide self-mention, el sistema la degrada a <code>message</code>.</li>
+              <li>Si elige un agente invalido, cae a uno aleatorio valido.</li>
+              <li>Un <code>like</code> duplicado tambien se convierte en wait.</li>
+            </ul>
+          </div>
+
+          <div class="stage-detail" data-stage="performer">
+            <h3>6. Performer</h3>
+            <p>
+              El Performer no ve el chat completo. Solo recibe contexto del chatroom, su perfil,
+              sus mensajes recientes, la O/M/D del Director y el target relevante.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Memoria</span>
+                <code>performer_memory_size</code>
+              </div>
+              <div class="meta">
+                <span class="label">Objetivo</span>
+                producir solo el mensaje visible
+              </div>
+              <div class="meta">
+                <span class="label">Reintentos</span>
+                hasta 3 con Moderator
+              </div>
+            </div>
+            <ul>
+              <li>Para <code>message</code> con target_user, el sistema busca el ultimo mensaje de esa persona.</li>
+              <li>La salida aun puede traer ruido, por eso siempre pasa por Moderator.</li>
+            </ul>
+          </div>
+
+          <div class="stage-detail" data-stage="moderator">
+            <h3>7. Moderator</h3>
+            <p>
+              Recorta razonamiento, prefijos, markdown o basura del Performer. Si no detecta contenido,
+              devuelve <code>NO_CONTENT</code> y se reintenta el ciclo Performer -&gt; Moderator.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Input</span>
+                salida cruda del Performer
+              </div>
+              <div class="meta">
+                <span class="label">Output</span>
+                texto limpio o <code>NO_CONTENT</code>
+              </div>
+              <div class="meta">
+                <span class="label">Si falla 3 veces</span>
+                el turno se oculta como wait
+              </div>
+            </div>
+          </div>
+
+          <div class="stage-detail" data-stage="classifier">
+            <h3>8. Classifier</h3>
+            <p>
+              Despues de moderar el mensaje, corre un clasificador extra para etiquetar incivility,
+              like-mindedness e inferencia de stance del participante.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Input</span>
+                historial del participante + mensaje del agente
+              </div>
+              <div class="meta">
+                <span class="label">Output</span>
+                <code>is_incivil</code>, <code>is_like_minded</code>, stance, rationale
+              </div>
+              <div class="meta">
+                <span class="label">Configurable</span>
+                modelo y prompt template via API
+              </div>
+            </div>
+            <ul>
+              <li>Si el classifier falla, el mensaje sigue existiendo; solo se pierden labels.</li>
+              <li>Las columnas quedan en <code>messages</code> para export y evaluacion.</li>
+            </ul>
+          </div>
+
+          <div class="stage-detail" data-stage="end">
+            <h3>9. Fin de sesion</h3>
+            <p>
+              Si la sesion expira por tiempo, publica un evento <code>session_end</code> con
+              <code>redirect_url</code>, cierra WebSocket y persiste el cierre. El frontend redirige
+              o muestra la thank-you screen.
+            </p>
+            <div class="meta-grid">
+              <div class="meta">
+                <span class="label">Trigger</span>
+                <code>duration_minutes</code>
+              </div>
+              <div class="meta">
+                <span class="label">Frontend</span>
+                limpia <code>sessionId</code> de localStorage
+              </div>
+              <div class="meta">
+                <span class="label">Post-run</span>
+                session report HTML + CSV + dashboard exports
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="card stack">
+          <h2>Condiciones y reglas fijas</h2>
+          <div class="note-grid">
+            <div class="note">
+              <strong>Tick loop:</strong> cada 1 segundo.
+            </div>
+            <div class="note">
+              <strong>Tipado simulado:</strong> 7 chars/seg, minimo 0.5s, maximo 8s.
+            </div>
+            <div class="note">
+              <strong>Secuencial:</strong> un lock evita turnos concurrentes para que el Director vea todo en orden.
+            </div>
+            <div class="note">
+              <strong>Broadcast:</strong> Redis pub/sub entrega a WebSocket; DB es la fuente autoritativa.
+            </div>
+            <div class="note">
+              <strong>Bloqueo por report:</strong> no borra mensajes viejos; solo oculta futuros del agente bloqueado.
+            </div>
+            <div class="note warn">
+              <strong>El pipeline real tiene 6 llamadas LLM, no 5.</strong>
+              README enumera 5 porque no cuenta explicitamente el classifier post-moderation.
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-prompts">
+      <article class="card stack">
+        <div>
+          <h2>Prompt explorer</h2>
+          <p class="section-copy">
+            Estos son los prompts que de verdad usa el runtime actual. Los botones muestran la pieza activa.
+            Debajo de cada resumen puedes desplegar el template crudo.
+          </p>
+        </div>
+
+        <div class="selector" data-selector="prompt">
+          <button class="active" data-target="p-update">Director Update</button>
+          <button data-target="p-evaluate">Director Evaluate</button>
+          <button data-target="p-action">Director Action</button>
+          <button data-target="p-performer">Performer</button>
+          <button data-target="p-moderator">Moderator</button>
+          <button data-target="p-classifier">Classifier</button>
+        </div>
+
+        <article class="prompt-card active" data-prompt="p-update">
+          <h3>Director Update</h3>
+          <p>
+            Se renderiza desde <code>backend/agents/STAGE/prompts/director_update_prompt.md</code>.
+            Mezcla bloques <code>{#SYSTEM}</code> y <code>{#USER}</code> con placeholders como
+            <code>{LAST_AGENT}</code>, <code>{LAST_AGENT_PROFILE}</code> y <code>{LAST_ACTION}</code>.
+          </p>
+          <div class="chip-list">
+            <span class="chip">Objetivo: refrescar perfil emergente</span>
+            <span class="chip">Salida JSON: performer_profile_update</span>
+            <span class="chip">No configurable desde UI</span>
+          </div>
+          <details>
+            <summary>Ver template crudo</summary>
+            <div class="details-body">
+              <pre># Director - Update Performer Profile
+
+You are the 'Director' in a social-scientific experiment simulating a realistic online chatroom. Your role is strictly behind the scenes. In this step, you must update the profile of the performer that acted most recently.
+
+## Chatroom Context
+
+Here is the chatroom context, as described by the researcher for this experiment:
+
+`{CHATROOM_CONTEXT}`
+
+{#SYSTEM}
+The name of the last-acting performer, their current profile, and their most recent action will be provided in the user message below.
+{/SYSTEM}
+
+## Your Task
+
+Read the performer's most recent action and update their profile accordingly.
+
+...
+
+{#USER}
+## Last-Acting Performer 
+
+**{LAST_AGENT}**
+
+### Their Current Profile
+
+{LAST_AGENT_PROFILE}
+
+## Their Most Recent Action
+
+{LAST_ACTION}
+{/USER}</pre>
+            </div>
+          </details>
+        </article>
+
+        <article class="prompt-card" data-prompt="p-evaluate">
+          <h3>Director Evaluate</h3>
+          <p>
+            Sale de <code>backend/agents/STAGE/prompts/director_evaluate_prompt.md</code> y usa los criterios
+            definidos por el investigador. Mantiene dos summaries: uno para validez interna y otro para ecologia.
+          </p>
+          <div class="chip-list">
+            <span class="chip">Inputs: criteria + previous summaries + action distribution + chat log</span>
+            <span class="chip">Salida JSON doble</span>
+            <span class="chip">Frecuencia controlada por evaluate_interval</span>
+          </div>
+          <details>
+            <summary>Ver template crudo</summary>
+            <div class="details-body">
+              <pre># Director - Evaluate Validity
+
+You are the 'Director' in a social-scientific experiment simulating a realistic online chatroom. Your role is strictly behind the scenes. In this step, you revise your running evaluation of the chatroom against two researcher-defined validity criteria.
+
+## Researcher-Defined Criteria
+
+### Internal Validity
+
+`{INTERNAL_VALIDITY_CRITERIA}`
+
+### Ecological Validity
+
+`{ECOLOGICAL_VALIDITY_CRITERIA}`
+
+...
+
+Respond with a JSON object using exactly this structure:
+{
+  "internal_validity_evaluation": "...",
+  "ecological_validity_evaluation": "..."
+}</pre>
+            </div>
+          </details>
+        </article>
+
+        <article class="prompt-card" data-prompt="p-action">
+          <h3>Director Action</h3>
+          <p>
+            Este prompt decide el siguiente movimiento. Vive en
+            <code>backend/agents/STAGE/prompts/director_action_prompt.md</code>.
+          </p>
+          <div class="chip-list">
+            <span class="chip">Outputs: priority, rationales, next_performer, action_type, target, performer_instruction</span>
+            <span class="chip">Usa action_window_size</span>
+            <span class="chip">Acciones validas: message, reply, @mention, like</span>
+          </div>
+          <details>
+            <summary>Ver template crudo</summary>
+            <div class="details-body">
+              <pre># Director - Design Action
+
+You are the 'Director' in a social-scientific experiment. Your purpose is to ensure the simulated chatroom achieves two goals: internal validity and ecological validity.
+
+### Step 1: Identify the Priority
+**Internal validity**: {INTERNAL_VALIDITY_SUMMARY}
+**Ecological validity**: {ECOLOGICAL_VALIDITY_SUMMARY}
+
+### Step 2: Select a Performer
+{AGENT_PROFILES}
+
+### Step 3: Select an Action
+{CHAT_LOG}
+
+### Step 4: Write the Performer Instruction
+
+Respond with JSON:
+{
+  "priority": "...",
+  "performer_rationale": "...",
+  "action_rationale": "...",
+  "next_performer": "performer_name",
+  "action_type": "message | reply | @mention | like",
+  "target_user": "username or null",
+  "target_message_id": "msg_id or null",
+  "performer_instruction": {
+    "objective": "...",
+    "motivation": "...",
+    "directive": "..."
+  }
+}</pre>
+            </div>
+          </details>
+        </article>
+
+        <article class="prompt-card" data-prompt="p-performer">
+          <h3>Performer</h3>
+          <p>
+            El runtime usa el template unificado <code>backend/agents/STAGE/prompts/performer_prompt.md</code>,
+            no el fichero legacy en <code>prompts/system/performer_prompt.md</code>.
+          </p>
+          <div class="chip-list">
+            <span class="chip">Inputs: chatroom context + agent profile + recent messages + O/M/D + target</span>
+            <span class="chip">Action blocks condicionales</span>
+            <span class="chip">Debe devolver solo el mensaje</span>
+          </div>
+          <details>
+            <summary>Ver template crudo</summary>
+            <div class="details-body">
+              <pre>You are a 'Performer' in a social-scientific experiment simulating a realistic online chatroom. Read the instructions below, which will guide you to write a short message for character. Follow the instructions exactly. Output ONLY the message.
+
+## About the Chatroom:
+
+{CHATROOM_CONTEXT}
+
+## Your Participation So Far:
+{AGENT_PROFILE}
+
+## Your Most Recent Messages:
+{RECENT_MESSAGES}
+
+You want to: {OBJECTIVE}
+This matters to you because: {MOTIVATION}
+Your message must be: {DIRECTIVE}
+
+{#ACTION_TYPE: message}
+Post a new message to the chatroom. You are not responding to anyone in particular.
+{/ACTION_TYPE}
+
+{#ACTION_TYPE: message_targeted}
+Post a message in response to {TARGET_USER}'s most recent message:
+&gt; {TARGET_MESSAGE}
+{/ACTION_TYPE}
+
+{#ACTION_TYPE: reply}
+Reply to this earlier message. The reader will see it quoted above your reply:
+&gt; {TARGET_MESSAGE}
+{/ACTION_TYPE}
+
+{#ACTION_TYPE: @mention}
+Post a message directed at @{TARGET_USER}. Do not include the @mention - it is added automatically.
+{/ACTION_TYPE}</pre>
+            </div>
+          </details>
+        </article>
+
+        <article class="prompt-card" data-prompt="p-moderator">
+          <h3>Moderator</h3>
+          <p>
+            El runtime usa <code>backend/agents/STAGE/prompts/moderator_prompt.md</code>.
+            Es un extractor minimalista: quita explicaciones, markdown y prefijos del Performer.
+          </p>
+          <div class="chip-list">
+            <span class="chip">Salida esperada: solo chatroom message</span>
+            <span class="chip">Sentinela: NO_CONTENT</span>
+            <span class="chip">No editable desde UI</span>
+          </div>
+          <details>
+            <summary>Ver template crudo</summary>
+            <div class="details-body">
+              <pre>{#SYSTEM}
+You must extract the chatroom message from the text below. The text should contain a chatroom message, but may include extra content (e.g., reasoning, commentary, formatting, etc.).
+
+Strip all extra content. Return ONLY the chatroom message itself. No quotation marks. Preserve the original language exactly.
+
+If no identifiable chatroom message is present, output exactly: NO_CONTENT
+{/SYSTEM}
+
+{#USER}
+{PERFORMER_OUTPUT}
+{/USER}</pre>
+            </div>
+          </details>
+        </article>
+
+        <article class="prompt-card" data-prompt="p-classifier">
+          <h3>Classifier</h3>
+          <p>
+            Aqui si hay dos piezas activas: <code>system/classifier_prompt.md</code> y
+            <code>user/classifier_prompt.md</code>. La de usuario puede overridearse con
+            <code>classifier_prompt_template</code>, aunque el wizard no lo expone.
+          </p>
+          <div class="chip-list">
+            <span class="chip">Clasifica incivility</span>
+            <span class="chip">Infiere stance del participante</span>
+            <span class="chip">Marca like-mindedness</span>
+            <span class="chip">Prompt editable solo por API</span>
+          </div>
+          <details>
+            <summary>Ver system template</summary>
+            <div class="details-body">
+              <pre># Classifier Prompt
+
+You are a strict message classifier in a social-science chatroom simulation.
+Your job is to classify each AGENT message on two dimensions:
+
+1. Civility
+2. Like-mindedness with the human participant
+
+## Chatroom Context
+`{CHATROOM_CONTEXT}`
+
+Return ONLY a JSON object with exactly these keys:
+{
+  "is_incivil": true,
+  "is_like_minded": false,
+  "inferred_participant_stance": "short summary",
+  "rationale": "one short sentence"
+}</pre>
+            </div>
+          </details>
+          <details>
+            <summary>Ver user template por defecto</summary>
+            <div class="details-body">
+              <pre># Classifier Task
+
+Infer the participant's stance from the participant messages below and classify the agent message.
+
+## Participant Messages
+{PARTICIPANT_MESSAGES}
+
+## Agent Message To Classify
+{AGENT_MESSAGE}
+
+## Response
+Return ONLY this JSON object:
+{
+  "is_incivil": true|false,
+  "is_like_minded": true|false|null,
+  "inferred_participant_stance": "short summary",
+  "rationale": "one short sentence"
+}</pre>
+            </div>
+          </details>
+        </article>
+      </article>
+
+      <div class="grid-3">
+        <article class="card stack">
+          <h3>Prompt plumbing</h3>
+          <ul>
+            <li><code>prompt_renderer.py</code> conserva bloques <code>{#SYSTEM}</code> o <code>{#USER}</code> segun el modo.</li>
+            <li>Para Performer, tambien resuelve bloques <code>{#ACTION_TYPE: ...}</code>.</li>
+            <li>Los placeholders se rellenan con <code>chatroom_context</code>, summaries, perfiles y targets.</li>
+          </ul>
+        </article>
+        <article class="card stack">
+          <h3>Que prompt puedes tocar sin codigo</h3>
+          <ul>
+            <li><strong>Directamente en wizard:</strong> ninguno de los templates base.</li>
+            <li><strong>Indirectamente:</strong> <code>chatroom_context</code>, criterios, personas, nombres y modelos si alteran la entrada al prompt.</li>
+            <li><strong>Via API:</strong> <code>classifier_prompt_template</code>.</li>
+          </ul>
+        </article>
+        <article class="card stack">
+          <h3>Prompts legacy</h3>
+          <ul>
+            <li>Existen <code>backend/agents/STAGE/prompts/system/director_prompt.md</code>, <code>system/performer_prompt.md</code> y <code>system/moderator_prompt.md</code>.</li>
+            <li>No aparecen cableados en <code>director.py</code>, <code>performer.py</code> o <code>moderator.py</code>.</li>
+            <li>Conviene tratarlos como material historico, no como fuente de verdad del runtime.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-controls">
+      <div class="table-wrap stack">
+        <div>
+          <h2>Que se puede cambiar</h2>
+          <p class="section-copy">
+            Tabla filtrable por superficie. "Wizard" significa visible en el admin panel actual.
+            "API-only" significa soportado por backend/tipos, pero no expuesto en UI.
+            "Fixed" significa que hoy solo cambia tocando codigo.
+          </p>
+        </div>
+
+        <div class="button-row">
+          <button class="filter-button active" data-filter="all">Todo</button>
+          <button class="filter-button" data-filter="wizard">Wizard</button>
+          <button class="filter-button" data-filter="api">API-only</button>
+          <button class="filter-button" data-filter="group">Por grupo</button>
+          <button class="filter-button" data-filter="fixed">Fixed in code</button>
+        </div>
+
+        <input id="configSearch" type="search" placeholder="Buscar clave, prompt, modelo, feature, target...">
+
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Clave / area</th>
+                <th>Default actual</th>
+                <th>Como se cambia</th>
+                <th>Notas de runtime</th>
+              </tr>
+            </thead>
+            <tbody id="configRows">
+              <tr data-kind="wizard">
+                <td><strong>experiment_id</strong><br><span class="tag">wizard</span></td>
+                <td>sin default</td>
+                <td>Step 1</td>
+                <td>Se usa para aislar datos en DB y dashboard.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>description</strong><br><span class="tag">wizard</span></td>
+                <td>sin default</td>
+                <td>Step 1</td>
+                <td>Metadato administrativo; no entra al pipeline.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>starts_at / ends_at</strong><br><span class="tag">wizard</span></td>
+                <td>ahora / ahora + 24h</td>
+                <td>Step 1</td>
+                <td>Bloquea consumo de tokens fuera de ventana.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>redirect_url</strong><br><span class="tag">wizard</span></td>
+                <td>""</td>
+                <td>Step 1</td>
+                <td>Se emite en <code>session_end</code> y gobierna la redireccion final.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>session_duration_minutes</strong><br><span class="tag">wizard</span></td>
+                <td>5</td>
+                <td>Step 2</td>
+                <td>Define el trigger de expiracion de sesion.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>random_seed</strong><br><span class="tag">wizard</span></td>
+                <td>42</td>
+                <td>Step 2</td>
+                <td>Controla anonimizacion estable y comportamiento aleatorio del loop.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>num_agents / agent_names</strong><br><span class="tag">wizard</span></td>
+                <td>5 / nombres vacios</td>
+                <td>Step 2</td>
+                <td>Obligatorios y unicos antes de guardar.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>agent_personas</strong><br><span class="tag">wizard</span></td>
+                <td>[]</td>
+                <td>Step 2 (opcional)</td>
+                <td>Ayudan a coherencia del Director, pero no son obligatorias.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>messages_per_minute</strong><br><span class="tag">wizard</span></td>
+                <td>6</td>
+                <td>Step 2</td>
+                <td>Probabilidad por tick = mpm / 60.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>evaluate_interval</strong><br><span class="tag">wizard</span></td>
+                <td>5</td>
+                <td>Step 2</td>
+                <td>Cadencia de Evaluate y longitud del contexto de Evaluate.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>action_window_size</strong><br><span class="tag">wizard</span></td>
+                <td>5</td>
+                <td>Step 2</td>
+                <td>Director Action mira esta ventana. Fallback backend: 10.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>performer_memory_size</strong><br><span class="tag">wizard</span></td>
+                <td>3</td>
+                <td>Step 2</td>
+                <td>Numero de mensajes propios recientes que ve el Performer.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>director_llm_*</strong><br><span class="tag">wizard</span></td>
+                <td>anthropic / claude-haiku-4-5 / 0.8 / 0.8 / 1024</td>
+                <td>Step 3</td>
+                <td>Es el mismo modelo para Update, Evaluate y Action.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>performer_llm_*</strong><br><span class="tag">wizard</span></td>
+                <td>mistral / mistral-large-latest / 0.8 / 0.8 / 256</td>
+                <td>Step 3</td>
+                <td>Fallback backend de max_tokens: 512 si la API no manda valor.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>moderator_llm_*</strong><br><span class="tag">wizard</span></td>
+                <td>anthropic / claude-haiku-4-5 / 0.2 / 1.0 / 256</td>
+                <td>Step 3</td>
+                <td>Idealmente barato y estable; el runtime lo usa en cada output textual.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>classifier_llm_*</strong><br><span class="tag">wizard</span></td>
+                <td>anthropic / claude-haiku-4-5 / 0.2 / 1.0 / 256</td>
+                <td>Step 3</td>
+                <td>Etiquetado posterior al mensaje; no bloquea la sesion si falla.</td>
+              </tr>
+              <tr data-kind="api">
+                <td><strong>classifier_prompt_template</strong><br><span class="tag api">API-only</span></td>
+                <td><code>backend/agents/STAGE/prompts/user/classifier_prompt.md</code></td>
+                <td>JSON via API / DB</td>
+                <td>Existe en backend y tipos, pero el wizard no tiene campo para ello.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>chatroom_context</strong><br><span class="tag">wizard</span></td>
+                <td>""</td>
+                <td>Step 4</td>
+                <td>Se inyecta en casi todos los prompts.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>ecological_validity_criteria</strong><br><span class="tag">wizard</span></td>
+                <td>texto largo estilo dialogic + reddit-like</td>
+                <td>Step 4</td>
+                <td>Condiciona Evaluate y, por rebote, Action.</td>
+              </tr>
+              <tr data-kind="group">
+                <td><strong>groups[*].internal_validity_criteria</strong><br><span class="tag group">group</span></td>
+                <td>sin default util</td>
+                <td>Step 4</td>
+                <td>Es el nucleo del tratamiento. Obligatorio para guardar.</td>
+              </tr>
+              <tr data-kind="group">
+                <td><strong>groups[*].features</strong><br><span class="tag group">group</span></td>
+                <td>[]</td>
+                <td>Step 4</td>
+                <td>Hoy: <code>news_article</code> y <code>gate_until_user_post</code>.</td>
+              </tr>
+              <tr data-kind="group">
+                <td><strong>groups[*].seed</strong><br><span class="tag group">group</span></td>
+                <td>solo si hay news_article</td>
+                <td>Step 4</td>
+                <td>Se convierte en mensaje <code>[news]</code> al inicio de sesion.</td>
+              </tr>
+              <tr data-kind="wizard">
+                <td><strong>tokens per group</strong><br><span class="tag">wizard</span></td>
+                <td>10 por grupo en UI</td>
+                <td>Step 5</td>
+                <td>No entra en config JSON; solo genera filas en la tabla <code>tokens</code>.</td>
+              </tr>
+              <tr data-kind="fixed">
+                <td><strong>tick interval</strong><br><span class="tag fixed">fixed</span></td>
+                <td>1 segundo</td>
+                <td>codigo</td>
+                <td>Definido en <code>SimulationSession._clock_loop</code>.</td>
+              </tr>
+              <tr data-kind="fixed">
+                <td><strong>typing speed</strong><br><span class="tag fixed">fixed</span></td>
+                <td>7 chars/s, min 0.5, max 8</td>
+                <td>codigo</td>
+                <td>Retraso artificial antes de persistir el mensaje del agente.</td>
+              </tr>
+              <tr data-kind="fixed">
+                <td><strong>MAX_PERFORMER_RETRIES</strong><br><span class="tag fixed">fixed</span></td>
+                <td>3</td>
+                <td>codigo</td>
+                <td>Si agota reintentos, el turno se vuelve invisible como wait.</td>
+              </tr>
+              <tr data-kind="fixed">
+                <td><strong>Prompt templates del Director/Performer/Moderator</strong><br><span class="tag fixed">fixed</span></td>
+                <td>ficheros .md del repo</td>
+                <td>codigo</td>
+                <td>No hay editor visual para ellos.</td>
+              </tr>
+              <tr data-kind="api">
+                <td><strong>provider = none</strong><br><span class="tag api">API-only</span></td>
+                <td>oculto</td>
+                <td>manual/API</td>
+                <td>Soportado por <code>llm_manager.py</code>, no listado en admin meta.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="panel-sources">
+      <article class="card stack">
+        <div>
+          <h2>Fuentes usadas</h2>
+          <p class="section-copy">
+            Si quieres contrastar algo o seguir la pista en el repo, estas son las rutas que gobiernan
+            la configuracion y el workflow real.
+          </p>
+        </div>
+        <div class="sources">
+          <div class="source-item">
+            <span class="path">frontend/components/admin/AdminPanel.tsx</span>
+            Defaults visibles del wizard: simulation, experimental y schedule.
+          </div>
+          <div class="source-item">
+            <span class="path">frontend/components/admin/steps/StepExperiment.tsx</span>
+            Experiment ID, participation window y redirect URL.
+          </div>
+          <div class="source-item">
+            <span class="path">frontend/components/admin/steps/StepSession.tsx</span>
+            Agentes, pacing, evaluate interval, action window y performer memory.
+          </div>
+          <div class="source-item">
+            <span class="path">frontend/components/admin/steps/StepLLM.tsx</span>
+            Roles LLM, test prompt y copy settings.
+          </div>
+          <div class="source-item">
+            <span class="path">frontend/components/admin/steps/StepTreatments.tsx</span>
+            Contexto, criterios, grupos, features y seed article.
+          </div>
+          <div class="source-item">
+            <span class="path">frontend/components/admin/steps/StepTokens.tsx</span>
+            Token generation UI y default de 10 por grupo.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/db/repositories/config_repo.py</span>
+            Validacion backend, normalizacion y fallbacks de config.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/main.py</span>
+            Endpoints de admin, session start, WebSocket, pause/resume, clone y test LLM.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/platforms/chatroom.py</span>
+            Lifecycle de sesion, clock loop, session_end, typing events y handling de mensajes usuario.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/agents/STAGE/orchestrator.py</span>
+            Pipeline real, warm-up, retries, wait turns, anonimizacion y classifier stage.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/agents/STAGE/director.py</span>
+            Render y parse de Update / Evaluate / Action.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/agents/STAGE/performer.py</span>
+            Como se construye el prompt del Performer y su memoria.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/agents/STAGE/moderator.py</span>
+            Extraccion y sentinela <code>NO_CONTENT</code>.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/agents/STAGE/classifier.py</span>
+            Prompt template configurable y parse de labels.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/features/__init__.py</span>
+            Registro de features disponibles.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/features/news_article.py</span>
+            Siembra del articulo inicial como mensaje <code>[news]</code>.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/features/gate_until_user_post.py</span>
+            Gateo de agentes hasta primer post humano.
+          </div>
+          <div class="source-item">
+            <span class="path">frontend/hooks/useChat.ts</span>
+            Privacidad del username, manejo de <code>session_end</code> y redirect final.
+          </div>
+          <div class="source-item">
+            <span class="path">backend/db/schema.sql</span>
+            Tablas <code>experiments</code>, <code>tokens</code>, <code>sessions</code>, <code>messages</code>, <code>events</code> y <code>agent_blocks</code>.
+          </div>
+          <div class="source-item">
+            <span class="path">frontend/lib/treatment-presets.ts</span>
+            Preset 3x3 y ejemplos de criterios internos/ecologicos bastante expresivos.
+          </div>
+          <div class="source-item">
+            <span class="path">docs/BSC-INCIVILITY-API.md</span>
+            Recomendacion concreta de usar <code>bsc/incivility</code> como Performer.
+          </div>
+        </div>
+      </article>
+      <p class="footer">
+        Esta pagina resume el estado del repo inspeccionado directamente. Si cambian los defaults o los prompts,
+        esta guia tambien deberia actualizarse.
+      </p>
+    </section>
+  </div>
+
+  <script>
+    (function () {
+      var tabButtons = document.querySelectorAll(".tab-button");
+      var panels = document.querySelectorAll(".panel");
+
+      tabButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+          var target = button.getAttribute("data-tab");
+          tabButtons.forEach(function (b) { b.classList.toggle("active", b === button); });
+          panels.forEach(function (panel) {
+            panel.classList.toggle("active", panel.id === "panel-" + target);
+          });
+        });
+      });
+
+      function wireSelector(selectorName, cardAttribute) {
+        document.querySelectorAll('[data-selector="' + selectorName + '"]').forEach(function (selector) {
+          var buttons = selector.querySelectorAll("button");
+          buttons.forEach(function (button) {
+            button.addEventListener("click", function () {
+              var target = button.getAttribute("data-target");
+              buttons.forEach(function (b) { b.classList.toggle("active", b === button); });
+              document.querySelectorAll("[" + cardAttribute + "]").forEach(function (card) {
+                var value = card.getAttribute(cardAttribute);
+                card.classList.toggle("active", value === target);
+              });
+            });
+          });
+        });
+      }
+
+      wireSelector("stage", "data-stage");
+      wireSelector("prompt", "data-prompt");
+
+      var durationRange = document.getElementById("durationRange");
+      var mpmRange = document.getElementById("mpmRange");
+      var durationValue = document.getElementById("durationValue");
+      var mpmValue = document.getElementById("mpmValue");
+      var expectedTurns = document.getElementById("expectedTurns");
+      var tickProbability = document.getElementById("tickProbability");
+
+      function updateEstimator() {
+        var duration = Number(durationRange.value);
+        var mpm = Number(mpmRange.value);
+        durationValue.textContent = String(duration);
+        mpmValue.textContent = String(mpm);
+        expectedTurns.textContent = String(duration * mpm);
+        tickProbability.textContent = (mpm / 60 * 100).toFixed(1).replace(/\.0$/, "") + "%";
+      }
+
+      durationRange.addEventListener("input", updateEstimator);
+      mpmRange.addEventListener("input", updateEstimator);
+      updateEstimator();
+
+      var search = document.getElementById("configSearch");
+      var rows = Array.prototype.slice.call(document.querySelectorAll("#configRows tr"));
+      var filterButtons = document.querySelectorAll(".filter-button");
+      var activeFilter = "all";
+
+      function applyTableFilter() {
+        var term = search.value.trim().toLowerCase();
+        rows.forEach(function (row) {
+          var kind = row.getAttribute("data-kind");
+          var matchesFilter = activeFilter === "all" || kind === activeFilter;
+          var matchesSearch = row.textContent.toLowerCase().indexOf(term) !== -1;
+          row.classList.toggle("hidden", !(matchesFilter && matchesSearch));
+        });
+      }
+
+      filterButtons.forEach(function (button) {
+        button.addEventListener("click", function () {
+          activeFilter = button.getAttribute("data-filter");
+          filterButtons.forEach(function (b) { b.classList.toggle("active", b === button); });
+          applyTableFilter();
+        });
+      });
+
+      search.addEventListener("input", applyTableFilter);
+      applyTableFilter();
+    })();
+  </script>
+</body>
+</html>

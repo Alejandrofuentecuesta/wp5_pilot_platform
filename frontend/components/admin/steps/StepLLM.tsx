@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import type { SimulationConfig, ProviderParamsMeta, TestLLMResult } from "../../../lib/admin-types"
-import { testLlm } from "../../../lib/admin-api"
+import { testLlm, fetchPromptDefaults } from "../../../lib/admin-api"
 
 export type LLMTestResults = Record<Role, boolean>
 
@@ -25,6 +25,13 @@ const ROLE_DESCRIPTIONS: Record<Role, string> = {
   classifier: "Classifies each final agent message for incivility and like-mindedness with the participant's inferred stance.",
 }
 
+const ROLE_PROMPT_KEY: Record<Role, keyof SimulationConfig> = {
+  director: "director_action_prompt_template",
+  performer: "performer_prompt_template",
+  moderator: "moderator_prompt_template",
+  classifier: "classifier_prompt_template",
+}
+
 const inputClass = "w-full px-3 py-2 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30"
 
 function LLMRoleConfig({
@@ -38,6 +45,8 @@ function LLMRoleConfig({
   providerParams,
   adminKey,
   onTestResult,
+  promptDefault,
+  promptKey,
 }: {
   role: Role
   config: SimulationConfig
@@ -49,6 +58,8 @@ function LLMRoleConfig({
   providerParams: Record<string, ProviderParamsMeta>
   adminKey: string
   onTestResult?: (role: Role, ok: boolean) => void
+  promptDefault: string
+  promptKey: string
 }) {
   const prefix = role
   const provider = config[`${prefix}_llm_provider` as keyof SimulationConfig] as string
@@ -63,6 +74,7 @@ function LLMRoleConfig({
 
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<TestLLMResult | null>(null)
+  const [showPrompt, setShowPrompt] = useState(false)
 
   // Clear test result whenever provider or model changes (including via "Copy Director" button)
   const prevProviderRef = useRef(provider)
@@ -305,6 +317,36 @@ function LLMRoleConfig({
               </div>
             </div>
           )}
+
+          {/* Prompt Template */}
+          <div className="pt-2 border-t border-admin-border">
+            <button
+              onClick={() => setShowPrompt(!showPrompt)}
+              className="text-xs font-medium text-admin-accent hover:text-admin-accent-hover transition-colors"
+            >
+              {showPrompt ? "▲ Hide prompt template" : "▼ Edit prompt template"}
+            </button>
+            {showPrompt && (
+              <div className="mt-2 space-y-2">
+                <textarea
+                  value={(config[promptKey as keyof SimulationConfig] as string) ?? ""}
+                  onChange={(e) => onChange({ [promptKey]: e.target.value } as Partial<SimulationConfig>)}
+                  rows={12}
+                  className={`${inputClass} font-mono text-xs resize-y`}
+                  placeholder={promptDefault || "Using default prompt from server..."}
+                />
+                <button
+                  onClick={() => onChange({ [promptKey]: "" } as Partial<SimulationConfig>)}
+                  className="text-xs text-admin-faint hover:text-admin-text transition-colors"
+                >
+                  Reset to default
+                </button>
+                {!(config[promptKey as keyof SimulationConfig] as string) && (
+                  <p className="text-xs text-admin-faint italic">Using server default. Edit above to override.</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -313,6 +355,10 @@ function LLMRoleConfig({
 
 export default function StepLLM({ config, onChange, llmProviders, providerModels, providerParams, adminKey, onTestResult }: StepLLMProps) {
   const [expanded, setExpanded] = useState<Role | null>("director")
+  const [promptDefaults, setPromptDefaults] = useState<Record<string, string>>({})
+  useEffect(() => {
+    fetchPromptDefaults(adminKey).then(setPromptDefaults).catch(() => {})
+  }, [adminKey])
 
   const copyDirectorToPerformer = () => {
     onChange({
@@ -357,6 +403,8 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
             providerParams={providerParams}
             adminKey={adminKey}
             onTestResult={onTestResult}
+            promptDefault={promptDefaults[ROLE_PROMPT_KEY[role] as string] ?? ""}
+            promptKey={ROLE_PROMPT_KEY[role] as string}
           />
         ))}
       </div>

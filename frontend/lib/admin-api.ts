@@ -324,3 +324,9 @@ export async function deleteExperiment(
   }
   return res.json()
 }
+
+export async function fetchPromptDefaults(key: string): Promise<Record<string, string>> {
+  const res = await adminFetch("/admin/prompt-defaults", key)
+  if (!res.ok) throw new Error("Failed to load prompt defaults")
+  return res.json()
+}

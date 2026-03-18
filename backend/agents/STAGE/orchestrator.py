@@ -130,6 +130,10 @@ class Orchestrator:
         chatroom_context: str = "",
         ecological_criteria: str = "",
         classifier_prompt_template: Optional[str] = None,
+        performer_prompt_template: Optional[str] = None,
+        director_action_prompt_template: Optional[str] = None,
+        director_evaluate_prompt_template: Optional[str] = None,
+        moderator_prompt_template: Optional[str] = None,
         rng: Optional[random.Random] = None,
     ):
         self.director_llm = director_llm
@@ -147,6 +151,26 @@ class Orchestrator:
             classifier_prompt_template
             if isinstance(classifier_prompt_template, str) and classifier_prompt_template.strip()
             else DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
+        )
+        self.performer_prompt_template = (
+            performer_prompt_template
+            if isinstance(performer_prompt_template, str) and performer_prompt_template.strip()
+            else None
+        )
+        self.director_action_prompt_template = (
+            director_action_prompt_template
+            if isinstance(director_action_prompt_template, str) and director_action_prompt_template.strip()
+            else None
+        )
+        self.director_evaluate_prompt_template = (
+            director_evaluate_prompt_template
+            if isinstance(director_evaluate_prompt_template, str) and director_evaluate_prompt_template.strip()
+            else None
+        )
+        self.moderator_prompt_template = (
+            moderator_prompt_template
+            if isinstance(moderator_prompt_template, str) and moderator_prompt_template.strip()
+            else None
         )
 
         # Build the shuffled name mapping (stable for the session lifetime).
@@ -195,9 +219,11 @@ class Orchestrator:
         )
         self._performer_system_prompt = build_performer_system_prompt(
             chatroom_context=chatroom_context,
+            template=self.performer_prompt_template,
         )
         self._moderator_system_prompt = build_moderator_system_prompt(
             chatroom_context=chatroom_context,
+            template=self.moderator_prompt_template,
         )
         self._classifier_system_prompt = build_classifier_system_prompt(
             chatroom_context=chatroom_context,
@@ -443,6 +469,7 @@ class Orchestrator:
             target_message=anon_target_message,
             recent_messages=anon_recent_by_agent,
             chatroom_context=self.chatroom_context,
+            template=self.performer_prompt_template,
         )
 
         content = None
@@ -471,6 +498,7 @@ class Orchestrator:
             # 5b. Call the Moderator to extract clean content
             moderator_user_prompt = build_moderator_user_prompt(
                 performer_output=performer_raw,
+                template=self.moderator_prompt_template,
             )
 
             moderator_raw = None
@@ -639,6 +667,7 @@ class Orchestrator:
                 internal_validity_criteria=internal_validity_criteria,
                 ecological_criteria=self.ecological_criteria,
                 chatroom_context=self.chatroom_context,
+                template=self.director_evaluate_prompt_template,
             )
 
         evaluate_user = build_evaluate_user_prompt(
@@ -651,6 +680,7 @@ class Orchestrator:
             action_counts=self._action_counts,
             performer_counts=self._performer_counts,
             exclude_performer=self._anon_user,
+            template=self.director_evaluate_prompt_template,
         )
 
         evaluate_raw = None
@@ -700,6 +730,7 @@ class Orchestrator:
         if self._action_system_prompt is None:
             self._action_system_prompt = build_action_system_prompt(
                 chatroom_context=self.chatroom_context,
+                template=self.director_action_prompt_template,
             )
 
         action_user = build_action_user_prompt(
@@ -710,6 +741,7 @@ class Orchestrator:
             chatroom_context=self.chatroom_context,
             performer_counts=self._performer_counts,
             exclude_performer=self._anon_user,
+            template=self.director_action_prompt_template,
         )
 
         action_raw = None

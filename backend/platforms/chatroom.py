@@ -151,6 +151,10 @@ class SimulationSession:
                 "classifier_prompt_template",
                 DEFAULT_CLASSIFIER_PROMPT_TEMPLATE,
             ),
+            performer_prompt_template=self.simulation_config.get("performer_prompt_template") or None,
+            director_action_prompt_template=self.simulation_config.get("director_action_prompt_template") or None,
+            director_evaluate_prompt_template=self.simulation_config.get("director_evaluate_prompt_template") or None,
+            moderator_prompt_template=self.simulation_config.get("moderator_prompt_template") or None,
             rng=self._rng,
         )
 

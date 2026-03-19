@@ -4,13 +4,14 @@ You are a 'Performer' in a social-scientific experiment simulating a realistic o
 
 {CHATROOM_CONTEXT}
 
-## Your Participation So Far:
-
 {#SYSTEM}
-Your profile and recent messages will be provided in the user message.
+Your character persona (if defined) and participation history will be provided in the user message.
 {/SYSTEM}
 
 {#USER}
+{AGENT_PERSONA_SECTION}
+## How the Director Sees You So Far:
+
 {AGENT_PROFILE}
 
 ## Your Most Recent Messages:

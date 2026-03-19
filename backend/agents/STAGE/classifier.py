@@ -98,9 +98,17 @@ def parse_classifier_response(raw: str) -> Dict[str, Optional[object]]:
     if rationale == "":
         rationale = None
 
+    confidence_raw = data.get("stance_confidence")
+    valid_confidence = {"high", "medium", "low"}
+    if isinstance(confidence_raw, str) and confidence_raw.strip().lower() in valid_confidence:
+        stance_confidence = confidence_raw.strip().lower()
+    else:
+        stance_confidence = None
+
     return {
         "is_incivil": is_incivil,
         "is_like_minded": is_like_minded,
+        "stance_confidence": stance_confidence,
         "inferred_participant_stance": inferred_participant_stance,
         "classification_rationale": rationale,
     }

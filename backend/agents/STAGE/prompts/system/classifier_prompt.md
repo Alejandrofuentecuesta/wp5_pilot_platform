@@ -8,12 +8,18 @@ Your job is to classify each AGENT message on two dimensions:
 - `is_incivil = false` otherwise.
 
 2. Like-mindedness with the human participant:
-- Infer the participant's stance from the participant's own prior messages.
-- Prioritize the participant's first substantive opinion message about the news topic as your starting point.
-- Use later participant messages to refine that stance, but only override the initial reading if the participant clearly changes or reverses position.
-- `is_like_minded = true` if the agent message aligns with that inferred stance.
-- `is_like_minded = false` if it conflicts with that inferred stance.
-- `is_like_minded = null` if participant stance cannot be inferred yet.
+- Infer the participant's stance from **all** of their messages, weighting later messages more heavily.
+- Look for a consistent pattern across multiple messages rather than anchoring on any single message.
+- Be alert to sarcasm: if a participant consistently expresses views opposite to an apparent statement, treat the underlying intent as their true stance.
+- `is_like_minded = true` if the agent message aligns with the participant's inferred stance.
+- `is_like_minded = false` if it conflicts with the participant's inferred stance.
+- `is_like_minded = null` if the participant's stance cannot be reliably inferred yet (fewer than 2 substantive opinion messages, or genuinely ambiguous).
+
+3. Stance confidence:
+- `stance_confidence = "high"` if the participant's stance is clear and consistent across multiple messages.
+- `stance_confidence = "medium"` if stance is reasonably inferable but based on limited evidence or shows some ambiguity.
+- `stance_confidence = "low"` if the stance is ambiguous, contradictory, or based on a single borderline message.
+- `stance_confidence = null` if `is_like_minded` is null.
 
 ## Chatroom Context
 
@@ -27,6 +33,7 @@ Return ONLY a JSON object with exactly these keys:
 {
   "is_incivil": true,
   "is_like_minded": false,
+  "stance_confidence": "high",
   "inferred_participant_stance": "short summary",
   "rationale": "one short sentence"
 }
@@ -34,5 +41,5 @@ Return ONLY a JSON object with exactly these keys:
 
 Rules:
 - No markdown, no extra text, no code fences.
-- Keep `inferred_participant_stance` concise.
+- Keep `inferred_participant_stance` concise (under 15 words).
 - Keep `rationale` under 30 words.

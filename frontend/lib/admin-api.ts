@@ -1,7 +1,7 @@
 /* Admin API client — all requests include X-Admin-Key header. */
 
 import { API_BASE } from "./constants"
-import type { AdminMeta, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult } from "./admin-types"
+import type { AdminMeta, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats } from "./admin-types"
 
 async function adminFetch(
   path: string,
@@ -329,5 +329,14 @@ export async function deleteExperiment(
 export async function fetchPromptDefaults(key: string): Promise<Record<string, string>> {
   const res = await adminFetch("/admin/prompt-defaults", key)
   if (!res.ok) throw new Error("Failed to load prompt defaults")
+  return res.json()
+}
+
+export async function getComplianceStats(
+  key: string,
+  experimentId: string,
+): Promise<ComplianceStats> {
+  const res = await adminFetch(`/admin/experiment/${encodeURIComponent(experimentId)}/compliance`, key)
+  if (!res.ok) throw new Error("Failed to load compliance stats")
   return res.json()
 }

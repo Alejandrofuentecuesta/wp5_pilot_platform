@@ -1363,6 +1363,68 @@ async def admin_token_stats(
     }
 
 
+@app.get("/admin/experiment/{experiment_id}/compliance")
+async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Header(None)):
+    """Return treatment fidelity stats per group for a given experiment.
+
+    Per treatment group:
+    - session_count: how many sessions exist
+    - classified_count: agent messages that were classified (is_incivil not null)
+    - incivil_count / incivil_pct: number and % of incivil agent messages
+    - like_minded_count / like_minded_pct: number and % of like-minded agent messages
+      (denominator is stance_classified_count, i.e. only messages where like-mindedness was determined)
+    """
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+
+    experiment = await config_repo.get_experiment(pool, experiment_id)
+    if not experiment:
+        raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                s.treatment_group,
+                COUNT(DISTINCT s.session_id)                                        AS session_count,
+                COUNT(m.message_id) FILTER (WHERE m.is_incivil IS NOT NULL)         AS classified_count,
+                COUNT(m.message_id) FILTER (WHERE m.is_incivil = true)              AS incivil_count,
+                COUNT(m.message_id) FILTER (WHERE m.is_like_minded IS NOT NULL)     AS stance_classified_count,
+                COUNT(m.message_id) FILTER (WHERE m.is_like_minded = true)          AS like_minded_count
+            FROM sessions s
+            LEFT JOIN messages m
+                ON s.session_id = m.session_id
+                AND m.sender != s.user_name
+            WHERE s.experiment_id = $1
+            GROUP BY s.treatment_group
+            ORDER BY s.treatment_group
+            """,
+            experiment_id,
+        )
+
+    def _pct(num, den):
+        return round(100.0 * num / den, 1) if den > 0 else None
+
+    groups = []
+    for r in rows:
+        classified = r["classified_count"]
+        incivil = r["incivil_count"]
+        stance_classified = r["stance_classified_count"]
+        like_minded = r["like_minded_count"]
+        groups.append({
+            "group": r["treatment_group"],
+            "session_count": r["session_count"],
+            "classified_count": classified,
+            "incivil_count": incivil,
+            "incivil_pct": _pct(incivil, classified),
+            "stance_classified_count": stance_classified,
+            "like_minded_count": like_minded,
+            "like_minded_pct": _pct(like_minded, stance_classified),
+        })
+
+    return {"experiment_id": experiment_id, "groups": groups}
+
+
 @app.get("/admin/sessions/csv/{experiment_id}")
 async def admin_sessions_csv(experiment_id: str, x_admin_key: str = Header(None)):
     """Download all session messages for an experiment as a flat CSV."""

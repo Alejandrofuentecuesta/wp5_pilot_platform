@@ -18,6 +18,7 @@ Return ONLY this JSON object:
 {
   "is_incivil": true|false,
   "is_like_minded": true|false|null,
+  "stance_confidence": "high"|"medium"|"low"|null,
   "inferred_participant_stance": "short summary",
   "rationale": "one short sentence"
 }

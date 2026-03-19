@@ -13,8 +13,9 @@ import {
   pauseExperiment,
   resumeExperiment,
   downloadSessionsCSV,
+  getComplianceStats,
 } from "../../lib/admin-api"
-import type { SessionSummary, TokenGroupStats, SimulationConfig, ExperimentalConfig } from "../../lib/admin-types"
+import type { SessionSummary, TokenGroupStats, SimulationConfig, ExperimentalConfig, ComplianceGroupStats } from "../../lib/admin-types"
 import type { ExperimentSummary, AdminEvent } from "../../lib/admin-api"
 import { API_BASE } from "../../lib/constants"
 import type { AdminTheme } from "./AdminPanel"
@@ -31,7 +32,7 @@ interface DashboardProps {
   onToggleTheme: () => void
 }
 
-type Tab = "overview" | "sessions" | "evaluate" | "logs" | "settings"
+type Tab = "overview" | "sessions" | "evaluate" | "compliance" | "logs" | "settings"
 
 /* ── Theme toggle button ─────────────────────────────────────────────────── */
 
@@ -165,6 +166,7 @@ const TAB_LABELS: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
   { key: "sessions", label: "Sessions", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
   { key: "evaluate", label: "Evaluate", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
+  { key: "compliance", label: "Compliance", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
   { key: "logs", label: "Event Log", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
   { key: "settings", label: "Settings", icon: "M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z M15 12a3 3 0 11-6 0 3 3 0 016 0z" },
 ]
@@ -1167,6 +1169,122 @@ function TokenProgress({ stats }: { stats: TokenGroupStats[] }) {
   )
 }
 
+/* ── Compliance tab ───────────────────────────────────────────────────────── */
+
+function ComplianceBar({ pct, color }: { pct: number | null; color: string }) {
+  if (pct === null) return <span className="text-admin-faint text-xs">—</span>
+  return (
+    <div className="flex items-center gap-2 min-w-[120px]">
+      <div className="flex-1 h-2 bg-admin-raised rounded-full overflow-hidden">
+        <div className={`h-full rounded-full transition-all duration-300 ${color}`} style={{ width: `${Math.min(pct, 100)}%` }} />
+      </div>
+      <span className="text-xs font-mono text-admin-text w-10 text-right">{pct.toFixed(1)}%</span>
+    </div>
+  )
+}
+
+function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimentId: string }) {
+  const [groups, setGroups] = useState<ComplianceGroupStats[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = () => {
+      getComplianceStats(adminKey, experimentId)
+        .then((res) => { if (!cancelled) { setGroups(res.groups); setLoading(false) } })
+        .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false) } })
+    }
+    load()
+    const iv = setInterval(load, 15000)
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [adminKey, experimentId])
+
+  if (loading) return <p className="text-sm text-admin-muted py-8 text-center">Loading compliance data…</p>
+  if (error) return <p className="text-sm text-admin-danger-text py-8 text-center">Error: {error}</p>
+  if (groups.length === 0) return (
+    <div className="text-center py-12">
+      <p className="text-sm text-admin-faint">No session data yet. Compliance statistics will appear here once sessions have messages classified.</p>
+    </div>
+  )
+
+  const totalSessions = groups.reduce((s, g) => s + g.session_count, 0)
+  const totalClassified = groups.reduce((s, g) => s + g.classified_count, 0)
+  const totalIncivil = groups.reduce((s, g) => s + g.incivil_count, 0)
+  const totalStanceClassified = groups.reduce((s, g) => s + g.stance_classified_count, 0)
+  const totalLikeMinded = groups.reduce((s, g) => s + g.like_minded_count, 0)
+
+  return (
+    <div className="space-y-6">
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <StatCard label="Total Sessions" value={totalSessions} />
+        <StatCard label="Classified Messages" value={totalClassified} sub="agent messages with civility label" />
+        <StatCard
+          label="Overall Incivility"
+          value={totalClassified > 0 ? `${((totalIncivil / totalClassified) * 100).toFixed(1)}%` : "—"}
+          pastel={totalClassified > 0 && (totalIncivil / totalClassified) > 0.6 ? "pink" : "green"}
+        />
+        <StatCard
+          label="Overall Like-mindedness"
+          value={totalStanceClassified > 0 ? `${((totalLikeMinded / totalStanceClassified) * 100).toFixed(1)}%` : "—"}
+          pastel="purple"
+        />
+      </div>
+
+      {/* Per-group table */}
+      <div className="bg-admin-surface rounded-lg border border-admin-border overflow-hidden">
+        <div className="px-5 py-3 border-b border-admin-border">
+          <h3 className="text-sm font-semibold text-admin-text">Treatment Fidelity by Group</h3>
+          <p className="text-xs text-admin-muted mt-0.5">
+            Shows actual incivility and like-mindedness rates across all agent messages in completed/active sessions.
+          </p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-left text-[10px] text-admin-faint uppercase tracking-wider border-b border-admin-border bg-admin-raised">
+                <th className="px-4 py-2">Group</th>
+                <th className="px-4 py-2 text-right">Sessions</th>
+                <th className="px-4 py-2 text-right">Agent Msgs</th>
+                <th className="px-4 py-2">Incivility Rate</th>
+                <th className="px-4 py-2">Like-mindedness Rate</th>
+              </tr>
+            </thead>
+            <tbody>
+              {groups.map((g) => (
+                <tr key={g.group} className="border-b border-admin-border/50 last:border-0 hover:bg-admin-raised/30">
+                  <td className="px-4 py-2.5 font-mono font-medium text-admin-text">{g.group}</td>
+                  <td className="px-4 py-2.5 text-right text-admin-muted">{g.session_count}</td>
+                  <td className="px-4 py-2.5 text-right text-admin-muted">
+                    {g.classified_count}
+                    {g.classified_count !== g.stance_classified_count && (
+                      <span className="text-admin-faint"> / {g.stance_classified_count} stance</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <ComplianceBar
+                      pct={g.incivil_pct}
+                      color={g.incivil_pct !== null && g.incivil_pct > 50 ? "bg-admin-pastel-pink-text/60" : "bg-admin-pastel-green-text/60"}
+                    />
+                  </td>
+                  <td className="px-4 py-2.5">
+                    <ComplianceBar pct={g.like_minded_pct} color="bg-admin-pastel-purple-text/60" />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <p className="text-[10px] text-admin-faint">
+        Refreshes every 15 seconds. Incivility and like-mindedness rates are computed from agent messages only (participant messages are excluded). Like-mindedness denominator excludes messages where participant stance could not be inferred.
+      </p>
+    </div>
+  )
+}
+
 /* ── Main Dashboard ───────────────────────────────────────────────────────── */
 
 export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, onDuplicateExperiment, saveBanner, onDismissBanner, theme, onToggleTheme }: DashboardProps) {
@@ -1317,6 +1435,12 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
                     adminKey={adminKey}
                     experimentId={selectedExperimentId}
                     sessions={sessions}
+                  />
+                )}
+                {activeTab === "compliance" && (
+                  <ComplianceTab
+                    adminKey={adminKey}
+                    experimentId={selectedExperimentId}
                   />
                 )}
                 {activeTab === "logs" && (

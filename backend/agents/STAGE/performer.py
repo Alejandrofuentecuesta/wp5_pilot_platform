@@ -64,6 +64,7 @@ def build_performer_user_prompt(
     instruction: dict,
     agent_profile: str,
     action_type: str,
+    persona: Optional[str] = None,
     target_user: Optional[str] = None,
     target_message: Optional[Message] = None,
     recent_messages: Optional[List[Message]] = None,
@@ -74,7 +75,9 @@ def build_performer_user_prompt(
     objective = instruction.get("objective", "")
     motivation = instruction.get("motivation", "")
     directive = instruction.get("directive", "")
-    profile_str = agent_profile or "(No profile yet — this is the performer's first action.)"
+    # Persona section is optional: include heading + text only when a persona is defined.
+    persona_section = f"## Your Character:\n\n{persona.strip()}\n\n" if (persona and persona.strip()) else ""
+    profile_str = agent_profile or "(No behavioral history yet — this is the performer's first action.)"
     recent_str = format_recent_messages(recent_messages or [])
     target_str = _format_target_message(target_message)
     target_user_str = target_user or ""
@@ -84,6 +87,7 @@ def build_performer_user_prompt(
     prompt = _render_prompt(raw, "user")
     prompt = _render_action_type(prompt, performer_action)
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
+    prompt = prompt.replace("{AGENT_PERSONA_SECTION}", persona_section)
     prompt = prompt.replace("{AGENT_PROFILE}", profile_str)
     prompt = prompt.replace("{RECENT_MESSAGES}", recent_str)
     prompt = prompt.replace("{OBJECTIVE}", objective)

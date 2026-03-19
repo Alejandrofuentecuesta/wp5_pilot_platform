@@ -12,6 +12,21 @@ interface StepSessionProps {
 
 const inputClass = "w-full px-3 py-2 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30"
 
+// Example personas for a political incivility experiment (Spanish context).
+// Each entry maps to an agent slot by index (wraps if there are more agents than examples).
+const EXAMPLE_PERSONAS = [
+  (name: string) =>
+    `${name} es una persona progresista de unos 35 años, apasionada por los derechos sociales y la justicia medioambiental. Comunica de manera directa y emocional, con tendencia a apelar a la solidaridad y al bien común. Cuando se siente atacada, puede volverse sarcástica pero raramente pierde la compostura del todo.`,
+  (name: string) =>
+    `${name} es un hombre conservador de unos 50 años, con visión pragmática y orientada a la economía. Desconfía de la intervención estatal y valora la responsabilidad individual. Su tono suele ser firme y algo condescendiente cuando debate con quienes no comparten su visión.`,
+  (name: string) =>
+    `${name} es una persona de centro, de unos 28 años, que intenta ver varios ángulos de los problemas. Sin embargo, tiene un umbral bajo de paciencia ante los argumentos que percibe como simplistas. Usa la ironía con frecuencia y puede escalar el tono si se siente ignorada o ridiculizada.`,
+  (name: string) =>
+    `${name} es una persona de izquierda radical, en torno a los 40 años, que considera que el sistema político actual está roto. Su comunicación es combativa y no evita el conflicto; a veces recurre a la provocación deliberada para poner a prueba las convicciones de los demás.`,
+  (name: string) =>
+    `${name} es una persona moderada de unos 45 años, con formación universitaria y un estilo argumentativo metódico. Suele pedir evidencias antes de pronunciarse y puede mostrarse distante o cortante si percibe que la conversación se está desviando hacia la demagogia.`,
+]
+
 export default function StepSession({ config, onChange, touched }: StepSessionProps) {
   const [showPersonas, setShowPersonas] = useState(false)
 
@@ -40,6 +55,15 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
     while (personas.length < n) personas.push("")
     personas.length = n
     onChange({ num_agents: n, agent_names: names, agent_personas: personas })
+  }
+
+  const loadExamplePersonas = () => {
+    const personas = config.agent_names.map((name, i) => {
+      const builder = EXAMPLE_PERSONAS[i % EXAMPLE_PERSONAS.length]
+      return builder(name || `Agente ${i + 1}`)
+    })
+    onChange({ agent_personas: personas })
+    setShowPersonas(true)
   }
 
   const agentNameErrors = config.agent_names.map((name, i) => {
@@ -137,16 +161,26 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
                 <label className="block text-sm font-medium text-admin-text">
                   Agent personas (optional)
                 </label>
-                <button
-                  type="button"
-                  onClick={() => setShowPersonas((prev) => !prev)}
-                  className="text-xs font-medium border border-admin-border rounded-lg px-2.5 py-1 bg-admin-surface text-admin-muted hover:text-admin-text"
-                >
-                  {showPersonas ? "Hide" : "Add"}
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={loadExamplePersonas}
+                    className="text-xs font-medium border border-admin-accent/40 rounded-lg px-2.5 py-1 bg-admin-surface text-admin-accent hover:bg-admin-accent/10"
+                    title="Fill in example personas suitable for a political incivility experiment"
+                  >
+                    Load examples
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowPersonas((prev) => !prev)}
+                    className="text-xs font-medium border border-admin-border rounded-lg px-2.5 py-1 bg-admin-surface text-admin-muted hover:text-admin-text"
+                  >
+                    {showPersonas ? "Hide" : "Add"}
+                  </button>
+                </div>
               </div>
               <p className="text-xs text-admin-faint mb-3">
-                Optional. Enable this section only if you want to define custom personalities for each agent.
+                Optional. If defined, each agent will use their persona to guide their writing style and political viewpoint. Click &ldquo;Load examples&rdquo; to see ready-made personas for a political discussion experiment.
               </p>
               {showPersonas && (
                 <div className="space-y-3">

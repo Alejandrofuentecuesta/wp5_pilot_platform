@@ -119,3 +119,19 @@ export interface TokenGroupStats {
   total: number
   used: number
 }
+
+export interface ComplianceGroupStats {
+  group: string
+  session_count: number
+  classified_count: number
+  incivil_count: number
+  incivil_pct: number | null
+  stance_classified_count: number
+  like_minded_count: number
+  like_minded_pct: number | null
+}
+
+export interface ComplianceStats {
+  experiment_id: string
+  groups: ComplianceGroupStats[]
+}

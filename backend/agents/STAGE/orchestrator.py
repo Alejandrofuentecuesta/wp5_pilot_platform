@@ -198,10 +198,16 @@ class Orchestrator:
 
         # Performer profiles: keyed by anonymous name, values are free-form text.
         # Includes both agents and the human — the Director treats all as equal performers.
-        # Start empty; accumulated via Director Update calls.
-        self.agent_profiles: Dict[str, str] = {
-            self._name_map[name]: "" for name in agent_names
-        }
+        # Seeded with each agent's persona (anonymized) so the Director knows their character
+        # from turn 1; further accumulated via Director Update calls.
+        self.agent_profiles: Dict[str, str] = {}
+        for a in state.agents:
+            anon_name = self._name_map[a.name]
+            if a.persona and a.persona.strip():
+                persona_text = _replace_names_in_text(a.persona, self._name_map)
+                self.agent_profiles[anon_name] = f"Character persona: {persona_text}"
+            else:
+                self.agent_profiles[anon_name] = ""
         self.agent_profiles[self._anon_user] = ""
 
         # Track the last agent that acted (anonymous name) and their action type, for Update calls.
@@ -524,10 +530,15 @@ class Orchestrator:
                         break
             anon_recent_by_agent.reverse()
 
+        # Get agent's raw persona for the performer (not anonymized — performer knows their own character)
+        agent_obj = next((a for a in agents if a.name == agent_name), None)
+        agent_persona = (agent_obj.persona or None) if agent_obj else None
+
         performer_user_prompt = build_performer_user_prompt(
             instruction=performer_instruction,
             agent_profile=agent_profile,
             action_type=action_type,
+            persona=agent_persona,
             target_user=anon_target_user,
             target_message=anon_target_message,
             recent_messages=anon_recent_by_agent,

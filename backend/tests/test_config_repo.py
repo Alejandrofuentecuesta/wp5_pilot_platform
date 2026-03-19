@@ -31,6 +31,7 @@ def _minimal_sim() -> dict:
 def _minimal_exp() -> dict:
     return {
         "chatroom_context": "Discuss topic X",
+        "incivility_framework": "",
         "ecological_validity_criteria": "Informal Reddit-like chatroom with short messages.",
         "groups": {
             "civil_support": {
@@ -207,6 +208,13 @@ class TestValidateExperimentalConfig:
             _minimal_exp(), available_features=[]
         )
         assert "groups" in result
+        assert result["incivility_framework"] == ""
+
+    def test_missing_incivility_framework_defaults_to_empty(self):
+        cfg = _minimal_exp()
+        del cfg["incivility_framework"]
+        result = config_repo.validate_experimental_config(cfg, available_features=[])
+        assert result["incivility_framework"] == ""
 
     def test_no_groups(self):
         with pytest.raises(ValueError, match="treatment group"):

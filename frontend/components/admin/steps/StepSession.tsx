@@ -1,7 +1,8 @@
-"use client"
+﻿"use client"
 
 import { useEffect, useState } from "react"
 import type { SimulationConfig } from "../../../lib/admin-types"
+import { normalizeAgentNames } from "../../../lib/agent-name-options"
 
 interface StepSessionProps {
   config: SimulationConfig
@@ -34,19 +35,13 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
   }
 
   const handleNumAgentsChange = (n: number) => {
-    const names = [...config.agent_names]
+    const names = normalizeAgentNames(n, config.agent_names)
     const personas = [...(config.agent_personas || [])]
-    if (n > names.length) {
-      while (names.length < n) names.push("")
-      while (personas.length < n) personas.push("")
-    } else {
-      names.length = n
-      personas.length = n
-    }
+    while (personas.length < n) personas.push("")
+    personas.length = n
     onChange({ num_agents: n, agent_names: names, agent_personas: personas })
   }
 
-  // Validation: check for empty or duplicate names
   const agentNameErrors = config.agent_names.map((name, i) => {
     if (!name.trim()) return "Required"
     if (config.agent_names.some((other, j) => j !== i && other.trim() === name.trim())) return "Duplicate"
@@ -112,6 +107,9 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
               <label className="block text-sm font-medium text-admin-text mb-2">
                 Agent names
               </label>
+              <p className="text-xs text-admin-faint mb-2">
+                Names are auto-filled from a default list when you change the number of agents, but you can still edit them manually.
+              </p>
               <div className="flex flex-wrap gap-2">
                 {config.agent_names.map((name, i) => (
                   <div key={i} className="flex flex-col">
@@ -188,7 +186,7 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
               className={inputClass}
             />
             <p className="text-xs text-admin-muted mt-1">
-              Upper bound — actual rate will be slower, limited by the Director→Performer→Moderator pipeline latency.
+              Upper bound - actual rate will be slower, limited by the Director-&gt;Performer-&gt;Moderator pipeline latency.
             </p>
           </div>
           <div>
@@ -235,3 +233,4 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
     </div>
   )
 }
+

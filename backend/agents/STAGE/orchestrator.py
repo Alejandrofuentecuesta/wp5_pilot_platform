@@ -109,6 +109,16 @@ def deanonymize_text(text: str, reverse_map: Dict[str, str]) -> str:
     return _replace_names_in_text(text, reverse_map)
 
 
+def _merge_prompt_context(chatroom_context: str = "", incivility_framework: str = "") -> str:
+    """Combine shared experiment context blocks for prompt injection."""
+    parts = []
+    if chatroom_context.strip():
+        parts.append(chatroom_context.strip())
+    if incivility_framework.strip():
+        parts.append(f"Incivility framework:\n{incivility_framework.strip()}")
+    return "\n\n".join(parts)
+
+
 class Orchestrator:
     """Coordinates the three-call Director + Performer + Moderator pipeline.
 
@@ -128,6 +138,7 @@ class Orchestrator:
         action_window_size: int = 10,
         performer_memory_size: int = 3,
         chatroom_context: str = "",
+        incivility_framework: str = "",
         ecological_criteria: str = "",
         classifier_prompt_template: Optional[str] = None,
         performer_prompt_template: Optional[str] = None,
@@ -148,6 +159,7 @@ class Orchestrator:
         self.action_window_size = action_window_size
         self.performer_memory_size = performer_memory_size
         self.chatroom_context = chatroom_context
+        self.incivility_framework = incivility_framework
         self.ecological_criteria = ecological_criteria
         self.classifier_prompt_template = (
             classifier_prompt_template
@@ -217,20 +229,25 @@ class Orchestrator:
         self._turns_since_evaluate: int = 0
         self._has_completed_first_interval: bool = False
 
+        prompt_context = _merge_prompt_context(
+            chatroom_context=chatroom_context,
+            incivility_framework=incivility_framework,
+        )
+
         # Cached session-static system prompts.
         self._update_system_prompt = build_update_system_prompt(
-            chatroom_context=chatroom_context,
+            chatroom_context=prompt_context,
         )
         self._performer_system_prompt = build_performer_system_prompt(
-            chatroom_context=chatroom_context,
+            chatroom_context=prompt_context,
             template=self.performer_prompt_template,
         )
         self._moderator_system_prompt = build_moderator_system_prompt(
-            chatroom_context=chatroom_context,
+            chatroom_context=prompt_context,
             template=self.moderator_prompt_template,
         )
         self._classifier_system_prompt = build_classifier_system_prompt(
-            chatroom_context=chatroom_context,
+            chatroom_context=prompt_context,
         )
         # Evaluate and Action system prompts deferred until first execute_turn (need internal_validity_criteria).
         self._evaluate_system_prompt: Optional[str] = None
@@ -246,7 +263,10 @@ class Orchestrator:
             participant_messages=participant_messages,
             agent_message=agent_message,
             prompt_template=self.classifier_prompt_template,
-            chatroom_context=self.chatroom_context,
+            chatroom_context=_merge_prompt_context(
+                chatroom_context=self.chatroom_context,
+                incivility_framework=self.incivility_framework,
+            ),
         )
 
         classifier_raw = None
@@ -472,7 +492,10 @@ class Orchestrator:
             target_user=anon_target_user,
             target_message=anon_target_message,
             recent_messages=anon_recent_by_agent,
-            chatroom_context=self.chatroom_context,
+            chatroom_context=_merge_prompt_context(
+                chatroom_context=self.chatroom_context,
+                incivility_framework=self.incivility_framework,
+            ),
             template=self.performer_prompt_template,
         )
 
@@ -639,7 +662,10 @@ class Orchestrator:
             last_action=last_action,
             last_agent=self._last_agent or "",
             last_agent_profile=last_agent_profile,
-            chatroom_context=self.chatroom_context,
+            chatroom_context=_merge_prompt_context(
+                chatroom_context=self.chatroom_context,
+                incivility_framework=self.incivility_framework,
+            ),
         )
 
         update_raw = None
@@ -684,7 +710,10 @@ class Orchestrator:
             self._evaluate_system_prompt = build_evaluate_system_prompt(
                 internal_validity_criteria=internal_validity_criteria,
                 ecological_criteria=self.ecological_criteria,
-                chatroom_context=self.chatroom_context,
+                chatroom_context=_merge_prompt_context(
+                    chatroom_context=self.chatroom_context,
+                    incivility_framework=self.incivility_framework,
+                ),
                 template=self.director_evaluate_prompt_template,
             )
 
@@ -694,7 +723,10 @@ class Orchestrator:
             previous_ecological=self._ecological_validity_summary,
             internal_validity_criteria=internal_validity_criteria,
             ecological_criteria=self.ecological_criteria,
-            chatroom_context=self.chatroom_context,
+            chatroom_context=_merge_prompt_context(
+                chatroom_context=self.chatroom_context,
+                incivility_framework=self.incivility_framework,
+            ),
             action_counts=self._action_counts,
             performer_counts=self._performer_counts,
             exclude_performer=self._anon_user,
@@ -747,7 +779,10 @@ class Orchestrator:
         # Cache Action system prompt (session-static)
         if self._action_system_prompt is None:
             self._action_system_prompt = build_action_system_prompt(
-                chatroom_context=self.chatroom_context,
+                chatroom_context=_merge_prompt_context(
+                    chatroom_context=self.chatroom_context,
+                    incivility_framework=self.incivility_framework,
+                ),
                 template=self.director_action_prompt_template,
             )
 
@@ -756,7 +791,10 @@ class Orchestrator:
             agent_profiles=self.agent_profiles,
             internal_validity_summary=self._internal_validity_summary or "No actions have occurred yet. No assessment available.",
             ecological_validity_summary=self._ecological_validity_summary or "No actions have occurred yet. No assessment available.",
-            chatroom_context=self.chatroom_context,
+            chatroom_context=_merge_prompt_context(
+                chatroom_context=self.chatroom_context,
+                incivility_framework=self.incivility_framework,
+            ),
             performer_counts=self._performer_counts,
             exclude_performer=self._anon_user,
             template=self.director_action_prompt_template,

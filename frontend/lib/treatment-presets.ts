@@ -4,274 +4,183 @@ export const CHATROOM_CONTEXT_3X3 = `This is a Spanish-language chatroom on Tele
 The participant has posted an opinion about a news article.
 The Director must preserve the assigned treatment condition across the whole conversation.
 
-Important design rule:
+Core design rules:
 - Agents must remain ideologically consistent across the whole conversation.
 - A like-minded agent should consistently support the participant.
 - A not-like-minded agent should consistently oppose the participant.
 - Do not switch an agent from support to opposition or from opposition to support.
-- Treatment percentages refer to the share of total group messages across the conversation, not to changing agent beliefs.
-- The Director should satisfy the treatment by choosing which consistent agents speak more or less often.
-- Prefer stable speaking frequency per agent unless adjustment is needed to satisfy the treatment.
-- Avoid abrupt over-correction in turn allocation.
-- Keep the flow natural; do not force strict alternation.`
+
+Treatment execution rule:
+- Each treatment only changes parameter values.
+- Follow the definitions in the incivility framework exactly.
+- Do not reinterpret definitions.
+- Do not change percentages.`
 
 export const ECOLOGICAL_VALIDITY_3X3 = `Messages should stay short, natural, and chat-like.
 The flow should feel like a real Telegram group conversation in Spanish.
 Use a mix of standalone messages, replies, @mentions, and likes.
-Keep turn-taking organic and avoid robotic alternation or obvious quota chasing.`
+Keep the flow natural; do not force strict alternation.`
+
+export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is defined through these three dimensions:
+
+- Impoliteness:
+  Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
+  Examples: "friki", "chiflado", "estupido", "farsa", "infame", "maldito", "mierda", "DEVOLVEDLOS A SU PAIS!!!!".
+
+- Threats to Democratic Freedoms:
+  Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism.
+  This includes restricting freedoms, delegitimizing elections or institutions, promoting autocratic rule, or using authoritarian patriotic slogans in an endorsing way.
+  Do not code this dimension if the message only describes, reports on, or analyses threats to democracy without endorsing them.
+  Examples: "Todo el proceso electoral es una farsa. Nuestros votos no importan", "No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene", "Con Franco se vivia mejor", "Arriba Espana!".
+
+- Hate Speech and Stereotyping:
+  Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or racist insults is included.
+  Groups may be defined by gender, race, religion, nationality, sexuality, ideology, disability, or similar social identity markers.
+  This also includes fake claims used to dehumanize or discriminate against identity-based groups.
+  Examples that count: "Conducia una mujer?", "Los zurdos son la verguenza de nuestra nacion", "Los moros simpatizan con los terroristas", "Todos los hombres son violadores".
+ 
+
+Treatment interpretation rules:
+- Each treatment defines numerical targets that must be followed.
+- INCIVILITY_TARGET = percentage of total group messages that are uncivil.
+- LIKEMINDED_TARGET = percentage of total group messages that come from agents who support the participant.
+- NOT_LIKEMINDED_TARGET = percentage of total group messages that come from agents who oppose the participant.
+- Percentages refer to the share of total group messages.
+- Percentages should be respected both overall and within any window of about 10 consecutive group messages.
+- Do not change agent beliefs to meet targets.
+- Meet targets by choosing which agents speak more or less often.
+
+Independence rule:
+- Alignment and incivility are independent dimensions.
+- A supportive message can be civil or uncivil.
+- An opposing message can be civil or uncivil.
+
+Operational conversion rule:
+For every 10 group messages:
+- INCIVILITY_TARGET 20 means 2 uncivil and  8 civil.
+- INCIVILITY_TARGET 50 means 5 uncivil and  5 civil.
+- INCIVILITY_TARGET 80 means 8 uncivil and  2 civil.
+- LIKEMINDED_TARGET 20 means 2 like-minded and 8 not-like-minded.
+- LIKEMINDED_TARGET 50 means 5 like-minded and 5 not-like-minded.
+- LIKEMINDED_TARGET 80 means 8 like-minded and 2 not-like-minded.
+
+Incivility level mapping:
+- low:
+  - Impoliteness: low.
+  - Hate speech and stereotyping: none.
+  - Threats to democratic freedoms: none.
+  - Style: short, natural, and mostly civil.
+  - Allowed incivility at this level is limited to mild rudeness, sarcasm, mockery, or dismissive tone.
+
+- medium:
+  - Impoliteness: medium including sarcasm, mockery, dismissiveness,
+  - Hate speech and stereotyping: indirect or problematic group generalizations may appear, but without slurs or explicit dehumanization.
+  - Threats to democratic freedoms: mild delegitimizing or manipulative anti-democratic claims may appear.
+  - Style: short and natural.
+  - Incivility may include more visible sarcasm, mockery, dismissiveness, and some problematic generalizations within these limits.
+
+- high:
+  - Impoliteness: All uncivil messages must be impolite. Include strong insults, rudeness, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
+  - Hate speech and stereotyping: stronger stereotyped group contempt may appear, but without explicit dehumanization. Slurs may appear frequently.
+  - Threats to democratic freedoms: strong delegitimizing or pro-authoritarian framing may appear.
+  - Style: short and sharp. Prioritize confrontation rather than elaborate arguments.
+  - Uncivility may include strong rudeness, repeated sarcasm, mockery, and harsh dismissiveness within these limits.
+
+Safety rules:
+- No physical threats.
+- No incitement to violence.
+- No explicit dehumanization.`
 
 const GROUP_TREATMENTS: Record<string, string> = {
-  low_against: `Maintain about 20% uncivil messages across the conversation.
-Maintain about 20% like-minded messages and about 80% not-like-minded messages across the conversation.
+  low_against: `INCIVILITY_LEVEL = low
+INCIVILITY_TARGET = 20
+LIKEMINDED_TARGET = 20
+NOT_LIKEMINDED_TARGET = 80
 
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-Operational rule of thumb per 10 group messages:
-- about 2 uncivil, about 8 civil;
-- about 2 like-minded, about 8 not-like-minded.
+  low_mixed: `INCIVILITY_LEVEL = low
+INCIVILITY_TARGET = 20
+LIKEMINDED_TARGET = 50
+NOT_LIKEMINDED_TARGET = 50
 
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
+  low_favor: `INCIVILITY_LEVEL = low
+INCIVILITY_TARGET = 20
+LIKEMINDED_TARGET = 80
+NOT_LIKEMINDED_TARGET = 20
 
-Style:
-- Messages should remain short and natural.
-- Uncivility means rudeness, sarcasm, mockery, or dismissive tone only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-  low_mixed: `Maintain about 20% uncivil messages across the conversation.
-Maintain about 50% like-minded messages and about 50% not-like-minded messages across the conversation.
+  medium_against: `INCIVILITY_LEVEL = medium
+INCIVILITY_TARGET = 50
+LIKEMINDED_TARGET = 20
+NOT_LIKEMINDED_TARGET = 80
 
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-Operational rule of thumb per 10 group messages:
-- about 2 uncivil, about 8 civil;
-- about 5 like-minded, about 5 not-like-minded.
+  medium_mixed: `INCIVILITY_LEVEL = medium
+INCIVILITY_TARGET = 50
+LIKEMINDED_TARGET = 50
+NOT_LIKEMINDED_TARGET = 50
 
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
+  medium_favor: `INCIVILITY_LEVEL = medium
+INCIVILITY_TARGET = 50
+LIKEMINDED_TARGET = 80
+NOT_LIKEMINDED_TARGET = 20
 
-Style:
-- Messages should remain short and natural.
-- Uncivility means rudeness, sarcasm, mockery, or dismissive tone only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-  low_favor: `Maintain about 20% uncivil messages across the conversation.
-Maintain about 80% like-minded messages and about 20% not-like-minded messages across the conversation.
+  high_against: `INCIVILITY_LEVEL = high
+INCIVILITY_TARGET = 80
+LIKEMINDED_TARGET = 20
+NOT_LIKEMINDED_TARGET = 80
 
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-Operational rule of thumb per 10 group messages:
-- about 2 uncivil, about 8 civil;
-- about 8 like-minded, about 2 not-like-minded.
+  high_mixed: `INCIVILITY_LEVEL = high
+INCIVILITY_TARGET = 80
+LIKEMINDED_TARGET = 50
+NOT_LIKEMINDED_TARGET = 50
 
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
+  high_favor: `INCIVILITY_LEVEL = high
+INCIVILITY_TARGET = 80
+LIKEMINDED_TARGET = 80
+NOT_LIKEMINDED_TARGET = 20
 
-Style:
-- Messages should remain short and natural.
-- Uncivility means rudeness, sarcasm, mockery, or dismissive tone only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
-
-  medium_against: `Maintain about 50% uncivil messages across the conversation.
-Maintain about 20% like-minded messages and about 80% not-like-minded messages across the conversation.
-
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
-
-Operational rule of thumb per 10 group messages:
-- about 5 uncivil, about 5 civil;
-- about 2 like-minded, about 8 not-like-minded.
-
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
-
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
-
-Style:
-- Messages should remain short and natural.
-- Uncivility means rudeness, sarcasm, mockery, or dismissive tone only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
-
-  medium_mixed: `Maintain about 50% uncivil messages across the conversation.
-Maintain about 50% like-minded messages and about 50% not-like-minded messages across the conversation.
-
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
-
-Operational rule of thumb per 10 group messages:
-- about 5 uncivil, about 5 civil;
-- about 5 like-minded, about 5 not-like-minded.
-
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
-
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
-
-Style:
-- Messages should remain short and natural.
-- Uncivility means rudeness, sarcasm, mockery, or dismissive tone only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
-
-  medium_favor: `Maintain about 50% uncivil messages across the conversation.
-Maintain about 80% like-minded messages and about 20% not-like-minded messages across the conversation.
-
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
-
-Operational rule of thumb per 10 group messages:
-- about 5 uncivil, about 5 civil;
-- about 8 like-minded, about 2 not-like-minded.
-
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
-
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
-
-Style:
-- Messages should remain short and natural.
-- Uncivility means rudeness, sarcasm, mockery, or dismissive tone only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
-
-  high_against: `Maintain about 80% uncivil messages across the conversation.
-Maintain about 20% like-minded messages and about 80% not-like-minded messages across the conversation.
-
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
-
-Operational rule of thumb per 10 group messages:
-- about 8 uncivil, about 2 civil;
-- about 2 like-minded, about 8 not-like-minded.
-
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
-
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
-
-Style:
-- Messages should remain short and sharp.
-- Uncivility means strong rudeness, repeated sarcasm, mockery, and harsh dismissiveness only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
-
-  high_mixed: `Maintain about 80% uncivil messages across the conversation.
-Maintain about 50% like-minded messages and about 50% not-like-minded messages across the conversation.
-
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
-
-Operational rule of thumb per 10 group messages:
-- about 8 uncivil, about 2 civil;
-- about 5 like-minded, about 5 not-like-minded.
-
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
-
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
-
-Style:
-- Messages should remain short and sharp.
-- Uncivility means strong rudeness, repeated sarcasm, mockery, and harsh dismissiveness only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
-
-  high_favor: `Maintain about 80% uncivil messages across the conversation.
-Maintain about 80% like-minded messages and about 20% not-like-minded messages across the conversation.
-
-Agent consistency:
-- Agents must keep a stable position.
-- Like-minded agents consistently support the participant.
-- Not-like-minded agents consistently oppose the participant.
-- The Director must meet the target by selecting who speaks more often, not by changing anyone's stance.
-- Prefer approximately stable speaking frequency per agent unless adjustment is needed to satisfy the target percentages.
-- Use mild, gradual turn-allocation corrections rather than abrupt swings.
-
-Operational rule of thumb per 10 group messages:
-- about 8 uncivil, about 2 civil;
-- about 8 like-minded, about 2 not-like-minded.
-
-Windowing rule:
-- Stay close to the target not only overall, but also within any window of about 10 consecutive group messages.
-
-Independence rule:
-- Alignment and incivility are independent dimensions.
-- A supportive message can be civil or uncivil.
-- An opposing message can be civil or uncivil.
-
-Style:
-- Messages should remain short and sharp.
-- Uncivility means strong rudeness, repeated sarcasm, mockery, and harsh dismissiveness only.
-- No slurs, no dehumanization, no threats, no incitement to violence.`,
+Apply the incivility level using the shared incivility framework.
+Follow global rules.
+Do not reinterpret definitions.
+Do not change percentages.`,
 }
 
 export function createExperimental3x3Preset(): ExperimentalConfig {
@@ -286,6 +195,7 @@ export function createExperimental3x3Preset(): ExperimentalConfig {
 
   return {
     chatroom_context: CHATROOM_CONTEXT_3X3,
+    incivility_framework: INCIVILITY_FRAMEWORK_3X3,
     ecological_validity_criteria: ECOLOGICAL_VALIDITY_3X3,
     redirect_url: "",
     groups,

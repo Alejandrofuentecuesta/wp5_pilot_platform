@@ -57,11 +57,13 @@ class Logger:
         treatment_group: str,
         *,
         chatroom_context: str = "",
+        incivility_framework: str = "",
     ) -> None:
         self.log_event("session_start", {
             "treatment_group": treatment_group,
             "experiment_id": self.experiment_id,
             "chatroom_context": chatroom_context,
+            "incivility_framework": incivility_framework,
             "experimental_config": experimental_config,
             "simulation_config": simulation_config,
         })

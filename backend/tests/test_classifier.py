@@ -68,4 +68,3 @@ class TestParseClassifierResponse:
     def test_raises_when_incivil_missing(self):
         with pytest.raises(ValueError, match="is_incivil"):
             parse_classifier_response('{"is_like_minded": true}')
-

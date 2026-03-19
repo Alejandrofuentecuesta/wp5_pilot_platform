@@ -9,6 +9,8 @@ Your job is to classify each AGENT message on two dimensions:
 
 2. Like-mindedness with the human participant:
 - Infer the participant's stance from the participant's own prior messages.
+- Prioritize the participant's first substantive opinion message about the news topic as your starting point.
+- Use later participant messages to refine that stance, but only override the initial reading if the participant clearly changes or reverses position.
 - `is_like_minded = true` if the agent message aligns with that inferred stance.
 - `is_like_minded = false` if it conflicts with that inferred stance.
 - `is_like_minded = null` if participant stance cannot be inferred yet.

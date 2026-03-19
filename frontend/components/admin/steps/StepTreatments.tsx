@@ -169,7 +169,7 @@ function GroupCard({
           value={group.internal_validity_criteria}
           onChange={(e) => onChangeGroup({ ...group, internal_validity_criteria: e.target.value })}
           rows={4}
-          placeholder="Describe the internal validity criteria for this condition..."
+          placeholder="Describe the internal validity criteria for this condition, ideally referencing the shared incivility framework if you defined one..."
           className={`${inputClass} resize-vertical`}
         />
       </div>
@@ -318,7 +318,7 @@ export default function StepTreatments({ config, onChange, availableFeatures }: 
       <div>
         <h2 className="text-lg font-semibold text-admin-text">Treatment Groups</h2>
         <p className="text-sm text-admin-muted mt-1">
-          Define the chatroom context and treatment conditions for each group.
+          Define the shared chatroom setup, optional incivility framework, and treatment conditions for each group.
         </p>
       </div>
 
@@ -358,6 +358,19 @@ export default function StepTreatments({ config, onChange, availableFeatures }: 
             className={`${inputClass} resize-vertical`}
           />
           <p className="text-xs text-admin-faint mt-1">The topic and setting of the chatroom. Shared across all treatment groups.</p>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-admin-text mb-1">Incivility framework</label>
+          <textarea
+            value={config.incivility_framework}
+            onChange={(e) => onChange({ ...config, incivility_framework: e.target.value })}
+            rows={6}
+            placeholder="Optional shared definition of incivility, its levels, and the forms that are allowed or disallowed across this experiment."
+            className={`${inputClass} resize-vertical`}
+          />
+          <p className="text-xs text-admin-faint mt-1">
+            Optional shared taxonomy for incivility. Use this for the long definition, levels, and allowed forms, then keep each treatment focused on the target level or pattern.
+          </p>
         </div>
         <div>
           <label className="block text-sm font-medium text-admin-text mb-1">Ecological validity criteria</label>

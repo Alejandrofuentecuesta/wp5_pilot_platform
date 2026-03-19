@@ -103,6 +103,7 @@ export default function StepReview({
 
       <Section title="Treatment Groups">
         <KV label="Chatroom context" value={experimental.chatroom_context.slice(0, 80) + (experimental.chatroom_context.length > 80 ? "..." : "")} />
+        <KV label="Incivility framework" value={experimental.incivility_framework ? experimental.incivility_framework.slice(0, 80) + (experimental.incivility_framework.length > 80 ? "..." : "") : "(not set)"} />
         <KV label="Ecological validity" value={experimental.ecological_validity_criteria.slice(0, 80) + (experimental.ecological_validity_criteria.length > 80 ? "..." : "")} />
         <div className="space-y-3 mt-2">
           {Object.entries(experimental.groups).map(([name, group]) => (

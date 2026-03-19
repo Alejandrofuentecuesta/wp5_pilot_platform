@@ -66,6 +66,7 @@ class SimulationSession:
             raise RuntimeError(f"treatment_group '{treatment_group}' has no 'internal_validity_criteria' description")
 
         self.chatroom_context = experimental_full.get("chatroom_context", "")
+        self.incivility_framework = experimental_full.get("incivility_framework", "")
         self.ecological_criteria = experimental_full.get("ecological_validity_criteria", "")
         self.redirect_url = experimental_full.get("redirect_url", "")
 
@@ -146,6 +147,7 @@ class SimulationSession:
             action_window_size=int(self.simulation_config.get("action_window_size", 10)),
             performer_memory_size=int(self.simulation_config.get("performer_memory_size", 3)),
             chatroom_context=self.chatroom_context,
+            incivility_framework=self.incivility_framework,
             ecological_criteria=self.ecological_criteria,
             classifier_prompt_template=self.simulation_config.get(
                 "classifier_prompt_template",
@@ -196,7 +198,9 @@ class SimulationSession:
         self.running = True
         self.logger.log_session_start(
             self.experimental_config, self.simulation_config,
-            self.treatment_group, chatroom_context=self.chatroom_context,
+            self.treatment_group,
+            chatroom_context=self.chatroom_context,
+            incivility_framework=self.incivility_framework,
         )
 
         pool = db_conn.get_pool()

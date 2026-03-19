@@ -162,11 +162,27 @@ def validate_experimental_config(
     Raises ValueError on invalid input.
     """
     # Ecological validity criteria — required for new experiments
-    evc = cfg.get("ecological_validity_criteria", "")
+    out = dict(cfg)
+
+    chatroom_context = out.get("chatroom_context", "")
+    if chatroom_context is None:
+        out["chatroom_context"] = ""
+    elif not isinstance(chatroom_context, str):
+        raise ValueError("'chatroom_context' must be a string")
+
+    incivility_framework = out.get("incivility_framework", "")
+    if incivility_framework is None:
+        out["incivility_framework"] = ""
+    elif not isinstance(incivility_framework, str):
+        raise ValueError("'incivility_framework' must be a string")
+
+    evc = out.get("ecological_validity_criteria", "")
     if isinstance(evc, str) and not evc.strip():
         raise ValueError("'ecological_validity_criteria' is required")
+    if not isinstance(evc, str):
+        raise ValueError("'ecological_validity_criteria' must be a string")
 
-    groups = cfg.get("groups", {})
+    groups = out.get("groups", {})
     if not groups or not isinstance(groups, dict):
         raise ValueError("At least one treatment group is required")
 
@@ -182,7 +198,7 @@ def validate_experimental_config(
                     f"Available: {', '.join(available_features)}"
                 )
 
-    return cfg
+    return out
 
 
 def validate_token_groups(

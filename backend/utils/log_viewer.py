@@ -441,6 +441,7 @@ def render_session_start(ev: dict) -> str:
     treatment_group = _esc(data.get("treatment_group", ""))
     experiment_id = _esc(data.get("experiment_id", ""))
     chatroom_context = data.get("chatroom_context", "")
+    incivility_framework = data.get("incivility_framework", "")
 
     exp_cfg = data.get("experimental_config", {})
     sim_cfg = data.get("simulation_config", {})
@@ -467,6 +468,8 @@ def render_session_start(ev: dict) -> str:
     parts.append(_config_row("Treatment group", treatment_group))
     if chatroom_context:
         parts.append(_config_row("Chatroom context", chatroom_context, mono=False))
+    if incivility_framework:
+        parts.append(_config_row("Incivility framework", incivility_framework, mono=False))
 
     parts.append('    </div>')
 

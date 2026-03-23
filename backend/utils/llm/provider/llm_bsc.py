@@ -160,10 +160,13 @@ class BSCClient:
             self.aclient = None
 
     def _build_kwargs(self, prompt: str, system_prompt: str = None) -> dict:
-        messages = []
+        # BSC fine-tuned models may not support the "system" role.
+        # Merge system instructions into the user message instead.
         if system_prompt is not None:
-            messages.append({"role": "system", "content": system_prompt})
-        messages.append({"role": "user", "content": prompt})
+            combined = f"{system_prompt}\n\n---\n\n{prompt}"
+            messages = [{"role": "user", "content": combined}]
+        else:
+            messages = [{"role": "user", "content": prompt}]
 
         kwargs = {
             "model": self.model_name,

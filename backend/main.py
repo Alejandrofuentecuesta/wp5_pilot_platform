@@ -7,7 +7,7 @@ import secrets
 import string
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 import uuid
 
 from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, HTTPException
@@ -159,6 +159,21 @@ class ReportRequest(BaseModel):
     user: str
     block: Optional[bool] = False
     reason: Optional[str] = None
+
+
+class ManualEvaluationRowRequest(BaseModel):
+    message_id: str
+    incivility: bool = False
+    hate_speech: bool = False
+    threats_to_dem_freedom: bool = False
+    impoliteness: bool = False
+    alignment: Literal["", "like_minded", "not_like_minded"] = ""
+    human_like: Literal["", "yes", "no"] = ""
+    other: str = ""
+
+
+class SessionEvaluationSaveRequest(BaseModel):
+    rows: List[ManualEvaluationRowRequest]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -1314,6 +1329,7 @@ async def admin_session_messages(
         raise HTTPException(status_code=404, detail="Session not found for this experiment")
 
     messages = await message_repo.get_session_messages(pool, session_id)
+    saved_evaluations = await message_repo.get_manual_evaluations(pool, session_id)
     return {
         "messages": [
             {
@@ -1325,9 +1341,46 @@ async def admin_session_messages(
                 "is_like_minded": msg.get("is_like_minded"),
                 "inferred_participant_stance": msg.get("inferred_participant_stance"),
                 "classification_rationale": msg.get("classification_rationale"),
+                "manual_evaluation": saved_evaluations.get(msg["message_id"]),
             }
             for msg in messages
         ]
+    }
+
+
+@app.put("/admin/session/{session_id}/evaluation")
+async def admin_save_session_evaluation(
+    session_id: str,
+    request: SessionEvaluationSaveRequest,
+    experiment_id: Optional[str] = None,
+    x_admin_key: str = Header(None),
+):
+    """Persist the full manual evaluation snapshot for a session."""
+    _require_admin(x_admin_key)
+    eid = experiment_id or get_experiment_id()
+    pool = _get_pool()
+
+    session_row = await session_repo.get_session(pool, session_id)
+    if not session_row or session_row["experiment_id"] != eid:
+        raise HTTPException(status_code=404, detail="Session not found for this experiment")
+
+    messages = await message_repo.get_session_messages(pool, session_id)
+    valid_message_ids = {msg["message_id"] for msg in messages}
+    request_ids = [row.message_id for row in request.rows]
+    unknown_ids = sorted(set(request_ids) - valid_message_ids)
+    if unknown_ids:
+        raise HTTPException(status_code=400, detail="Evaluation payload contains unknown message ids")
+
+    await message_repo.replace_manual_evaluations(
+        pool,
+        session_id=session_id,
+        experiment_id=eid,
+        evaluations=[row.model_dump() for row in request.rows],
+    )
+    return {
+        "status": "ok",
+        "session_id": session_id,
+        "saved_rows": len(request.rows),
     }
 
 
@@ -1545,6 +1598,123 @@ async def admin_sessions_csv(experiment_id: str, x_admin_key: str = Header(None)
 
     buf.seek(0)
     filename = f"{experiment_id}_sessions.csv"
+    return StreamingResponse(
+        io.StringIO(buf.getvalue()),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/admin/evaluations/summary-csv/{experiment_id}")
+async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = Header(None)):
+    """Download one summary row per session with saved manual evaluations."""
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+
+    experiment = await config_repo.get_experiment(pool, experiment_id)
+    if not experiment:
+        raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
+
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                s.session_id,
+                s.treatment_group,
+                s.status,
+                COUNT(m.message_id) AS total_messages,
+                COUNT(ev.message_id) AS saved_rows,
+                COUNT(*) FILTER (WHERE ev.incivility) AS incivility_count,
+                COUNT(*) FILTER (WHERE ev.hate_speech) AS hate_speech_count,
+                COUNT(*) FILTER (WHERE ev.impoliteness) AS impoliteness_count,
+                COUNT(*) FILTER (WHERE ev.threats_to_dem_freedom) AS threats_to_democracy_count,
+                COUNT(*) FILTER (WHERE ev.alignment = 'like_minded') AS like_minded_count,
+                COUNT(*) FILTER (WHERE ev.alignment = 'not_like_minded') AS not_like_minded_count,
+                COUNT(*) FILTER (WHERE ev.alignment <> '') AS aligned_rows,
+                MAX(ev.updated_at) AS last_evaluated_at
+            FROM sessions s
+            LEFT JOIN messages m
+                ON m.session_id = s.session_id
+            LEFT JOIN manual_message_evaluations ev
+                ON ev.session_id = s.session_id
+                AND ev.message_id = m.message_id
+            WHERE s.experiment_id = $1
+            GROUP BY s.session_id, s.treatment_group, s.status
+            HAVING COUNT(ev.message_id) > 0
+            ORDER BY last_evaluated_at DESC NULLS LAST, s.session_id
+            """,
+            experiment_id,
+        )
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No saved evaluations found for this experiment")
+
+    def _pct(value: int, total: int) -> str:
+        return f"{(value / total) * 100:.1f}%" if total > 0 else ""
+
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        [
+            "experiment_id",
+            "experiment_description",
+            "session_id",
+            "treatment_group",
+            "session_status",
+            "saved_rows",
+            "n_messages",
+            "n_incivility",
+            "n_hate_speech",
+            "n_impoliteness",
+            "n_threats_to_democracy",
+            "n_like_minded",
+            "n_not_like_minded",
+            "perc_incivility",
+            "perc_hate_speech",
+            "perc_impoliteness",
+            "perc_threats_to_democracy",
+            "perc_like_minded",
+            "perc_not_like_minded",
+            "last_evaluated_at",
+        ]
+    )
+    for row in rows:
+        total_messages = int(row["total_messages"] or 0)
+        saved_rows = int(row["saved_rows"] or 0)
+        incivility_count = int(row["incivility_count"] or 0)
+        hate_speech_count = int(row["hate_speech_count"] or 0)
+        impoliteness_count = int(row["impoliteness_count"] or 0)
+        threats_count = int(row["threats_to_democracy_count"] or 0)
+        like_minded_count = int(row["like_minded_count"] or 0)
+        not_like_minded_count = int(row["not_like_minded_count"] or 0)
+        aligned_rows = int(row["aligned_rows"] or 0)
+        writer.writerow(
+            [
+                experiment_id,
+                experiment.get("description", ""),
+                str(row["session_id"]),
+                row["treatment_group"],
+                row["status"],
+                saved_rows,
+                total_messages,
+                incivility_count,
+                hate_speech_count,
+                impoliteness_count,
+                threats_count,
+                like_minded_count,
+                not_like_minded_count,
+                _pct(incivility_count, total_messages),
+                _pct(hate_speech_count, total_messages),
+                _pct(impoliteness_count, total_messages),
+                _pct(threats_count, total_messages),
+                _pct(like_minded_count, aligned_rows),
+                _pct(not_like_minded_count, aligned_rows),
+                row["last_evaluated_at"].isoformat() if row["last_evaluated_at"] else "",
+            ]
+        )
+
+    buf.seek(0)
+    filename = f"{experiment_id}_evaluation_summary.csv"
     return StreamingResponse(
         io.StringIO(buf.getvalue()),
         media_type="text/csv",

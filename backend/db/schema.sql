@@ -58,12 +58,29 @@ CREATE TABLE IF NOT EXISTS messages (
     seq         BIGSERIAL
 );
 
+CREATE TABLE IF NOT EXISTS manual_message_evaluations (
+    session_id               UUID        NOT NULL REFERENCES sessions(session_id) ON DELETE CASCADE,
+    message_id               UUID        NOT NULL REFERENCES messages(message_id) ON DELETE CASCADE,
+    experiment_id            TEXT        NOT NULL,
+    incivility               BOOLEAN     NOT NULL DEFAULT FALSE,
+    hate_speech              BOOLEAN     NOT NULL DEFAULT FALSE,
+    threats_to_dem_freedom   BOOLEAN     NOT NULL DEFAULT FALSE,
+    impoliteness             BOOLEAN     NOT NULL DEFAULT FALSE,
+    alignment                TEXT        NOT NULL DEFAULT '',
+    human_like               TEXT        NOT NULL DEFAULT '',
+    other                    TEXT        NOT NULL DEFAULT '',
+    updated_at               TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    PRIMARY KEY (session_id, message_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_session_seq ON messages(session_id, seq);
 CREATE INDEX IF NOT EXISTS idx_messages_experiment   ON messages(experiment_id);
 CREATE INDEX IF NOT EXISTS idx_messages_sender       ON messages(session_id, sender);
 CREATE INDEX IF NOT EXISTS idx_messages_reply_to     ON messages(reply_to) WHERE reply_to IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_messages_classification
     ON messages(session_id, is_incivil, is_like_minded);
+CREATE INDEX IF NOT EXISTS idx_manual_message_evaluations_experiment
+    ON manual_message_evaluations(experiment_id, session_id);
 
 CREATE TABLE IF NOT EXISTS events (
     id            BIGSERIAL   PRIMARY KEY,

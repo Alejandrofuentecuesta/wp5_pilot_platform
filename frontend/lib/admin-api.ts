@@ -231,6 +231,16 @@ export interface SessionMessageForEvaluation {
   sender: string
   content: string
   timestamp: string
+  manual_evaluation?: {
+    incivility: boolean
+    hate_speech: boolean
+    threats_to_dem_freedom: boolean
+    impoliteness: boolean
+    alignment: string
+    human_like: string
+    other: string
+    updated_at?: string | null
+  } | null
 }
 
 export async function getEvents(
@@ -258,6 +268,52 @@ export async function getSessionMessagesForEvaluation(
   const res = await adminFetch(`/admin/session/${encodeURIComponent(sessionId)}/messages?${params}`, key)
   if (!res.ok) throw new Error("Failed to load session messages")
   return res.json()
+}
+
+export async function saveSessionEvaluation(
+  key: string,
+  sessionId: string,
+  experimentId: string,
+  rows: Array<{
+    message_id: string
+    incivility: boolean
+    hate_speech: boolean
+    threats_to_dem_freedom: boolean
+    impoliteness: boolean
+    alignment: string
+    human_like: string
+    other: string
+  }>,
+): Promise<{ status: string; session_id: string; saved_rows: number }> {
+  const params = new URLSearchParams({ experiment_id: experimentId })
+  const res = await adminFetch(`/admin/session/${encodeURIComponent(sessionId)}/evaluation?${params}`, key, {
+    method: "PUT",
+    body: JSON.stringify({ rows }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to save evaluation" }))
+    throw new Error(err.detail || "Failed to save evaluation")
+  }
+  return res.json()
+}
+
+export async function downloadEvaluationSummaryCSV(
+  key: string,
+  experimentId: string,
+): Promise<void> {
+  const res = await adminFetch(`/admin/evaluations/summary-csv/${encodeURIComponent(experimentId)}`, key)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Summary CSV export failed" }))
+    throw new Error(err.detail || "Summary CSV export failed")
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `${experimentId}_evaluation_summary.csv`
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
 export async function resetSessions(

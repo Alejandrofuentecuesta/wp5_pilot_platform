@@ -1,8 +1,13 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
-import { getExperimentConfig, getSessionMessagesForEvaluation, type SessionMessageForEvaluation } from "../../lib/admin-api"
-import type { ExperimentalConfig, SessionSummary, SimulationConfig, TreatmentGroup } from "../../lib/admin-types"
+import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  downloadEvaluationSummaryCSV,
+  getSessionMessagesForEvaluation,
+  saveSessionEvaluation,
+  type SessionMessageForEvaluation,
+} from "../../lib/admin-api"
+import type { SessionSummary } from "../../lib/admin-types"
 
 type Alignment = "like_minded" | "not_like_minded" | ""
 type HumanLike = "yes" | "no" | ""
@@ -20,12 +25,6 @@ type AnnotationRow = {
   other: string
 }
 
-type ExperimentMeta = {
-  description: string
-  simulation: SimulationConfig
-  experimental: ExperimentalConfig
-}
-
 const tableInputClass =
   "border border-admin-border rounded px-2 py-1 bg-admin-surface text-admin-text"
 
@@ -36,63 +35,6 @@ function csvEscape(value: string): string {
   return value
 }
 
-function pct(value: number, total: number): string {
-  return total > 0 ? `${((value / total) * 100).toFixed(1)}%` : ""
-}
-
-function formatModelsUsed(simulation: SimulationConfig | null): string {
-  if (!simulation) return ""
-  const rows = [
-    `Dir:${simulation.director_llm_provider}/${simulation.director_llm_model}`,
-    `Perf:${simulation.performer_llm_provider}/${simulation.performer_llm_model}`,
-    `Mod:${simulation.moderator_llm_provider}/${simulation.moderator_llm_model}`,
-    `Cls:${simulation.classifier_llm_provider}/${simulation.classifier_llm_model}`,
-  ]
-  return rows.join("\n")
-}
-
-function formatConfiguration(simulation: SimulationConfig | null): string {
-  if (!simulation) return ""
-  const rows = [
-    `duration: ${simulation.session_duration_minutes}`,
-    `seed: ${simulation.random_seed}`,
-    `msg_min: ${simulation.messages_per_minute}`,
-    `eval_int: ${simulation.evaluate_interval}`,
-    `action_win: ${simulation.action_window_size}`,
-    `perf_mem: ${simulation.performer_memory_size}`,
-  ]
-  return rows.join("\n")
-}
-
-function getSelectedGroup(
-  experimental: ExperimentalConfig | null,
-  treatmentGroup: string,
-): TreatmentGroup | null {
-  if (!experimental) return null
-  return experimental.groups[treatmentGroup] || null
-}
-
-function getSeedArticleType(group: TreatmentGroup | null): string {
-  const templateId = group?.seed?.template_id?.trim()
-  if (templateId) return templateId
-  if (group?.seed?.headline?.trim()) return "custom"
-  return ""
-}
-
-function getIncivilityTypes(rows: AnnotationRow[]): string {
-  const types: string[] = []
-  if (rows.some((row) => row.impoliteness)) types.push("Impoliteness")
-  if (rows.some((row) => row.hate_speech)) types.push("Hate Speech")
-  if (rows.some((row) => row.threats_to_dem_freedom)) types.push("Threats to Democratic Freedoms")
-  return types.join("; ")
-}
-
-function getNotes(rows: AnnotationRow[]): string {
-  return rows
-    .map((row) => row.other.trim())
-    .filter(Boolean)
-    .join(" | ")
-}
 
 function downloadCsv(lines: string[][], filename: string) {
   const csv = lines.map((line) => line.map((value) => csvEscape(value)).join(",")).join("\n")
@@ -122,56 +64,16 @@ export default function EvaluateTab({
   const [rows, setRows] = useState<AnnotationRow[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const [experimentMeta, setExperimentMeta] = useState<ExperimentMeta | null>(null)
-
-  const selectedSession = useMemo(
-    () => endedSessions.find((session) => session.session_id === selectedSessionId) || null,
-    [endedSessions, selectedSessionId],
-  )
-
-  const selectedGroup = useMemo(
-    () => getSelectedGroup(experimentMeta?.experimental || null, selectedSession?.treatment_group || ""),
-    [experimentMeta, selectedSession],
-  )
-
-  const evaluatedAgentRows = useMemo(
-    () => rows.filter((row) => row.sender !== "participant" && row.sender !== "[news]"),
-    [rows],
-  )
-
-  const participantMessagesCount = useMemo(
-    () => rows.filter((row) => row.sender === "participant").length,
-    [rows],
-  )
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle")
+  const [summaryExporting, setSummaryExporting] = useState(false)
+  const saveTimeoutRef = useRef<number | null>(null)
+  const skipAutosaveRef = useRef(true)
 
   useEffect(() => {
     if (!selectedSessionId && endedSessions.length > 0) {
       setSelectedSessionId(endedSessions[0].session_id)
     }
   }, [endedSessions, selectedSessionId])
-
-  useEffect(() => {
-    let cancelled = false
-
-    getExperimentConfig(adminKey, experimentId)
-      .then((res) => {
-        if (cancelled) return
-        setExperimentMeta({
-          description: res.description || "",
-          simulation: res.config.simulation,
-          experimental: res.config.experimental,
-        })
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setExperimentMeta(null)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [adminKey, experimentId])
 
   useEffect(() => {
     if (!selectedSessionId) {
@@ -191,15 +93,17 @@ export default function EvaluateTab({
             message_id: message.message_id,
             sender: message.sender,
             message: message.content,
-            incivility: false,
-            hate_speech: false,
-            threats_to_dem_freedom: false,
-            impoliteness: false,
-            alignment: "",
-            human_like: "",
-            other: "",
+            incivility: message.manual_evaluation?.incivility ?? false,
+            hate_speech: message.manual_evaluation?.hate_speech ?? false,
+            threats_to_dem_freedom: message.manual_evaluation?.threats_to_dem_freedom ?? false,
+            impoliteness: message.manual_evaluation?.impoliteness ?? false,
+            alignment: (message.manual_evaluation?.alignment as Alignment | undefined) ?? "",
+            human_like: (message.manual_evaluation?.human_like as HumanLike | undefined) ?? "",
+            other: message.manual_evaluation?.other ?? "",
           })),
         )
+        skipAutosaveRef.current = true
+        setSaveStatus("idle")
       })
       .catch((err) => {
         if (!cancelled) {
@@ -215,8 +119,83 @@ export default function EvaluateTab({
     }
   }, [adminKey, experimentId, selectedSessionId])
 
+  useEffect(() => {
+    if (!selectedSessionId || rows.length === 0) return
+    if (skipAutosaveRef.current) {
+      skipAutosaveRef.current = false
+      return
+    }
+
+    setSaveStatus("saving")
+    if (saveTimeoutRef.current) {
+      window.clearTimeout(saveTimeoutRef.current)
+    }
+
+    saveTimeoutRef.current = window.setTimeout(async () => {
+      try {
+        await saveSessionEvaluation(
+          adminKey,
+          selectedSessionId,
+          experimentId,
+          rows.map((row) => ({
+            message_id: row.message_id,
+            incivility: row.incivility,
+            hate_speech: row.hate_speech,
+            threats_to_dem_freedom: row.threats_to_dem_freedom,
+            impoliteness: row.impoliteness,
+            alignment: row.alignment,
+            human_like: row.human_like,
+            other: row.other,
+          })),
+        )
+        setSaveStatus("saved")
+      } catch (err) {
+        console.error(err)
+        setSaveStatus("error")
+      }
+    }, 500)
+
+    return () => {
+      if (saveTimeoutRef.current) {
+        window.clearTimeout(saveTimeoutRef.current)
+      }
+    }
+  }, [adminKey, experimentId, rows, selectedSessionId])
+
   const setRow = (messageId: string, patch: Partial<AnnotationRow>) => {
     setRows((prev) => prev.map((row) => (row.message_id === messageId ? { ...row, ...patch } : row)))
+  }
+
+  const flushPendingSave = async () => {
+    if (!selectedSessionId || rows.length === 0) return
+    if (saveTimeoutRef.current) {
+      window.clearTimeout(saveTimeoutRef.current)
+      saveTimeoutRef.current = null
+    }
+
+    setSaveStatus("saving")
+    try {
+      await saveSessionEvaluation(
+        adminKey,
+        selectedSessionId,
+        experimentId,
+        rows.map((row) => ({
+          message_id: row.message_id,
+          incivility: row.incivility,
+          hate_speech: row.hate_speech,
+          threats_to_dem_freedom: row.threats_to_dem_freedom,
+          impoliteness: row.impoliteness,
+          alignment: row.alignment,
+          human_like: row.human_like,
+          other: row.other,
+        })),
+      )
+      setSaveStatus("saved")
+    } catch (err) {
+      console.error(err)
+      setSaveStatus("error")
+      throw err
+    }
   }
 
   const handleDownloadCSV = () => {
@@ -243,93 +222,17 @@ export default function EvaluateTab({
     downloadCsv([header, ...body], `${selectedSessionId || "session"}_evaluation.csv`)
   }
 
-  const handleDownloadSummaryCSV = () => {
-    const totalAgentMessages = evaluatedAgentRows.length
-    const alignedRows = evaluatedAgentRows.filter((row) => row.alignment !== "")
-    const likeMindedCount = alignedRows.filter((row) => row.alignment === "like_minded").length
-    const notLikeMindedCount = alignedRows.filter((row) => row.alignment === "not_like_minded").length
-    const incivilityCount = evaluatedAgentRows.filter((row) => row.incivility).length
-    const impolitenessCount = evaluatedAgentRows.filter((row) => row.impoliteness).length
-    const hateSpeechCount = evaluatedAgentRows.filter((row) => row.hate_speech).length
-    const threatsCount = evaluatedAgentRows.filter((row) => row.threats_to_dem_freedom).length
-
-    const modelsUsed = formatModelsUsed(experimentMeta?.simulation || null)
-    const configuration = formatConfiguration(experimentMeta?.simulation || null)
-    const seedArticleType = getSeedArticleType(selectedGroup)
-
-    const groupHeader = [
-      "RUN",
-      "",
-      "",
-      "LLM_PIPELINE",
-      "",
-      "EXPERIMENT",
-      "",
-      "CONTEXT_DETAILS",
-      "",
-      "",
-      "TREATMENT",
-      "TEST_OUTPUTS",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "",
-      "NOTES",
-      "INPUTS",
-    ]
-
-    const header = [
-      "token_used",
-      "experiment_name",
-      "experiment_description",
-      "models_used",
-      "configuration",
-      "n_agents",
-      "seed_article_type",
-      "chatroom_context",
-      "ecological_validity",
-      "incivility_framework",
-      "treatment_group",
-      "n_messages",
-      "perc_incivil_messages",
-      "perc_like_minded",
-      "perc_not_like_minded",
-      "perc_impoliteness",
-      "perc_hate_speech",
-      "perc_threats_to_democracy",
-      "notes",
-      "sent_messages",
-    ]
-
-    const row = [
-      selectedSession?.token || "",
-      experimentId,
-      experimentMeta?.description || "",
-      modelsUsed,
-      configuration,
-      String(experimentMeta?.simulation?.num_agents || ""),
-      seedArticleType,
-      experimentMeta?.experimental?.chatroom_context || "",
-      experimentMeta?.experimental?.ecological_validity_criteria || "",
-      experimentMeta?.experimental?.incivility_framework || "",
-      selectedSession?.treatment_group || "",
-      String(totalAgentMessages),
-      pct(incivilityCount, totalAgentMessages),
-      pct(likeMindedCount, alignedRows.length),
-      pct(notLikeMindedCount, alignedRows.length),
-      pct(impolitenessCount, totalAgentMessages),
-      pct(hateSpeechCount, totalAgentMessages),
-      pct(threatsCount, totalAgentMessages),
-      getNotes(rows),
-      String(participantMessagesCount),
-    ]
-
-    downloadCsv(
-      [groupHeader, header, row.map((value, index) => (header[index] === "notes" ? `${value}${value && getIncivilityTypes(evaluatedAgentRows) ? " | " : ""}${getIncivilityTypes(evaluatedAgentRows) ? `Incivility types: ${getIncivilityTypes(evaluatedAgentRows)}` : ""}` : value))],
-      `${selectedSessionId || "session"}_summary.csv`,
-    )
+  const handleDownloadSummaryCSV = async () => {
+    try {
+      await flushPendingSave()
+      setSummaryExporting(true)
+      setError("")
+      await downloadEvaluationSummaryCSV(adminKey, experimentId)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to download summary CSV")
+    } finally {
+      setSummaryExporting(false)
+    }
   }
 
   return (
@@ -338,7 +241,10 @@ export default function EvaluateTab({
         <label className="text-xs font-medium text-admin-faint uppercase tracking-wider">Session</label>
         <select
           value={selectedSessionId}
-          onChange={(e) => setSelectedSessionId(e.target.value)}
+          onChange={(e) => {
+            void flushPendingSave()
+            setSelectedSessionId(e.target.value)
+          }}
           className="text-xs font-mono border border-admin-border rounded-lg px-3 py-1.5 bg-admin-surface text-admin-text"
         >
           {endedSessions.length === 0 ? (
@@ -351,6 +257,11 @@ export default function EvaluateTab({
             ))
           )}
         </select>
+        <span className="text-xs text-admin-faint">
+          {saveStatus === "saving" && "Saving…"}
+          {saveStatus === "saved" && "Saved"}
+          {saveStatus === "error" && "Save failed"}
+        </span>
         <div className="flex-1" />
         <button
           onClick={handleDownloadCSV}
@@ -361,10 +272,10 @@ export default function EvaluateTab({
         </button>
         <button
           onClick={handleDownloadSummaryCSV}
-          disabled={rows.length === 0}
+          disabled={summaryExporting || endedSessions.length === 0}
           className="px-3 py-1.5 text-xs font-medium border border-admin-border text-admin-text rounded-lg hover:bg-admin-border/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Download summary CSV
+          {summaryExporting ? "Exporting..." : "Download summary CSV"}
         </button>
       </div>
 

@@ -105,3 +105,89 @@ async def test_message_with_reply_metadata(db_pool, experiment_id):
     reply = rows[1]
     assert reply["reply_to"] == MSG_A
     assert reply["quoted_text"] == "Original message"
+
+
+async def test_replace_and_load_manual_evaluations(db_pool, experiment_id):
+    await _insert_msg(db_pool, MSG_A, "alice", "Hello!", experiment_id)
+    await _insert_msg(db_pool, MSG_B, "Carlos", "Hi there.", experiment_id)
+
+    await message_repo.replace_manual_evaluations(
+        db_pool,
+        session_id=SESSION_ID,
+        experiment_id=experiment_id,
+        evaluations=[
+            {
+                "message_id": MSG_A,
+                "incivility": True,
+                "hate_speech": False,
+                "threats_to_dem_freedom": False,
+                "impoliteness": True,
+                "alignment": "like_minded",
+                "human_like": "yes",
+                "other": "note",
+            },
+            {
+                "message_id": MSG_B,
+                "incivility": False,
+                "hate_speech": True,
+                "threats_to_dem_freedom": True,
+                "impoliteness": False,
+                "alignment": "not_like_minded",
+                "human_like": "no",
+                "other": "",
+            },
+        ],
+    )
+
+    saved = await message_repo.get_manual_evaluations(db_pool, SESSION_ID)
+    assert saved[MSG_A]["incivility"] is True
+    assert saved[MSG_A]["impoliteness"] is True
+    assert saved[MSG_A]["alignment"] == "like_minded"
+    assert saved[MSG_A]["human_like"] == "yes"
+    assert saved[MSG_B]["hate_speech"] is True
+    assert saved[MSG_B]["threats_to_dem_freedom"] is True
+
+
+async def test_replace_manual_evaluations_overwrites_previous_snapshot(db_pool, experiment_id):
+    await _insert_msg(db_pool, MSG_A, "alice", "Hello!", experiment_id)
+    await _insert_msg(db_pool, MSG_B, "Carlos", "Hi there.", experiment_id)
+
+    await message_repo.replace_manual_evaluations(
+        db_pool,
+        session_id=SESSION_ID,
+        experiment_id=experiment_id,
+        evaluations=[
+            {
+                "message_id": MSG_A,
+                "incivility": True,
+                "hate_speech": False,
+                "threats_to_dem_freedom": False,
+                "impoliteness": False,
+                "alignment": "",
+                "human_like": "",
+                "other": "",
+            }
+        ],
+    )
+    await message_repo.replace_manual_evaluations(
+        db_pool,
+        session_id=SESSION_ID,
+        experiment_id=experiment_id,
+        evaluations=[
+            {
+                "message_id": MSG_B,
+                "incivility": False,
+                "hate_speech": True,
+                "threats_to_dem_freedom": False,
+                "impoliteness": True,
+                "alignment": "like_minded",
+                "human_like": "yes",
+                "other": "updated",
+            }
+        ],
+    )
+
+    saved = await message_repo.get_manual_evaluations(db_pool, SESSION_ID)
+    assert MSG_A not in saved
+    assert saved[MSG_B]["hate_speech"] is True
+    assert saved[MSG_B]["other"] == "updated"

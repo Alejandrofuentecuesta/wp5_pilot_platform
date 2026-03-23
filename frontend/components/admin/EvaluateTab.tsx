@@ -307,18 +307,18 @@ export default function EvaluateTab({
         </div>
       ) : (
         <div className="bg-admin-surface rounded-lg border border-admin-border overflow-x-auto">
-          <table className="w-full text-xs min-w-[1250px]">
+          <table className="w-full text-xs min-w-[1120px]">
             <thead>
               <tr className="text-left text-[10px] text-admin-faint uppercase tracking-wider border-b border-admin-border">
                 <th className="sticky top-0 z-10 px-3 py-3 bg-admin-surface">Sender</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-admin-surface min-w-[420px]">Message</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[90px]">Incivility</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[110px]">Hate Speech</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[110px]">Threats</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[110px]">Impoliteness</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-blue-50 min-w-[140px]">Alignment</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-emerald-50 min-w-[120px]">Human Like</th>
-                <th className="sticky top-0 z-10 px-3 py-3 bg-amber-50 min-w-[220px]">Other</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-admin-surface min-w-[320px]">Message</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[80px]">Incivility</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[95px]">Hate Speech</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[95px]">Threats</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-red-50 text-center min-w-[95px]">Impoliteness</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-blue-50 min-w-[120px]">Alignment</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-emerald-50 min-w-[105px]">Human Like</th>
+                <th className="sticky top-0 z-10 px-3 py-3 bg-amber-50 min-w-[180px]">Other</th>
               </tr>
             </thead>
             <tbody>
@@ -340,7 +340,7 @@ export default function EvaluateTab({
                       {row.sender}
                     </span>
                   </td>
-                  <td className="px-3 py-3 text-admin-text max-w-[500px] whitespace-pre-wrap leading-5">
+                  <td className="px-3 py-3 text-admin-text max-w-[360px] whitespace-pre-wrap leading-5">
                     {row.message}
                   </td>
                   <td className="px-3 py-3 text-center bg-red-50/60">
@@ -379,7 +379,7 @@ export default function EvaluateTab({
                     <select
                       value={row.alignment}
                       onChange={(e) => setRow(row.message_id, { alignment: e.target.value as Alignment })}
-                      className={`${tableInputClass} min-w-[130px]`}
+                      className={`${tableInputClass} min-w-[120px]`}
                     >
                       <option value="">-</option>
                       <option value="like_minded">like-minded</option>
@@ -390,7 +390,7 @@ export default function EvaluateTab({
                     <select
                       value={row.human_like}
                       onChange={(e) => setRow(row.message_id, { human_like: e.target.value as HumanLike })}
-                      className={`${tableInputClass} min-w-[100px]`}
+                      className={`${tableInputClass} min-w-[105px]`}
                     >
                       <option value="">-</option>
                       <option value="yes">yes</option>
@@ -402,7 +402,7 @@ export default function EvaluateTab({
                       type="text"
                       value={row.other}
                       onChange={(e) => setRow(row.message_id, { other: e.target.value })}
-                      className="w-full border border-admin-border rounded px-2 py-1 bg-admin-surface text-admin-text"
+                      className="w-full border border-admin-border rounded px-2 py-1 bg-admin-surface text-admin-text min-w-[180px]"
                       placeholder="Notes"
                     />
                   </td>

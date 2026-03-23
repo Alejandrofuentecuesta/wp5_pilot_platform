@@ -833,6 +833,7 @@
               </p>
               <div class="chip-list">
                 <span class="chip">ID sin default</span>
+                <span class="chip">Ejemplo: Bloque_1_Alejandro</span>
                 <span class="chip">Descripcion obligatoria</span>
                 <span class="chip">Start default = ahora</span>
                 <span class="chip">End default = +24h</span>
@@ -899,15 +900,16 @@
             </summary>
             <div class="details-body">
               <div class="chip-list">
-                <span class="chip">chatroom_context = ""</span>
+                <span class="chip">chatroom_context = "Spanish Telegram chat"</span>
                 <span class="chip">redirect_url = ""</span>
-                <span class="chip">groups.condition_1.features = []</span>
-                <span class="chip">groups.condition_1.internal_validity_criteria = ""</span>
+                <span class="chip">groups = 9 cells (3x3)</span>
+                <span class="chip">not_incivil / mix / incivil x not_like_minded / mix / like_minded</span>
               </div>
               <p>
                 El unico default fuerte aqui es <code>ecological_validity_criteria</code>, que arranca
                 con una descripcion larga del estilo "dialogic + mix de acciones + mensajes cortos +
-                tono reddit-like".
+                tono reddit-like". El preset de frontend carga una matriz 3x3 completa con incivilidad
+                y alineacion independientes.
               </p>
               <ul>
                 <li>El criterio ecologico es global al experimento.</li>
@@ -1879,7 +1881,7 @@ Return ONLY this JSON object:
           </div>
           <div class="source-item">
             <span class="path">frontend/lib/treatment-presets.ts</span>
-            Preset 3x3 y ejemplos de criterios internos/ecologicos bastante expresivos.
+            Preset 3x3, con condiciones semanticas not_incivil / mix / incivil x stance.
           </div>
           <div class="source-item">
             <span class="path">docs/BSC-INCIVILITY-API.md</span>

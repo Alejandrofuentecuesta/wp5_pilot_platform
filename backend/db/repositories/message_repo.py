@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import asyncpg
 
@@ -99,6 +99,93 @@ async def get_session_messages(
             d.update(meta)
         results.append(d)
     return results
+
+
+async def get_manual_evaluations(
+    pool: asyncpg.Pool, session_id: str
+) -> Dict[str, dict]:
+    """Return saved manual evaluation rows keyed by message_id."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT
+                message_id,
+                incivility,
+                hate_speech,
+                threats_to_dem_freedom,
+                impoliteness,
+                alignment,
+                human_like,
+                other,
+                updated_at
+            FROM manual_message_evaluations
+            WHERE session_id = $1
+            """,
+            session_id,
+        )
+    return {
+        str(r["message_id"]): {
+            "incivility": bool(r["incivility"]),
+            "hate_speech": bool(r["hate_speech"]),
+            "threats_to_dem_freedom": bool(r["threats_to_dem_freedom"]),
+            "impoliteness": bool(r["impoliteness"]),
+            "alignment": r["alignment"] or "",
+            "human_like": r["human_like"] or "",
+            "other": r["other"] or "",
+            "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+        }
+        for r in rows
+    }
+
+
+async def replace_manual_evaluations(
+    pool: asyncpg.Pool,
+    *,
+    session_id: str,
+    experiment_id: str,
+    evaluations: List[dict],
+) -> None:
+    """Replace the full saved manual evaluation snapshot for a session."""
+    async with pool.acquire() as conn, conn.transaction():
+        await conn.execute(
+            "DELETE FROM manual_message_evaluations WHERE session_id = $1",
+            session_id,
+        )
+        if not evaluations:
+            return
+
+        await conn.executemany(
+            """
+            INSERT INTO manual_message_evaluations(
+                session_id,
+                message_id,
+                experiment_id,
+                incivility,
+                hate_speech,
+                threats_to_dem_freedom,
+                impoliteness,
+                alignment,
+                human_like,
+                other,
+                updated_at
+            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,NOW())
+            """,
+            [
+                (
+                    session_id,
+                    str(uuid.UUID(str(item["message_id"]))),
+                    experiment_id,
+                    bool(item.get("incivility", False)),
+                    bool(item.get("hate_speech", False)),
+                    bool(item.get("threats_to_dem_freedom", False)),
+                    bool(item.get("impoliteness", False)),
+                    str(item.get("alignment", "") or ""),
+                    str(item.get("human_like", "") or ""),
+                    str(item.get("other", "") or ""),
+                )
+                for item in evaluations
+            ],
+        )
 
 
 async def update_message_likes(

@@ -1,7 +1,7 @@
 import type { ExperimentalConfig, TreatmentGroup } from "./admin-types"
 
 export const CHATROOM_CONTEXT_3X3 = `This is a Spanish-language chatroom on Telegram, based in Spain. Messages must be written in Spanish.
-The participant has posted an opinion about a news article.
+The participant has posted an opinion about a news article. The news article defines the topic of the discussion.
 The Director must preserve the assigned treatment condition across the whole conversation.
 
 Core design rules:
@@ -73,26 +73,26 @@ Incivility level mapping:
   - Allowed incivility at this level is limited to mild rudeness, sarcasm, mockery, or dismissive tone.
 
 - medium:
-  - Impoliteness: medium including sarcasm, mockery, dismissiveness,
+  - Impoliteness: medium including sarcasm, mockery, dismissiveness.
   - Hate speech and stereotyping: indirect or problematic group generalizations may appear, but without slurs or explicit dehumanization.
   - Threats to democratic freedoms: mild delegitimizing or manipulative anti-democratic claims may appear.
   - Style: short and natural.
-  - Incivility may include more visible sarcasm, mockery, dismissiveness, and some problematic generalizations within these limits.
+  - This is the realistic mixed condition: the thread should feel plausible, with some friction, some sharper replies, and some civil back-and-forth.
 
 - high:
-  - Impoliteness: All uncivil messages must be impolite. Include strong insults, rudeness, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
+  - Impoliteness: all uncivil messages must be obviously impolite. Include strong insults, rudeness, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
   - Hate speech and stereotyping: stronger stereotyped group contempt may appear, but without explicit dehumanization. Slurs may appear frequently.
   - Threats to democratic freedoms: strong delegitimizing or pro-authoritarian framing may appear.
-  - Style: short and sharp. Prioritize confrontation rather than elaborate arguments.
-  - Uncivility may include strong rudeness, repeated sarcasm, mockery, and harsh dismissiveness within these limits.
+  - Style: short, sharp, and confrontational. Prioritize hostility rather than elaborate arguments.
+  - Uncivility should read as very incivil to a human coder.
 
 Safety rules:
 - No physical threats.
 - No incitement to violence.
 - No explicit dehumanization.`
 
-const GROUP_TREATMENTS: Record<string, string> = {
-  low_against: `INCIVILITY_LEVEL = low
+const GROUP_TREATMENTS: Array<[string, string]> = [
+  ["not_incivil_not_like_minded", `INCIVILITY_LEVEL = low
 INCIVILITY_TARGET = 20
 LIKEMINDED_TARGET = 20
 NOT_LIKEMINDED_TARGET = 80
@@ -101,8 +101,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  low_mixed: `INCIVILITY_LEVEL = low
+  ],
+  ["not_incivil_mix", `INCIVILITY_LEVEL = low
 INCIVILITY_TARGET = 20
 LIKEMINDED_TARGET = 50
 NOT_LIKEMINDED_TARGET = 50
@@ -111,8 +111,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  low_favor: `INCIVILITY_LEVEL = low
+  ],
+  ["not_incivil_like_minded", `INCIVILITY_LEVEL = low
 INCIVILITY_TARGET = 20
 LIKEMINDED_TARGET = 80
 NOT_LIKEMINDED_TARGET = 20
@@ -121,8 +121,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  medium_against: `INCIVILITY_LEVEL = medium
+  ],
+  ["mix_not_like_minded", `INCIVILITY_LEVEL = medium
 INCIVILITY_TARGET = 50
 LIKEMINDED_TARGET = 20
 NOT_LIKEMINDED_TARGET = 80
@@ -131,8 +131,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  medium_mixed: `INCIVILITY_LEVEL = medium
+  ],
+  ["mix_mix", `INCIVILITY_LEVEL = medium
 INCIVILITY_TARGET = 50
 LIKEMINDED_TARGET = 50
 NOT_LIKEMINDED_TARGET = 50
@@ -141,8 +141,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  medium_favor: `INCIVILITY_LEVEL = medium
+  ],
+  ["mix_like_minded", `INCIVILITY_LEVEL = medium
 INCIVILITY_TARGET = 50
 LIKEMINDED_TARGET = 80
 NOT_LIKEMINDED_TARGET = 20
@@ -151,8 +151,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  high_against: `INCIVILITY_LEVEL = high
+  ],
+  ["incivil_not_like_minded", `INCIVILITY_LEVEL = high
 INCIVILITY_TARGET = 80
 LIKEMINDED_TARGET = 20
 NOT_LIKEMINDED_TARGET = 80
@@ -161,8 +161,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  high_mixed: `INCIVILITY_LEVEL = high
+  ],
+  ["incivil_mix", `INCIVILITY_LEVEL = high
 INCIVILITY_TARGET = 80
 LIKEMINDED_TARGET = 50
 NOT_LIKEMINDED_TARGET = 50
@@ -171,8 +171,8 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-
-  high_favor: `INCIVILITY_LEVEL = high
+  ],
+  ["incivil_like_minded", `INCIVILITY_LEVEL = high
 INCIVILITY_TARGET = 80
 LIKEMINDED_TARGET = 80
 NOT_LIKEMINDED_TARGET = 20
@@ -181,12 +181,13 @@ Apply the incivility level using the shared incivility framework.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
-}
+  ],
+];
 
 export function createExperimental3x3Preset(): ExperimentalConfig {
   const groups: Record<string, TreatmentGroup> = {}
 
-  for (const [groupName, internal_validity_criteria] of Object.entries(GROUP_TREATMENTS)) {
+  for (const [groupName, internal_validity_criteria] of GROUP_TREATMENTS) {
     groups[groupName] = {
       features: ["news_article", "gate_until_user_post"],
       internal_validity_criteria,

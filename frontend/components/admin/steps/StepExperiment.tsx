@@ -63,7 +63,7 @@ export default function StepExperiment({
             type="text"
             value={experimentId}
             onChange={(e) => setExperimentId(e.target.value)}
-            placeholder="e.g. my_experiment"
+            placeholder="e.g. Bloque_1_Alejandro"
             disabled={isEditing}
             className={`w-full px-3 py-2 border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:ring-1 ${
               isDuplicate

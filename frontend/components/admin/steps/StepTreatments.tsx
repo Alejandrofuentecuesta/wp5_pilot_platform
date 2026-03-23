@@ -145,7 +145,7 @@ function GroupCard({
             type="text"
             value={name}
             onChange={(e) => onChangeName(e.target.value.replace(/[^a-z0-9_]/gi, "_").toLowerCase())}
-            placeholder="e.g. uncivil_support"
+            placeholder="e.g. not_incivil_mix"
             className={`${inputClass} font-mono`}
           />
         </div>

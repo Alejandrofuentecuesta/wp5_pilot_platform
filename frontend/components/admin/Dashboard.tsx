@@ -1190,13 +1190,33 @@ function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimen
 
   useEffect(() => {
     let cancelled = false
-    const load = () => {
-      getComplianceStats(adminKey, experimentId)
-        .then((res) => { if (!cancelled) { setGroups(res.groups); setLoading(false) } })
-        .catch((e) => { if (!cancelled) { setError(e.message); setLoading(false) } })
+    const load = async (showLoading: boolean) => {
+      if (showLoading) {
+        setLoading(true)
+        setError(null)
+      }
+      try {
+        const res = await getComplianceStats(adminKey, experimentId)
+        if (!cancelled) {
+          setGroups(res.groups)
+          if (showLoading) setLoading(false)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load compliance stats")
+          setGroups([])
+          if (showLoading) setLoading(false)
+        }
+      }
     }
-    load()
-    const iv = setInterval(load, 15000)
+
+    setGroups([])
+    setLoading(true)
+    setError(null)
+    void load(true)
+    const iv = setInterval(() => {
+      void load(false)
+    }, 15000)
     return () => { cancelled = true; clearInterval(iv) }
   }, [adminKey, experimentId])
 
@@ -1432,6 +1452,7 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
                 )}
                 {activeTab === "evaluate" && (
                   <EvaluateTab
+                    key={selectedExperimentId}
                     adminKey={adminKey}
                     experimentId={selectedExperimentId}
                     sessions={sessions}
@@ -1439,6 +1460,7 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
                 )}
                 {activeTab === "compliance" && (
                   <ComplianceTab
+                    key={selectedExperimentId}
                     adminKey={adminKey}
                     experimentId={selectedExperimentId}
                   />

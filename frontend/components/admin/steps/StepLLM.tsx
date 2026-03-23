@@ -505,7 +505,7 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
       <div className="bg-admin-surface rounded-lg border border-admin-border p-5">
         <div className="mb-3">
           <span className="text-sm font-semibold text-admin-text">BSC Model Version</span>
-          <span className="text-xs text-admin-faint ml-2">Select which fine-tuned model to use (V1 or V2)</span>
+          <span className="text-xs text-admin-faint ml-2">BSC v2 is the fine-tuned version used for these experiments.</span>
         </div>
 
         <div className="space-y-3">
@@ -518,7 +518,7 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
                   : "border-admin-border hover:border-admin-accent/50 text-admin-muted"
               }`}
             >
-              <div className="font-medium text-sm">V1 Model</div>
+              <div className="font-medium text-sm">BSC v1</div>
               <div className="text-xs mt-1 opacity-75">
                 r=16, α=32 · English prompts · 130k samples
               </div>
@@ -532,7 +532,7 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
                   : "border-admin-border hover:border-admin-accent/50 text-admin-muted"
               }`}
             >
-              <div className="font-medium text-sm">V2 Model (Recommended)</div>
+              <div className="font-medium text-sm">BSC v2 (fine-tuned, recommended)</div>
               <div className="text-xs mt-1 opacity-75">
                 r=64, α=128 · Spanish prompts · 88k balanced
               </div>

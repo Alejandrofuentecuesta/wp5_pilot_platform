@@ -91,6 +91,12 @@ Safety rules:
 - No incitement to violence.
 - No explicit dehumanization.`
 
+export const STANCE_EXECUTION_3X3 = `Alignment is a hard constraint and is independent from incivility.
+- In like-minded treatments, the message must make explicit support or agreement visible, even if the tone is rude or confrontational.
+- In not-like-minded treatments, the message must make explicit disagreement or opposition visible, even if the tone is civil.
+- In mix treatments, both stances must appear clearly across the conversation; do not let hostility erase the stance signal.
+- Never rely on hostility alone to communicate stance.`
+
 const GROUP_TREATMENTS: Array<[string, string]> = [
   ["not_incivil_not_like_minded", `INCIVILITY_LEVEL = low
 INCIVILITY_TARGET = 20
@@ -98,6 +104,7 @@ LIKEMINDED_TARGET = 20
 NOT_LIKEMINDED_TARGET = 80
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -108,6 +115,7 @@ LIKEMINDED_TARGET = 50
 NOT_LIKEMINDED_TARGET = 50
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -118,6 +126,7 @@ LIKEMINDED_TARGET = 80
 NOT_LIKEMINDED_TARGET = 20
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -128,6 +137,7 @@ LIKEMINDED_TARGET = 20
 NOT_LIKEMINDED_TARGET = 80
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -138,6 +148,7 @@ LIKEMINDED_TARGET = 50
 NOT_LIKEMINDED_TARGET = 50
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -148,6 +159,7 @@ LIKEMINDED_TARGET = 80
 NOT_LIKEMINDED_TARGET = 20
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -158,6 +170,7 @@ LIKEMINDED_TARGET = 20
 NOT_LIKEMINDED_TARGET = 80
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -168,6 +181,7 @@ LIKEMINDED_TARGET = 50
 NOT_LIKEMINDED_TARGET = 50
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,
@@ -178,6 +192,7 @@ LIKEMINDED_TARGET = 80
 NOT_LIKEMINDED_TARGET = 20
 
 Apply the incivility level using the shared incivility framework.
+Follow the stance execution rules: like-minded messages must clearly agree, not-like-minded messages must clearly disagree, and mix messages must stay balanced.
 Follow global rules.
 Do not reinterpret definitions.
 Do not change percentages.`,

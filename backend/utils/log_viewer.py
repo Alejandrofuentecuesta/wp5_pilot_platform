@@ -321,6 +321,22 @@ HTML_HEAD = """\
     margin-top: 0.5rem;
   }}
 
+  /* ── Pipeline badge (parallel turns) ───────────────────── */
+  .pipeline-colors {{ }}
+  .badge-pipeline {{
+    display: inline-block;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    margin-left: 0.4rem;
+    vertical-align: middle;
+  }}
+  .badge-pipeline-1 {{ background: #dbeafe; color: #1d4ed8; }}
+  .badge-pipeline-2 {{ background: #fce7f3; color: #be185d; }}
+  .badge-pipeline-3 {{ background: #d1fae5; color: #047857; }}
+  .badge-pipeline-4 {{ background: #fef3c7; color: #b45309; }}
+
   /* ── Footer ─────────────────────────────────────────────── */
   .footer {{
     text-align: center;
@@ -371,8 +387,20 @@ def _format_time(ts_str: str) -> str:
         return ts_str
 
 
-def _try_parse_director_json(text: str) -> dict | None:
+def _pipeline_badge(data: dict) -> str:
+    """Return an HTML badge like ``P1`` if the event carries a pipeline_id, else ''."""
+    pid = data.get("pipeline_id")
+    if pid is None:
+        return ""
+    slot = int(pid)
+    css_class = f"badge-pipeline-{slot}" if slot <= 4 else "badge-pipeline-1"
+    return f'<span class="badge-pipeline {css_class}">P{slot}</span>'
+
+
+def _try_parse_director_json(text: str | None) -> dict | None:
     """Try to extract the JSON block from a director response."""
+    if text is None:
+        return None
     # Strip markdown fences if present
     stripped = text.strip()
     if stripped.startswith("```"):
@@ -482,6 +510,9 @@ def render_session_start(ev: dict) -> str:
     parts.append(_config_row("Messages/min", str(sim_cfg.get("messages_per_minute", "?"))))
     parts.append(_config_row("Evaluate interval", str(sim_cfg.get("evaluate_interval", "?"))))
     parts.append(_config_row("Random seed", str(sim_cfg.get("random_seed", "?"))))
+    parallel = int(sim_cfg.get("parallel_turns", 1))
+    if parallel > 1:
+        parts.append(_config_row("Parallel pipelines", str(parallel)))
     parts.append('    </div>')
 
     # ── LLM Pipeline section ──
@@ -555,11 +586,16 @@ def render_message(ev: dict, colour_map: dict) -> str:
     if meta_bits:
         meta_html = '<div class="chat-meta">' + " · ".join(meta_bits) + '</div>'
 
+    p_badge = _pipeline_badge(data)
+
     return f"""\
 <div class="event ev-message">
   <div class="event-card">
     <div class="event-header">
-      <span class="event-badge badge-message">message</span>
+      <div>
+        <span class="event-badge badge-message">message</span>
+        {p_badge}
+      </div>
       <span class="event-time">{ts}</span>
     </div>
     <div class="chat-msg">
@@ -579,8 +615,8 @@ def render_llm_call(ev: dict) -> str:
     data = ev["data"]
     ts = _format_time(ev["timestamp"])
     agent = data.get("agent_name", "unknown")
-    prompt = data.get("prompt", "")
-    response = data.get("response", "")
+    prompt = data.get("prompt") or ""
+    response = data.get("response") or ""
     error = data.get("error")
 
     is_director = agent.startswith("__director")
@@ -620,6 +656,8 @@ def render_llm_call(ev: dict) -> str:
     if error:
         error_html = f'<div class="error-box">Error: {_esc(str(error))}</div>'
 
+    p_badge = _pipeline_badge(data)
+
     return f"""\
 <div class="event ev-llm_call">
   <div class="event-card">
@@ -627,6 +665,7 @@ def render_llm_call(ev: dict) -> str:
       <div>
         <span class="event-badge {badge_class}">llm call</span>
         <span class="llm-agent {role_class}" style="margin-left:0.5rem">{_esc(role_label)}</span>
+        {p_badge}
       </div>
       <span class="event-time">{ts}</span>
     </div>

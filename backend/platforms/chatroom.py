@@ -190,6 +190,9 @@ class SimulationSession:
         self.running = False
         self._seeded = False
         self._turn_lock = asyncio.Lock()  # serialise turns so each sees prior messages
+        self._parallel_turns = max(1, int(self.simulation_config.get("parallel_turns", 1)))
+        self._active_turn_tasks: set = set()  # track fire-and-forget parallel tasks
+        self._next_pipeline_id = 0  # cycles 1..N for parallel pipeline tagging
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -242,6 +245,14 @@ class SimulationSession:
                 await self._subscriber_task
             except asyncio.CancelledError:
                 pass
+        # Cancel any in-flight parallel turn tasks.
+        for task in list(self._active_turn_tasks):
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        self._active_turn_tasks.clear()
 
         self.logger.log_session_end(reason)
         # Flush any pending fire-and-forget log tasks before closing DB connection.
@@ -293,7 +304,15 @@ class SimulationSession:
                     continue
 
                 if self._rng.random() < post_probability:
-                    await self._guarded_turn()
+                    if self._parallel_turns > 1:
+                        # Fire turn as background task, capped by parallel_turns.
+                        if len(self._active_turn_tasks) < self._parallel_turns:
+                            self._next_pipeline_id = (self._next_pipeline_id % self._parallel_turns) + 1
+                            task = asyncio.create_task(self._parallel_turn(self._next_pipeline_id))
+                            self._active_turn_tasks.add(task)
+                            task.add_done_callback(self._active_turn_tasks.discard)
+                    else:
+                        await self._guarded_turn()
 
                 await asyncio.sleep(tick_interval)
 
@@ -341,6 +360,45 @@ class SimulationSession:
                 self.logger.log_error("guarded_turn", str(e))
             finally:
                 await self._publish_typing(started=False)
+
+    async def _parallel_turn(self, pid: int) -> None:
+        """Execute a single agent turn in parallel-friendly mode.
+
+        LLM pipeline calls run WITHOUT the turn lock so multiple pipelines
+        can overlap.  Only the persistence / broadcast phase acquires the
+        lock to maintain message ordering.
+
+        ``pid`` (1, 2, …) tags every log event produced during this task
+        so the report can visually group events by pipeline slot.
+        """
+        from utils.logger import pipeline_id_var
+        pipeline_id_var.set(pid)
+        try:
+            await self._publish_typing(started=True)
+            # LLM pipeline runs concurrently with other parallel tasks.
+            result = await self.agent_manager.orchestrator.execute_turn(
+                self.internal_validity_criteria,
+            )
+
+            if result is None or result.action_type == "wait":
+                return
+
+            # Apply realistic typing delay based on message length.
+            if result.message and result.message.content:
+                delay = len(result.message.content) / self.TYPING_CHARS_PER_SECOND
+                delay = max(self.TYPING_DELAY_MIN, min(delay, self.TYPING_DELAY_MAX))
+                await asyncio.sleep(delay)
+
+            # Serialise only the persistence + broadcast to keep message order.
+            async with self._turn_lock:
+                if result.action_type == "like":
+                    await self.agent_manager._handle_like(result)
+                else:
+                    await self.agent_manager._handle_message(result)
+        except Exception as e:
+            self.logger.log_error("parallel_turn", str(e))
+        finally:
+            await self._publish_typing(started=False)
 
     async def _publish_typing(self, *, started: bool) -> None:
         """Publish a typing indicator event via Redis pub/sub."""

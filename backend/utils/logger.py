@@ -14,11 +14,19 @@ awaited writes in ``chatroom.py`` / ``agent_manager.py`` via
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+
+# ContextVar set by parallel pipeline tasks so every log call within a task
+# automatically carries its pipeline slot id (1, 2, …).  When unset (sequential
+# mode) the logger simply omits the field.
+pipeline_id_var: contextvars.ContextVar[int | None] = contextvars.ContextVar(
+    "pipeline_id", default=None,
+)
 
 
 class Logger:
@@ -48,6 +56,10 @@ class Logger:
 
     def log_event(self, event_type: str, data: Any) -> None:
         """Fire-and-forget: insert an event row into the DB."""
+        # Attach pipeline_id when running inside a parallel pipeline task.
+        pid = pipeline_id_var.get(None)
+        if pid is not None and isinstance(data, dict):
+            data = {**data, "pipeline_id": pid}
         self._schedule(event_type, data)
 
     def log_session_start(

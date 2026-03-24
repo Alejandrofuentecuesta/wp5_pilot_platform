@@ -263,6 +263,44 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
             <p className="text-xs text-admin-faint mt-1">Number of the performer&apos;s own recent messages included in its prompt. Helps avoid repetition. Set to 0 to disable.</p>
           </div>
         </div>
+
+        {/* Parallel turns */}
+        <div className="border-t border-admin-border pt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-admin-text">
+                Parallel pipelines
+              </label>
+              <p className="text-xs text-admin-faint mt-0.5">
+                Run multiple Director&rarr;Performer&rarr;Moderator pipelines concurrently. Each pipeline makes independent API calls in parallel, reducing wait time. After each round, directors see the messages produced by all pipelines.
+              </p>
+            </div>
+            <button
+              onClick={() => onChange({ parallel_turns: (config.parallel_turns ?? 1) > 1 ? 1 : 2 })}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${(config.parallel_turns ?? 1) > 1 ? "bg-admin-accent" : "bg-admin-border"}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${(config.parallel_turns ?? 1) > 1 ? "translate-x-4" : "translate-x-1"}`} />
+            </button>
+          </div>
+          {(config.parallel_turns ?? 1) > 1 && (
+            <div className="mt-3">
+              <label className="block text-xs font-medium text-admin-muted mb-1">
+                Concurrent pipelines
+              </label>
+              <input
+                type="number"
+                min={2}
+                max={4}
+                value={config.parallel_turns ?? 2}
+                onChange={(e) => onChange({ parallel_turns: Math.min(4, Math.max(2, parseInt(e.target.value) || 2)) })}
+                className="w-20 px-3 py-1.5 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30"
+              />
+              <p className="text-xs text-amber-500 mt-1.5">
+                Higher values increase API usage proportionally. State may be slightly stale between concurrent pipelines within the same round.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )

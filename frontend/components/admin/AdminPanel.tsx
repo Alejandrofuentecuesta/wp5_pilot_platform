@@ -57,6 +57,7 @@ const DEFAULT_SIMULATION: SimulationConfig = {
   evaluate_interval: 5,
   action_window_size: 5,
   performer_memory_size: 3,
+  parallel_turns: 1,
 }
 
 const DEFAULT_EXPERIMENTAL: ExperimentalConfig = createExperimental3x3Preset()

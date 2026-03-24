@@ -194,6 +194,16 @@ class SimulationSession:
         self._active_turn_tasks: set = set()  # track fire-and-forget parallel tasks
         self._next_pipeline_id = 0  # cycles 1..N for parallel pipeline tagging
 
+        # Pre-split agents across pipeline slots so each director only picks
+        # from its own subset, avoiding duplicate agent selection.
+        if self._parallel_turns > 1:
+            agent_names = self.simulation_config["agent_names"]
+            self._pipeline_agents: List[List[str]] = [[] for _ in range(self._parallel_turns)]
+            for i, name in enumerate(agent_names):
+                self._pipeline_agents[i % self._parallel_turns].append(name)
+        else:
+            self._pipeline_agents = []
+
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:
@@ -308,7 +318,9 @@ class SimulationSession:
                         # Fire turn as background task, capped by parallel_turns.
                         if len(self._active_turn_tasks) < self._parallel_turns:
                             self._next_pipeline_id = (self._next_pipeline_id % self._parallel_turns) + 1
-                            task = asyncio.create_task(self._parallel_turn(self._next_pipeline_id))
+                            pid = self._next_pipeline_id
+                            allowed = self._pipeline_agents[pid - 1]  # 0-indexed
+                            task = asyncio.create_task(self._parallel_turn(pid, allowed))
                             self._active_turn_tasks.add(task)
                             task.add_done_callback(self._active_turn_tasks.discard)
                     else:
@@ -361,7 +373,7 @@ class SimulationSession:
             finally:
                 await self._publish_typing(started=False)
 
-    async def _parallel_turn(self, pid: int) -> None:
+    async def _parallel_turn(self, pid: int, allowed_agents: List[str]) -> None:
         """Execute a single agent turn in parallel-friendly mode.
 
         LLM pipeline calls run WITHOUT the turn lock so multiple pipelines
@@ -370,6 +382,9 @@ class SimulationSession:
 
         ``pid`` (1, 2, …) tags every log event produced during this task
         so the report can visually group events by pipeline slot.
+
+        ``allowed_agents`` restricts which agents this pipeline's Director
+        can select, preventing duplicate agent picks across pipelines.
         """
         from utils.logger import pipeline_id_var
         pipeline_id_var.set(pid)
@@ -378,6 +393,7 @@ class SimulationSession:
             # LLM pipeline runs concurrently with other parallel tasks.
             result = await self.agent_manager.orchestrator.execute_turn(
                 self.internal_validity_criteria,
+                allowed_performers=set(allowed_agents),
             )
 
             if result is None or result.action_type == "wait":

@@ -18,7 +18,7 @@ import random
 import re
 from copy import copy
 from dataclasses import dataclass
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Set
 
 from models import Message, Agent
 from utils import Logger
@@ -305,8 +305,16 @@ class Orchestrator:
         """Map an anonymous label back to the real name."""
         return self._reverse_map.get(anon_name, anon_name)
 
-    async def execute_turn(self, internal_validity_criteria: str) -> Optional[TurnResult]:
+    async def execute_turn(
+        self,
+        internal_validity_criteria: str,
+        allowed_performers: Optional[Set[str]] = None,
+    ) -> Optional[TurnResult]:
         """Run one full Update → Evaluate → Action → Performer → Moderator cycle.
+
+        ``allowed_performers`` (real agent names) restricts which agents the
+        Director can select in parallel mode, preventing duplicate picks.
+        When ``None``, all agents are eligible (sequential mode).
 
         Returns a TurnResult on success, or None if the cycle fails.
         """
@@ -354,7 +362,22 @@ class Orchestrator:
         # 3. Director Action
         #    The Director selects from all performers visible in profiles/chat log.
         #    If it picks the human participant, the turn becomes a 'wait'.
-        action_data = await self._director_action(anon_recent_action)
+        #    In parallel mode, only show profiles for the allowed agent subset
+        #    so each pipeline's Director picks from its own pool.
+        action_profiles = self.agent_profiles
+        action_perf_counts = self._performer_counts
+        if allowed_performers is not None:
+            allowed_anon = {self._name_map[n] for n in allowed_performers if n in self._name_map}
+            # Always include the human so the Director can still yield ('wait').
+            allowed_anon.add(self._anon_user)
+            action_profiles = {k: v for k, v in self.agent_profiles.items() if k in allowed_anon}
+            action_perf_counts = {k: v for k, v in self._performer_counts.items() if k in allowed_anon}
+
+        action_data = await self._director_action(
+            anon_recent_action,
+            override_profiles=action_profiles,
+            override_perf_counts=action_perf_counts,
+        )
         if action_data is None:
             return None
 
@@ -437,10 +460,22 @@ class Orchestrator:
             self.logger.log_error("director_agent", "No agents available for this session")
             return None
         if not any(a.name == agent_name for a in agents):
-            fallback = random.choice(agents).name
+            pool = list(allowed_performers) if allowed_performers else [a.name for a in agents]
+            fallback = random.choice(pool)
             self.logger.log_error(
                 "director_agent",
                 f"Director chose unknown agent '{agent_name}'; falling back to '{fallback}'",
+            )
+            agent_name = fallback
+
+        # In parallel mode, enforce the allowed subset.
+        if allowed_performers and agent_name not in allowed_performers:
+            pool = list(allowed_performers)
+            fallback = random.choice(pool)
+            self.logger.log_error(
+                "director_agent_restricted",
+                f"Director chose '{agent_name}' outside its pipeline subset; "
+                f"falling back to '{fallback}'",
             )
             agent_name = fallback
 
@@ -816,13 +851,19 @@ class Orchestrator:
     # ── Director Action (Call 3) ──────────────────────────────────────────────
 
     async def _director_action(
-        self, anon_recent: List[Message],
+        self,
+        anon_recent: List[Message],
+        override_profiles: Optional[Dict[str, str]] = None,
+        override_perf_counts: Optional[Dict[str, int]] = None,
     ) -> Optional[dict]:
         """Run Director Action call: select performer, action type, O/M/D.
 
         The Director selects from all performers visible in profiles and
         chat log.  If it picks the human participant, the orchestrator
         will treat this as a 'wait' (handled by the caller).
+
+        ``override_profiles`` / ``override_perf_counts`` allow the caller
+        to restrict the agent pool (used in parallel pipeline mode).
 
         Returns parsed action response dict, or None on failure.
         """
@@ -836,16 +877,19 @@ class Orchestrator:
                 template=self.director_action_prompt_template,
             )
 
+        profiles = override_profiles if override_profiles is not None else self.agent_profiles
+        perf_counts = override_perf_counts if override_perf_counts is not None else self._performer_counts
+
         action_user = build_action_user_prompt(
             messages=anon_recent,
-            agent_profiles=self.agent_profiles,
+            agent_profiles=profiles,
             internal_validity_summary=self._internal_validity_summary or "No actions have occurred yet. No assessment available.",
             ecological_validity_summary=self._ecological_validity_summary or "No actions have occurred yet. No assessment available.",
             chatroom_context=_merge_prompt_context(
                 chatroom_context=self.chatroom_context,
                 incivility_framework=self.incivility_framework,
             ),
-            performer_counts=self._performer_counts,
+            performer_counts=perf_counts,
             action_counts=self._action_counts,
             exclude_performer=self._anon_user,
             template=self.director_action_prompt_template,

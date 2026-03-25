@@ -1631,6 +1631,9 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
                 COUNT(*) FILTER (WHERE ev.alignment = 'like_minded') AS like_minded_count,
                 COUNT(*) FILTER (WHERE ev.alignment = 'not_like_minded') AS not_like_minded_count,
                 COUNT(*) FILTER (WHERE ev.alignment <> '') AS aligned_rows,
+                COUNT(*) FILTER (WHERE ev.human_like = 'yes') AS human_like_yes_count,
+                COUNT(*) FILTER (WHERE ev.human_like IN ('yes', 'no')) AS human_like_answered_rows,
+                COUNT(*) FILTER (WHERE LENGTH(TRIM(COALESCE(ev.other, ''))) > 0) AS other_filled_count,
                 MAX(ev.updated_at) AS last_evaluated_at
             FROM sessions s
             LEFT JOIN messages m
@@ -1652,6 +1655,36 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
     def _pct(value: int, total: int) -> str:
         return f"{(value / total) * 100:.1f}%" if total > 0 else ""
 
+    def _pct_value(value: int, total: int) -> float:
+        return (value / total) * 100.0 if total > 0 else 0.0
+
+    # Aggregate compliance metrics by treatment group so each session row can
+    # include same-treatment context.
+    treatment_totals: Dict[str, Dict[str, int]] = {}
+    for row in rows:
+        treatment = row["treatment_group"]
+        bucket = treatment_totals.setdefault(
+            treatment,
+            {
+                "total_messages": 0,
+                "aligned_rows": 0,
+                "human_like_answered_rows": 0,
+                "saved_rows": 0,
+                "incivility_count": 0,
+                "like_minded_count": 0,
+                "human_like_yes_count": 0,
+                "other_filled_count": 0,
+            },
+        )
+        bucket["total_messages"] += int(row["total_messages"] or 0)
+        bucket["aligned_rows"] += int(row["aligned_rows"] or 0)
+        bucket["human_like_answered_rows"] += int(row["human_like_answered_rows"] or 0)
+        bucket["saved_rows"] += int(row["saved_rows"] or 0)
+        bucket["incivility_count"] += int(row["incivility_count"] or 0)
+        bucket["like_minded_count"] += int(row["like_minded_count"] or 0)
+        bucket["human_like_yes_count"] += int(row["human_like_yes_count"] or 0)
+        bucket["other_filled_count"] += int(row["other_filled_count"] or 0)
+
     buf = io.StringIO()
     writer = csv.writer(buf)
     writer.writerow(
@@ -1669,12 +1702,25 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
             "n_threats_to_democracy",
             "n_like_minded",
             "n_not_like_minded",
+            "n_human_like_yes",
+            "n_human_like_answered",
+            "n_other_with_text",
             "perc_incivility",
             "perc_hate_speech",
             "perc_impoliteness",
             "perc_threats_to_democracy",
             "perc_like_minded",
             "perc_not_like_minded",
+            "perc_human_like_yes",
+            "human_like_compliance_vs_100",
+            "human_like_gap_to_100",
+            "perc_other_with_text",
+            "treatment_perc_incivility",
+            "treatment_perc_like_minded",
+            "treatment_perc_human_like_yes",
+            "treatment_human_like_compliance_vs_100",
+            "treatment_human_like_gap_to_100",
+            "treatment_perc_other_with_text",
             "last_evaluated_at",
         ]
     )
@@ -1688,6 +1734,31 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
         like_minded_count = int(row["like_minded_count"] or 0)
         not_like_minded_count = int(row["not_like_minded_count"] or 0)
         aligned_rows = int(row["aligned_rows"] or 0)
+        human_like_yes_count = int(row["human_like_yes_count"] or 0)
+        human_like_answered_rows = int(row["human_like_answered_rows"] or 0)
+        other_filled_count = int(row["other_filled_count"] or 0)
+
+        human_like_pct_value = _pct_value(human_like_yes_count, human_like_answered_rows)
+        human_like_compliance = min(human_like_pct_value, 100.0)
+        human_like_gap = max(0.0, 100.0 - human_like_pct_value)
+
+        treatment = row["treatment_group"]
+        treatment_bucket = treatment_totals[treatment]
+        treatment_incivility_pct_value = _pct_value(
+            treatment_bucket["incivility_count"], treatment_bucket["total_messages"]
+        )
+        treatment_like_minded_pct_value = _pct_value(
+            treatment_bucket["like_minded_count"], treatment_bucket["aligned_rows"]
+        )
+        treatment_human_like_pct_value = _pct_value(
+            treatment_bucket["human_like_yes_count"], treatment_bucket["human_like_answered_rows"]
+        )
+        treatment_human_like_compliance = min(treatment_human_like_pct_value, 100.0)
+        treatment_human_like_gap = max(0.0, 100.0 - treatment_human_like_pct_value)
+        treatment_other_pct_value = _pct_value(
+            treatment_bucket["other_filled_count"], treatment_bucket["saved_rows"]
+        )
+
         writer.writerow(
             [
                 experiment_id,
@@ -1703,12 +1774,25 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
                 threats_count,
                 like_minded_count,
                 not_like_minded_count,
+                human_like_yes_count,
+                human_like_answered_rows,
+                other_filled_count,
                 _pct(incivility_count, total_messages),
                 _pct(hate_speech_count, total_messages),
                 _pct(impoliteness_count, total_messages),
                 _pct(threats_count, total_messages),
                 _pct(like_minded_count, aligned_rows),
                 _pct(not_like_minded_count, aligned_rows),
+                f"{human_like_pct_value:.1f}%",
+                f"{human_like_compliance:.1f}%",
+                f"{human_like_gap:.1f}%",
+                _pct(other_filled_count, saved_rows),
+                f"{treatment_incivility_pct_value:.1f}%",
+                f"{treatment_like_minded_pct_value:.1f}%",
+                f"{treatment_human_like_pct_value:.1f}%",
+                f"{treatment_human_like_compliance:.1f}%",
+                f"{treatment_human_like_gap:.1f}%",
+                f"{treatment_other_pct_value:.1f}%",
                 row["last_evaluated_at"].isoformat() if row["last_evaluated_at"] else "",
             ]
         )

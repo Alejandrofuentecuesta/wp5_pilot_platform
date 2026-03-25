@@ -16,6 +16,7 @@ type AnnotationRow = {
   message_id: string
   sender: string
   message: string
+  is_participant: boolean
   incivility: boolean
   hate_speech: boolean
   threats_to_dem_freedom: boolean
@@ -93,6 +94,7 @@ export default function EvaluateTab({
             message_id: message.message_id,
             sender: message.sender,
             message: message.content,
+            is_participant: message.sender === "participant",
             incivility: message.manual_evaluation?.incivility ?? false,
             hate_speech: message.manual_evaluation?.hate_speech ?? false,
             threats_to_dem_freedom: message.manual_evaluation?.threats_to_dem_freedom ?? false,
@@ -137,16 +139,18 @@ export default function EvaluateTab({
           adminKey,
           selectedSessionId,
           experimentId,
-          rows.map((row) => ({
-            message_id: row.message_id,
-            incivility: row.incivility,
-            hate_speech: row.hate_speech,
-            threats_to_dem_freedom: row.threats_to_dem_freedom,
-            impoliteness: row.impoliteness,
-            alignment: row.alignment,
-            human_like: row.human_like,
-            other: row.other,
-          })),
+          rows
+            .filter((row) => !row.is_participant)
+            .map((row) => ({
+              message_id: row.message_id,
+              incivility: row.incivility,
+              hate_speech: row.hate_speech,
+              threats_to_dem_freedom: row.threats_to_dem_freedom,
+              impoliteness: row.impoliteness,
+              alignment: row.alignment,
+              human_like: row.human_like,
+              other: row.other,
+            })),
         )
         setSaveStatus("saved")
       } catch (err) {
@@ -179,16 +183,18 @@ export default function EvaluateTab({
         adminKey,
         selectedSessionId,
         experimentId,
-        rows.map((row) => ({
-          message_id: row.message_id,
-          incivility: row.incivility,
-          hate_speech: row.hate_speech,
-          threats_to_dem_freedom: row.threats_to_dem_freedom,
-          impoliteness: row.impoliteness,
-          alignment: row.alignment,
-          human_like: row.human_like,
-          other: row.other,
-        })),
+        rows
+          .filter((row) => !row.is_participant)
+          .map((row) => ({
+            message_id: row.message_id,
+            incivility: row.incivility,
+            hate_speech: row.hate_speech,
+            threats_to_dem_freedom: row.threats_to_dem_freedom,
+            impoliteness: row.impoliteness,
+            alignment: row.alignment,
+            human_like: row.human_like,
+            other: row.other,
+          })),
       )
       setSaveStatus("saved")
     } catch (err) {
@@ -311,7 +317,9 @@ export default function EvaluateTab({
               {rows.map((row) => (
                 <tr
                   key={row.message_id}
-                  className="border-b border-admin-border/50 align-top odd:bg-admin-surface even:bg-admin-border/10"
+                  className={`border-b border-admin-border/50 align-top odd:bg-admin-surface even:bg-admin-border/10 ${
+                    row.is_participant ? "opacity-75" : ""
+                  }`}
                 >
                   <td className="px-3 py-3 font-mono text-admin-faint whitespace-nowrap">
                     <span
@@ -333,6 +341,7 @@ export default function EvaluateTab({
                     <input
                       type="checkbox"
                       checked={row.incivility}
+                      disabled={row.is_participant}
                       onChange={(e) => setRow(row.message_id, { incivility: e.target.checked })}
                       className="h-4 w-4 accent-red-600"
                     />
@@ -341,6 +350,7 @@ export default function EvaluateTab({
                     <input
                       type="checkbox"
                       checked={row.hate_speech}
+                      disabled={row.is_participant}
                       onChange={(e) => setRow(row.message_id, { hate_speech: e.target.checked })}
                       className="h-4 w-4 accent-red-600"
                     />
@@ -349,6 +359,7 @@ export default function EvaluateTab({
                     <input
                       type="checkbox"
                       checked={row.threats_to_dem_freedom}
+                      disabled={row.is_participant}
                       onChange={(e) => setRow(row.message_id, { threats_to_dem_freedom: e.target.checked })}
                       className="h-4 w-4 accent-red-600"
                     />
@@ -357,6 +368,7 @@ export default function EvaluateTab({
                     <input
                       type="checkbox"
                       checked={row.impoliteness}
+                      disabled={row.is_participant}
                       onChange={(e) => setRow(row.message_id, { impoliteness: e.target.checked })}
                       className="h-4 w-4 accent-red-600"
                     />
@@ -364,6 +376,7 @@ export default function EvaluateTab({
                   <td className="px-3 py-3 bg-blue-50/60">
                     <select
                       value={row.alignment}
+                      disabled={row.is_participant}
                       onChange={(e) => setRow(row.message_id, { alignment: e.target.value as Alignment })}
                       className={`${tableInputClass} min-w-[130px]`}
                     >
@@ -375,6 +388,7 @@ export default function EvaluateTab({
                   <td className="px-3 py-3 bg-emerald-50/60">
                     <select
                       value={row.human_like}
+                      disabled={row.is_participant}
                       onChange={(e) => setRow(row.message_id, { human_like: e.target.value as HumanLike })}
                       className={`${tableInputClass} min-w-[100px]`}
                     >
@@ -387,9 +401,10 @@ export default function EvaluateTab({
                     <input
                       type="text"
                       value={row.other}
+                      disabled={row.is_participant}
                       onChange={(e) => setRow(row.message_id, { other: e.target.value })}
                       className="w-full border border-admin-border rounded px-2 py-1 bg-admin-surface text-admin-text"
-                      placeholder="Notes"
+                      placeholder={row.is_participant ? "N/A for participant" : "Notes"}
                     />
                   </td>
                 </tr>

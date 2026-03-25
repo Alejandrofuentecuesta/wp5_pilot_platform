@@ -1638,6 +1638,7 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
             FROM sessions s
             LEFT JOIN messages m
                 ON m.session_id = s.session_id
+                AND m.sender != s.user_name
             LEFT JOIN manual_message_evaluations ev
                 ON ev.session_id = s.session_id
                 AND ev.message_id = m.message_id

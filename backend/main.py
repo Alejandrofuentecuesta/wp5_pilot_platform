@@ -1504,6 +1504,9 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
                 COUNT(*) FILTER (WHERE ev.alignment = 'like_minded') AS like_minded_count,
                 COUNT(*) FILTER (WHERE ev.alignment = 'not_like_minded') AS not_like_minded_count,
                 COUNT(*) FILTER (WHERE ev.alignment <> '') AS aligned_rows,
+                COUNT(*) FILTER (WHERE ev.human_like = 'yes') AS human_like_yes_count,
+                COUNT(*) FILTER (WHERE ev.human_like <> '') AS human_like_labeled_count,
+                COUNT(*) FILTER (WHERE btrim(COALESCE(ev.other, '')) <> '') AS other_filled_count,
                 MAX(ev.updated_at) AS last_evaluated_at
             FROM sessions s
             LEFT JOIN messages m
@@ -1524,6 +1527,33 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
 
     def _pct(value: int, total: int) -> str:
         return f"{(value / total) * 100:.1f}%" if total > 0 else ""
+
+    def _expected_targets_from_treatment(treatment_group: str) -> tuple[Optional[int], Optional[int]]:
+        group = (treatment_group or "").lower()
+
+        expected_incivility: Optional[int] = None
+        if "not_incivil" in group:
+            expected_incivility = 0
+        elif "incivil" in group:
+            expected_incivility = 100
+        elif "mix" in group:
+            expected_incivility = 50
+
+        expected_like_minded: Optional[int] = None
+        if "not_like_minded" in group:
+            expected_like_minded = 0
+        elif "like_minded" in group:
+            expected_like_minded = 100
+        elif "mix" in group:
+            expected_like_minded = 50
+
+        return expected_incivility, expected_like_minded
+
+    def _compliance(actual_value: int, total: int, expected_pct: Optional[int]) -> str:
+        if total <= 0 or expected_pct is None:
+            return ""
+        actual_pct = (actual_value / total) * 100.0
+        return f"{max(0.0, 100.0 - abs(actual_pct - expected_pct)):.1f}%"
 
     buf = io.StringIO()
     writer = csv.writer(buf)
@@ -1548,6 +1578,11 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
             "perc_threats_to_democracy",
             "perc_like_minded",
             "perc_not_like_minded",
+            "compliance_incivility_target",
+            "compliance_like_minded_target",
+            "compliance_human_like_target_100",
+            "n_other_filled",
+            "perc_other_filled",
             "last_evaluated_at",
         ]
     )
@@ -1561,6 +1596,12 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
         like_minded_count = int(row["like_minded_count"] or 0)
         not_like_minded_count = int(row["not_like_minded_count"] or 0)
         aligned_rows = int(row["aligned_rows"] or 0)
+        human_like_yes_count = int(row["human_like_yes_count"] or 0)
+        human_like_labeled_count = int(row["human_like_labeled_count"] or 0)
+        other_filled_count = int(row["other_filled_count"] or 0)
+        expected_incivility, expected_like_minded = _expected_targets_from_treatment(
+            str(row["treatment_group"] or "")
+        )
         writer.writerow(
             [
                 experiment_id,
@@ -1582,6 +1623,11 @@ async def admin_evaluations_summary_csv(experiment_id: str, x_admin_key: str = H
                 _pct(threats_count, total_messages),
                 _pct(like_minded_count, aligned_rows),
                 _pct(not_like_minded_count, aligned_rows),
+                _compliance(incivility_count, total_messages, expected_incivility),
+                _compliance(like_minded_count, aligned_rows, expected_like_minded),
+                _compliance(human_like_yes_count, human_like_labeled_count, 100),
+                other_filled_count,
+                _pct(other_filled_count, saved_rows),
                 row["last_evaluated_at"].isoformat() if row["last_evaluated_at"] else "",
             ]
         )

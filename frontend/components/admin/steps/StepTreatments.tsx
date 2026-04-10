@@ -466,12 +466,24 @@ function GroupCard({
       )}
 
       {features.includes("news_article") && (
-        <SeedEditor
-          seed={group.seed || { type: "news_article", template_id: "", headline: "", source: "", body: "" }}
-          globalTemplateId={globalTemplateId}
-          onChange={(seed) => onChangeGroup({ ...group, seed })}
-          onSelectTemplate={onSelectGroupTemplate}
-        />
+        <>
+          <SeedEditor
+            seed={group.seed || { type: "news_article", template_id: "", headline: "", source: "", body: "" }}
+            globalTemplateId={globalTemplateId}
+            onChange={(seed) => onChangeGroup({ ...group, seed })}
+            onSelectTemplate={onSelectGroupTemplate}
+          />
+          <label className="flex items-center gap-2 cursor-pointer mt-2 pl-4">
+            <input
+              type="checkbox"
+              checked={group.agents_see_article ?? false}
+              onChange={(e) => onChangeGroup({ ...group, agents_see_article: e.target.checked })}
+              className="rounded border-admin-border text-admin-accent focus:ring-admin-accent/30"
+            />
+            <span className="text-sm text-admin-text">Agents see article summary</span>
+            <span className="text-xs text-admin-faint">— injects the headline and body into the agents&apos; chatroom context</span>
+          </label>
+        </>
       )}
     </div>
   )

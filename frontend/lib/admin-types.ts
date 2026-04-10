@@ -78,6 +78,7 @@ export interface TreatmentGroup {
   features: string[]
   internal_validity_criteria: string
   seed?: SeedArticle
+  agents_see_article?: boolean
   pool_agent_ids?: string[]
 }
 

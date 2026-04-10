@@ -65,12 +65,16 @@ class TurnResult:
 def build_name_map(agent_names: List[str], user_name: str, rng: random.Random) -> Dict[str, str]:
     """Build a shuffled mapping from real names to anonymous labels.
 
-    All participants (agents + human) are assigned "Performer 1", "Performer 2", …
-    in a random order so the LLM cannot distinguish the human from agents.
+    Agents are assigned "Performer 1", "Performer 2", … in a random order.
+    The human participant keeps their real name so agents can infer gender
+    and address them naturally.
     """
-    all_names = list(agent_names) + [user_name]
-    rng.shuffle(all_names)
-    return {name: f"Performer {i + 1}" for i, name in enumerate(all_names)}
+    shuffled = list(agent_names)
+    rng.shuffle(shuffled)
+    name_map = {name: f"Performer {i + 1}" for i, name in enumerate(shuffled)}
+    # Participant maps to their own name — not anonymized.
+    name_map[user_name] = user_name
+    return name_map
 
 
 def anonymize_message(msg: Message, name_map: Dict[str, str]) -> Message:

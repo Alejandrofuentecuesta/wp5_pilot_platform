@@ -75,6 +75,17 @@ function SeedEditor({
           className={`${inputClass} resize-vertical`}
         />
       </div>
+      <div>
+        <label className="block text-xs font-medium text-admin-muted mb-1">Agent summary</label>
+        <textarea
+          value={seed.agent_summary || ""}
+          onChange={(e) => onChange({ ...seed, agent_summary: e.target.value })}
+          rows={2}
+          placeholder="Short summary injected into agent context when 'Agents see article summary' is enabled. You can also paste the full body here if token budget allows."
+          className={`${inputClass} resize-vertical`}
+        />
+        <p className="text-xs text-admin-faint mt-1">Keep it to 2–4 sentences to avoid inflating prompts. If left empty, agents will not receive article content even if the toggle is on.</p>
+      </div>
     </div>
   )
 }

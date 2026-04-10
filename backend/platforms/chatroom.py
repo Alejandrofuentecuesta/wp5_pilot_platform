@@ -158,17 +158,17 @@ class SimulationSession:
         self.redirect_url = experimental_full.get("redirect_url", "")
         self.participant_stance_hint = participant_stance_hint
 
-        # Optionally inject the seed article into chatroom_context so agents know the article content.
+        # Optionally inject the seed article summary into chatroom_context so agents know the article content.
         if self.experimental_config.get("agents_see_article"):
             seed = self.experimental_config.get("seed") or {}
             headline = seed.get("headline", "").strip()
-            body = seed.get("body", "").strip()
-            if headline or body:
+            summary = seed.get("agent_summary", "").strip()
+            if headline or summary:
                 article_block = "\n\nThe following news article has been shown to the participant:"
                 if headline:
                     article_block += f"\nHeadline: {headline}"
-                if body:
-                    article_block += f"\n\n{body}"
+                if summary:
+                    article_block += f"\n\n{summary}"
                 self.chatroom_context = (self.chatroom_context.rstrip() + article_block)
 
         # Create LLM managers for each pipeline stage

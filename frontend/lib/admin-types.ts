@@ -72,6 +72,7 @@ export interface SeedArticle {
   headline: string
   source: string
   body: string
+  agent_summary?: string
 }
 
 export interface TreatmentGroup {

@@ -39,6 +39,8 @@ These are the live classifier outputs for agent messages so far.
 
 Read the performer profiles and participation counts below. Which performer is best positioned to address the priority you identified in Step 1?
 
+**Important:** You may only select an agent as `next_performer`. The human participant is never a valid performer — you cannot instruct or correct them. If the participant's most recent message is off-topic or extreme, treat it as context for how agents should respond, not as a performance to fix.
+
 {#USER}
 {AGENT_PROFILES}
 

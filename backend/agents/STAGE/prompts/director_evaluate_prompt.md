@@ -34,9 +34,11 @@ Your previous evaluations, the running action and participation distributions, a
 
 Revise your previous evaluations based on the latest activity. You should produce a complete revision that replaces the previous evaluation, retaining important earlier assessments while incorporating what has changed. Focus on what needs to change or be maintained — your evaluations will directly shape upcoming action decisions.
 
+**Important:** The human participant's messages are observations, not performances you control. If the participant posts something that deviates from the validity criteria (e.g. extreme language or off-topic content), note it as context but do not treat it as a failure to correct — focus your evaluation only on what the agents have done and what they should do next.
+
 ### 1. Internal Validity
 
-How well are the internal validity criteria being realised? What needs to change or be maintained?
+How well are the internal validity criteria being realised by the agents? What do the agents need to change or maintain?
 
 ### 2. Ecological Validity
 

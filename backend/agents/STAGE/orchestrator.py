@@ -347,14 +347,15 @@ class Orchestrator:
         anon_recent_action = [anonymize_message(m, self._name_map) for m in recent_action]
 
         # 1b. Detect if the human posted since the last orchestrator turn.
-        #     If the most recent message is from the human, treat them as the
-        #     last-acting performer so their profile gets updated too.
+        #     Do NOT treat the participant as a performer for Update purposes —
+        #     the Director cannot instruct the human, and running Update on their
+        #     message causes the Director to try to "correct" them in Action.
         if anon_recent_action and anon_recent_action[-1].sender == self._anon_user:
-            self._last_agent = self._anon_user
             self._last_action_type = "message"
+            # Leave _last_agent unchanged so Update still targets the previous agent.
 
         # 2. Director Update (skip on first turn — nothing to assess)
-        if anon_recent_action and self._last_agent:
+        if anon_recent_action and self._last_agent and self._last_agent != self._anon_user:
             # Skip Update for likes — they aren't significant enough for a profile revision.
             if self._last_action_type != "like":
                 await self._director_update(anon_recent_action)

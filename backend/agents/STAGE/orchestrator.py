@@ -839,6 +839,8 @@ class Orchestrator:
                     chatroom_context=self.chatroom_context,
                     incivility_framework=self.incivility_framework,
                 ),
+                participant_stance_hint=self._participant_hint_text,
+                participant_name=self.state.user_name,
                 template=self.director_evaluate_prompt_template,
             )
 
@@ -916,6 +918,8 @@ class Orchestrator:
                     chatroom_context=self.chatroom_context,
                     incivility_framework=self.incivility_framework,
                 ),
+                participant_stance_hint=self._participant_hint_text,
+                participant_name=self.state.user_name,
                 template=self.director_action_prompt_template,
             )
 

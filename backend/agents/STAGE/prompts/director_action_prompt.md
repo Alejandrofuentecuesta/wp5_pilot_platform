@@ -16,6 +16,7 @@ If available, use this as a soft prior when selecting which performer should act
 `{PARTICIPANT_STANCE_HINT}`
 
 Complete instructions and the corresponding data you need for each step will be provided in the user message below.
+{PARTICIPANT_NAME_NOTE}
 {/SYSTEM}
 
 Work through the following steps in order. Each step provides the data you need and narrows the decision for the next.

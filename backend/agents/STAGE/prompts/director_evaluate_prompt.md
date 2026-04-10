@@ -28,6 +28,7 @@ Here are the two validity criteria defined by the researcher for this experiment
 `{ECOLOGICAL_VALIDITY_CRITERIA}`
 
 Your previous evaluations, the running action and participation distributions, and the recent chat log will be provided in the user message below.
+{PARTICIPANT_NAME_NOTE}
 {/SYSTEM}
 
 ## Your Task

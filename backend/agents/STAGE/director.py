@@ -228,14 +228,19 @@ def build_evaluate_system_prompt(
     internal_validity_criteria: str,
     ecological_criteria: str,
     chatroom_context: str = "",
+    participant_stance_hint: str = "",
+    participant_name: str = "",
     template: Optional[str] = None,
 ) -> str:
     """Build the Director Evaluate system prompt (session-static)."""
     raw = template if (isinstance(template, str) and template.strip()) else _EVALUATE_TEMPLATE
     prompt = _render_prompt(raw, "system")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
+    prompt = prompt.replace("{PARTICIPANT_STANCE_HINT}", participant_stance_hint)
     prompt = prompt.replace("{INTERNAL_VALIDITY_CRITERIA}", internal_validity_criteria)
     prompt = prompt.replace("{ECOLOGICAL_VALIDITY_CRITERIA}", ecological_criteria)
+    participant_note = f"\n\nThe human participant's name is **{participant_name}**. Use this name (not 'participant') when referring to them in your evaluations." if participant_name else ""
+    prompt = prompt.replace("{PARTICIPANT_NAME_NOTE}", participant_note)
     return prompt
 
 
@@ -337,7 +342,12 @@ def parse_evaluate_response(raw: str) -> dict:
 
 # ── Action prompts (Call 3) ─────────────────────────────────────────────────
 
-def build_action_system_prompt(chatroom_context: str = "", template: Optional[str] = None) -> str:
+def build_action_system_prompt(
+    chatroom_context: str = "",
+    participant_stance_hint: str = "",
+    participant_name: str = "",
+    template: Optional[str] = None,
+) -> str:
     """Build the Director Action system prompt (session-static).
 
     The Action call does NOT receive raw validity criteria —
@@ -346,6 +356,9 @@ def build_action_system_prompt(chatroom_context: str = "", template: Optional[st
     raw = template if (isinstance(template, str) and template.strip()) else _ACTION_TEMPLATE
     prompt = _render_prompt(raw, "system")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
+    prompt = prompt.replace("{PARTICIPANT_STANCE_HINT}", participant_stance_hint)
+    participant_note = f"\n\nThe human participant's name is **{participant_name}**. Always use this name (not 'participant') when referring to them in `target_user` or instructions." if participant_name else ""
+    prompt = prompt.replace("{PARTICIPANT_NAME_NOTE}", participant_note)
     return prompt
 
 

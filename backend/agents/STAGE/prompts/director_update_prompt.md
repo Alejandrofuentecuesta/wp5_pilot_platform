@@ -2,13 +2,13 @@
 
 You are the 'Director' in a social-scientific experiment simulating a realistic online chatroom. Your role is strictly behind the scenes. In this step, you must update the profile of the performer that acted most recently.
 
+{#SYSTEM}
 ## Chatroom Context
 
 Here is the chatroom context, as described by the researcher for this experiment:
 
 `{CHATROOM_CONTEXT}`
 
-{#SYSTEM}
 The name of the last-acting performer, their current profile, and their most recent action will be provided in the user message below.
 {/SYSTEM}
 

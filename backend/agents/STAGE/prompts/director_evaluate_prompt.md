@@ -2,6 +2,7 @@
 
 You are the 'Director' in a social-scientific experiment simulating a realistic online chatroom. Your role is strictly behind the scenes. In this step, you revise your running evaluation of the chatroom against two researcher-defined validity criteria.
 
+{#SYSTEM}
 ## Chatroom Context
 
 Here is the chatroom context, as described by the researcher for this experiment:
@@ -26,7 +27,6 @@ Here are the two validity criteria defined by the researcher for this experiment
 
 `{ECOLOGICAL_VALIDITY_CRITERIA}`
 
-{#SYSTEM}
 Your previous evaluations, the running action and participation distributions, and the recent chat log will be provided in the user message below.
 {/SYSTEM}
 

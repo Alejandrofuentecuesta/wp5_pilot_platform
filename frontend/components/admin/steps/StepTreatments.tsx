@@ -604,6 +604,7 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
       [newName]: {
         features: [...DEFAULT_GROUP_FEATURES],
         internal_validity_criteria: "",
+        agents_see_article: true,
         pool_agent_ids: defaultPoolIds,
       },
     }
@@ -662,6 +663,7 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
         groups[slug] = {
           features: [...DEFAULT_GROUP_FEATURES],
           internal_validity_criteria: "",
+          agents_see_article: true,
           pool_agent_ids: defaultPoolIds,
         }
       }

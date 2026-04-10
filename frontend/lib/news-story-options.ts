@@ -17,6 +17,7 @@ export const NEWS_TEMPLATE_OPTIONS: NewsTemplateOption[] = [
       headline:
         "El Govern plantea un plan piloto para vincular permisos de residencia y empleo en sectores con vacantes y reabre el debate migratorio en Catalunya",
       source: "Reuters",
+      agent_summary: "El Govern de Catalunya prevé presentar un plan piloto para regularizar temporalmente a unos 2.000 inmigrantes en situación irregular que acrediten arraigo y una oferta de empleo en sectores con escasez de mano de obra (agricultura, construcción, cuidados, hostelería). El plan incluiría formación lingüística obligatoria y coordinación entre administraciones. La medida divide a patronales, sindicatos, partidos y entidades sociales, y reabre el debate sobre integración, seguridad y presión sobre los servicios públicos.",
       body: `La propuesta, que incluiría formación lingüística obligatoria y un refuerzo de los controles de identidad en los primeros meses, divide a patronales, sindicatos, ayuntamientos y entidades sociales en un momento de creciente presión sobre la acogida y los servicios públicos.
 La propuesta que el Govern prevé presentar la próxima semana para impulsar un plan piloto de inserción laboral de inmigrantes en sectores con falta de mano de obra ha reabierto en Catalunya un debate que trasciende la gestión administrativa y alcanza de lleno cuestiones económicas, de seguridad y de convivencia cultural. El borrador, todavía en fase de negociación con el Ejecutivo central, contempla facilitar itinerarios de regularización temporal para unas 2.000 personas en situación irregular que acrediten arraigo reciente y una oferta de empleo en actividades como la agricultura, la atención domiciliaria, la construcción o la hostelería.
 Según fuentes conocedoras del documento, la iniciativa incluiría además cursos obligatorios de catalán o castellano, seguimiento social durante el primer año y un protocolo de coordinación entre Mossos d’Esquadra, ayuntamientos y servicios sociales para reforzar la identificación y derivación de los beneficiarios. El objetivo declarado por la Generalitat sería doble: responder al déficit de trabajadores en sectores estratégicos y reducir los espacios de economía sumergida en los que hoy quedan atrapados muchos migrantes sin papeles.
@@ -28,13 +29,14 @@ El plan, todavía abierto a cambios, amenaza con convertirse en uno de los grand
     },
   },
   {
-    id: "climate_change",
-    label: "Climate change",
+    id: “climate_change”,
+    label: “Climate change”,
     article: {
-      type: "news_article",
+      type: “news_article”,
       headline:
-        "Más de un centenar de países pactan en Ginebra recortar un 45% las emisiones pese a las reticencias de las grandes potencias",
-      source: "Reuters",
+        “Más de un centenar de países pactan en Ginebra recortar un 45% las emisiones pese a las reticencias de las grandes potencias”,
+      source: “Reuters”,
+      agent_summary: “112 países firmaron en Ginebra un acuerdo climático que exige reducir las emisiones un 45% antes de 2040 y poner fin a la construcción de nuevas centrales de carbón en 2035. El pacto crea un fondo de 120.000 millones de dólares para apoyar la transición energética en países en desarrollo. India y Rusia se abstuvieron; EE.UU. firmó con matices. Los expertos lo califican de histórico pero advierten de que carece de mecanismos sancionadores suficientes.”,
       body: `Un total de 112 Estados suscriben un acuerdo “histórico, aunque insuficiente”, que prevé el fin de la nueva infraestructura de carbón en 2035 y la creación de un fondo de 120.000 millones para apoyar a los países en desarrollo.
 Tras dos semanas de negociaciones al límite en la Cumbre del Clima de la ONU celebrada en Ginebra, la comunidad internacional ha logrado cerrar un acuerdo de amplio alcance. Un bloque de 112 países firmó este viernes un pacto pionero que eleva de forma sustancial las ambiciones de descarbonización global.
 El texto establece compromisos vinculantes para reducir las emisiones de gases de efecto invernadero en un 45% de aquí a 2040, una meta diseñada para hacer compatibles los objetivos climáticos con los compromisos industriales ya asumidos por los Estados firmantes. Para los expertos, el acuerdo marca un punto de inflexión, aunque deja abiertos interrogantes clave sobre su aplicación.

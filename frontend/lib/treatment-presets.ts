@@ -209,6 +209,7 @@ export function createExperimental3x3Preset(templateId?: string): ExperimentalCo
     groups[groupName] = {
       features: ["news_article", "gate_until_user_post"],
       internal_validity_criteria,
+      agents_see_article: true,
       pool_agent_ids: [...poolAgentIds],
     }
   }

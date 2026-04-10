@@ -1140,14 +1140,15 @@ async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Heade
 
 @app.post("/admin/experiment/{experiment_id}/pause")
 async def admin_pause_experiment(experiment_id: str, x_admin_key: str = Header(None)):
-    """Pause an experiment so no new sessions can be started."""
+    """Pause an experiment — blocks new sessions and silences active ones."""
     _require_admin(x_admin_key)
     pool = _get_pool()
     try:
         await config_repo.set_paused(pool, experiment_id, True)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"status": "paused", "experiment_id": experiment_id}
+    affected = session_manager.set_experiment_paused(experiment_id, True)
+    return {"status": "paused", "experiment_id": experiment_id, "sessions_paused": affected}
 
 
 @app.post("/admin/experiment/{experiment_id}/resume")
@@ -1159,7 +1160,8 @@ async def admin_resume_experiment(experiment_id: str, x_admin_key: str = Header(
         await config_repo.set_paused(pool, experiment_id, False)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    return {"status": "resumed", "experiment_id": experiment_id}
+    affected = session_manager.set_experiment_paused(experiment_id, False)
+    return {"status": "resumed", "experiment_id": experiment_id, "sessions_resumed": affected}
 
 
 @app.post("/admin/tokens/generate")

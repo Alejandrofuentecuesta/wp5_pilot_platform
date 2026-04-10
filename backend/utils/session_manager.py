@@ -48,6 +48,20 @@ class SessionManager:
             cls._instance = SessionManager()
         return cls._instance
 
+    # ── Experiment-level pause/resume ─────────────────────────────────────────
+
+    def set_experiment_paused(self, experiment_id: str, paused: bool) -> int:
+        """Propagate pause/resume to all active in-memory sessions for an experiment.
+
+        Returns the number of sessions affected.
+        """
+        count = 0
+        for session in self._sessions.values():
+            if session.experiment_id == experiment_id:
+                session._paused = paused
+                count += 1
+        return count
+
     # ── Pending reservation (HTTP → WebSocket handoff) ────────────────────────
 
     async def reserve_pending(

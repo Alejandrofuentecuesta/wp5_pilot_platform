@@ -129,6 +129,7 @@ class SimulationSession:
         self.session_id = session_id
         self.experiment_id = experiment_id
         self.logger = Logger(session_id, experiment_id)
+        self._paused = False
 
         if not _config:
             raise RuntimeError(
@@ -651,6 +652,10 @@ class SimulationSession:
                     continue
 
                 if not self.features.agents_active(self.state):
+                    await asyncio.sleep(tick_interval)
+                    continue
+
+                if self._paused:
                     await asyncio.sleep(tick_interval)
                     continue
 

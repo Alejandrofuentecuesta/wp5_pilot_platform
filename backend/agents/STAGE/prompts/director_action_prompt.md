@@ -62,9 +62,18 @@ Select exactly one action type:
 - `@mention`: A message that @mentions a performer who did NOT send the most recent message. Use only when the performer needs to draw someone specific back into the conversation. Requires `target_user`.
 - `like`: A non-verbal endorsement of a message. Requires `target_message_id`.
 
-**Important:** Aim for a natural mix of approximately 30% messages, 30% likes, 20% replies, and 20% @mentions. If `likes` or `@mentions` are underrepresented in the action distribution above, prioritise those types now.
+**Action mix guidelines:**
+- Target approximately: 25% messages, 35% likes, 20% replies, 20% @mentions.
+- Likes are the most natural reaction in a real chatroom — if they are underrepresented, strongly prefer a `like` now.
+- After any agent or participant posts a substantive message, at least one other agent should `like` or `reply` to it before the conversation moves on.
+- When choosing `like`, pick the most recent message that has not yet been liked by the chosen performer.
 
-**Important:** If the human participant's most recent message in the chat log @mentioned or addressed a specific agent by name — and no agent has replied to that message yet — that agent MUST be the next performer and MUST reply directly to the participant's message (use `reply` with the participant's `message_id`). This rule overrides all other considerations about performer balance or validity criteria.
+**Chained reactions — participant interaction:**
+- If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This overrides all other considerations.
+- If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back. Other agents may then `like` or `reply` to continue the thread.
+- After the direct reply is handled, encourage other agents to `like` or react — this makes the exchange feel like a real group conversation rather than a one-on-one.
+
+**Variety:** Avoid two consecutive `message` actions from the same agent. If the last action was already a `message`, prefer `like`, `reply`, or `@mention` now.
 
 ### Step 4: Write the Performer Instruction
 

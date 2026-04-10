@@ -293,7 +293,8 @@ class SimulationSession:
         self.clock_task: Optional[asyncio.Task] = None
         self.running = False
         self._seeded = False
-        self._turn_lock = asyncio.Lock()  # serialise turns so each sees prior messages
+        self._turn_lock = asyncio.Lock()   # serialises the persist+broadcast phase
+        self._director_lock = asyncio.Lock()  # serialises the Director phase so each pipeline reads fresh state
         self._parallel_turns = max(1, int(self.simulation_config.get("parallel_turns", 1)))
         self._active_turn_tasks: set = set()  # track fire-and-forget parallel tasks
         self._next_pipeline_id = 0  # cycles 1..N for parallel pipeline tagging
@@ -643,17 +644,14 @@ class SimulationSession:
                 if self._rng.random() < post_probability:
                     if self._parallel_turns > 1:
                         # Fire turn as background task, capped by parallel_turns.
+                        # No stagger needed — _director_lock in _parallel_turn already
+                        # sequences Directors so each reads fresh chat state.
                         if len(self._active_turn_tasks) < self._parallel_turns:
                             self._next_pipeline_id = (self._next_pipeline_id % self._parallel_turns) + 1
                             pid = self._next_pipeline_id
                             allowed = self._pipeline_agents[pid - 1]  # 0-indexed
-                            # Stagger pipeline starts so messages from concurrent pipelines
-                            # don't all arrive at once.  Each pipeline slot gets an
-                            # independent random offset within its own window so they
-                            # interleave naturally rather than firing in a fixed order.
-                            stagger_delay = self._rng.uniform(0.0, (pid - 1) * 3.0)
                             task = asyncio.create_task(
-                                self._parallel_turn(pid, allowed, stagger_delay=stagger_delay)
+                                self._parallel_turn(pid, allowed)
                             )
                             self._active_turn_tasks.add(task)
                             task.add_done_callback(self._active_turn_tasks.discard)
@@ -710,50 +708,51 @@ class SimulationSession:
     async def _parallel_turn(self, pid: int, allowed_agents: List[str], stagger_delay: float = 0.0) -> None:
         """Execute a single agent turn in parallel-friendly mode.
 
-        LLM pipeline calls run WITHOUT the turn lock so multiple pipelines
-        can overlap.  Only the persistence / broadcast phase acquires the
-        lock to maintain message ordering.
+        Pipelines are serialised through the Director phase (_director_lock) so
+        each one reads the chat state *after* the previous pipeline has persisted
+        its message.  This prevents multiple Directors from seeing the same
+        conversation and producing redundant replies.
 
-        ``pid`` (1, 2, …) tags every log event produced during this task
-        so the report can visually group events by pipeline slot.
+        The Performer call (the slowest part) runs outside both locks so multiple
+        agents can generate their messages concurrently.
 
-        ``allowed_agents`` restricts which agents this pipeline's Director
-        can select, preventing duplicate agent picks across pipelines.
-
-        ``stagger_delay`` is an initial sleep applied before the LLM call so
-        concurrent pipelines don't all fire at the same instant — this makes
-        messages from different pipelines arrive at naturally staggered times
-        rather than in sudden batches.
+        ``pid`` tags log events for the report.
+        ``allowed_agents`` restricts which agents this pipeline's Director can pick.
         """
         from utils.logger import pipeline_id_var
         pipeline_id_var.set(pid)
         try:
-            # Stagger: wait before starting so pipelines interleave naturally.
             if stagger_delay > 0:
                 await asyncio.sleep(stagger_delay)
 
             await self._publish_typing(started=True)
-            # LLM pipeline runs concurrently with other parallel tasks.
-            result = await self.agent_manager.orchestrator.execute_turn(
-                self.internal_validity_criteria,
-                allowed_performers=set(allowed_agents),
-            )
+
+            # ── Phase 1: Director (serialised so each sees fresh state) ───────
+            async with self._director_lock:
+                result = await self.agent_manager.orchestrator.execute_turn(
+                    self.internal_validity_criteria,
+                    allowed_performers=set(allowed_agents),
+                )
 
             if result is None or result.action_type == "wait":
                 return
 
-            # Apply realistic typing delay based on message length.
+            # ── Phase 2: Likes need no typing delay — persist immediately ─────
+            if result.action_type == "like":
+                async with self._turn_lock:
+                    await self.agent_manager._handle_like(result)
+                return
+
+            # ── Phase 3: Typing delay (outside lock — Performers run in parallel)
             if result.message and result.message.content:
                 delay = len(result.message.content) / self.TYPING_CHARS_PER_SECOND
                 delay = max(self.TYPING_DELAY_MIN, min(delay, self.TYPING_DELAY_MAX))
                 await asyncio.sleep(delay)
 
-            # Serialise only the persistence + broadcast to keep message order.
+            # ── Phase 4: Persist + broadcast (serialised for ordering) ────────
             async with self._turn_lock:
-                if result.action_type == "like":
-                    await self.agent_manager._handle_like(result)
-                else:
-                    await self.agent_manager._handle_message(result)
+                await self.agent_manager._handle_message(result)
+
         except Exception as e:
             self.logger.log_error("parallel_turn", str(e))
         finally:

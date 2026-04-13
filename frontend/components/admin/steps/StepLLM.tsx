@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import type { SimulationConfig, ProviderParamsMeta, TestLLMResult } from "../../../lib/admin-types"
+import type { SimulationConfig, ProviderParamsMeta, TestLLMResult, HumanizeRules } from "../../../lib/admin-types"
 import { testLlm, fetchPromptDefaults } from "../../../lib/admin-api"
 
 export type LLMTestResults = Record<Role, boolean>
@@ -14,6 +14,7 @@ interface StepLLMProps {
   providerParams: Record<string, ProviderParamsMeta>
   adminKey: string
   onTestResult?: (role: Role, ok: boolean) => void
+  agentNames?: string[]
 }
 
 type Role = "director" | "performer" | "moderator" | "classifier"
@@ -354,7 +355,78 @@ function LLMRoleConfig({
   )
 }
 
-export default function StepLLM({ config, onChange, llmProviders, providerModels, providerParams, adminKey, onTestResult }: StepLLMProps) {
+const HUMANIZE_FIELDS: { key: keyof HumanizeRules; label: string; desc: string; def: number }[] = [
+  { key: "strip_hashtags",       label: "Strip hashtags",           desc: "Removes #hashtag tokens",                        def: 100 },
+  { key: "strip_inverted_punct", label: "Remove ¿ / ¡",             desc: "Drops Spanish inverted punctuation",              def: 100 },
+  { key: "word_subs",            label: "Word contractions",         desc: "que→q, xq→porque, tb→también, pa→para, x→por…",  def: 80  },
+  { key: "drop_accents",         label: "Drop accents",              desc: "Per-message chance to strip all accents",         def: 40  },
+  { key: "comma_spacing",        label: "Remove space after comma",  desc: "Per-comma chance: hola,como vs hola, como",      def: 50  },
+]
+
+const DEFAULT_HUMANIZE_RULES: HumanizeRules = {
+  strip_hashtags: 100,
+  strip_inverted_punct: 100,
+  word_subs: 80,
+  drop_accents: 40,
+  comma_spacing: 50,
+  max_emoji: 1,
+}
+
+function HumanizeRulesEditor({
+  rules,
+  onChange,
+  disabled = false,
+}: {
+  rules: HumanizeRules
+  onChange: (rules: HumanizeRules) => void
+  disabled?: boolean
+}) {
+  const set = (key: keyof HumanizeRules, value: number) => onChange({ ...rules, [key]: value })
+  return (
+    <div className={`grid grid-cols-2 gap-x-8 gap-y-3 ${disabled ? "opacity-40 pointer-events-none select-none" : ""}`}>
+      {HUMANIZE_FIELDS.map(({ key, label, desc, def }) => {
+        const val = rules[key] ?? def
+        return (
+          <div key={key}>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs font-medium text-admin-text">{label}</p>
+              <div className="flex items-center gap-1">
+                <input
+                  type="number" min={0} max={100} value={val}
+                  onChange={(e) => set(key, Math.min(100, Math.max(0, parseInt(e.target.value) || 0)))}
+                  className="w-12 px-1.5 py-0.5 border border-admin-border rounded text-xs bg-admin-surface text-admin-text text-right focus:outline-none focus:border-admin-accent"
+                />
+                <span className="text-xs text-admin-faint">%</span>
+              </div>
+            </div>
+            <input
+              type="range" min={0} max={100} value={val}
+              onChange={(e) => set(key, parseInt(e.target.value))}
+              className="w-full h-1.5 accent-admin-accent"
+            />
+            <p className="text-xs text-admin-faint mt-0.5">{desc}</p>
+          </div>
+        )
+      })}
+      <div>
+        <div className="flex items-center justify-between mb-1">
+          <p className="text-xs font-medium text-admin-text">Max emoji per message</p>
+          <div className="flex items-center gap-1">
+            <input
+              type="number" min={-1} max={10}
+              value={rules.max_emoji ?? 1}
+              onChange={(e) => set("max_emoji", parseInt(e.target.value) ?? 1)}
+              className="w-12 px-1.5 py-0.5 border border-admin-border rounded text-xs bg-admin-surface text-admin-text text-right focus:outline-none focus:border-admin-accent"
+            />
+          </div>
+        </div>
+        <p className="text-xs text-admin-faint">-1 = unlimited · 0 = strip all</p>
+      </div>
+    </div>
+  )
+}
+
+export default function StepLLM({ config, onChange, llmProviders, providerModels, providerParams, adminKey, onTestResult, agentNames = [] }: StepLLMProps) {
   const [expanded, setExpanded] = useState<Role | null>("director")
   const [promptDefaults, setPromptDefaults] = useState<Record<string, string>>({})
   useEffect(() => {
@@ -432,7 +504,6 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
             <span className="text-sm font-semibold text-admin-text">Post-processing</span>
             <span className="text-xs text-admin-faint ml-2">Humanizer — applied after Moderator, before Classifier</span>
           </div>
-          {/* Master toggle */}
           <button
             onClick={() => onChange({ humanize_output: !config.humanize_output })}
             className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${config.humanize_output ? "bg-admin-accent" : "bg-admin-border"}`}
@@ -442,61 +513,93 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
         </div>
 
         {config.humanize_output && (
-          <div className="px-5 pb-4 border-t border-admin-border pt-3 space-y-3">
-            <p className="text-xs text-admin-muted">
-              Set the probability (0–100%) for each transformation. 0 = never, 100 = always.
-            </p>
-
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-              {([
-                { key: "humanize_strip_hashtags",       label: "Strip hashtags",          desc: "Removes #hashtag tokens",                          def: 100 },
-                { key: "humanize_strip_inverted_punct", label: "Remove ¿ / ¡",            desc: "Drops Spanish inverted punctuation",                def: 100 },
-                { key: "humanize_word_subs",            label: "Word contractions",        desc: "que→q, xq→porque, tb→también, pa→para, x→por…",   def: 80  },
-                { key: "humanize_drop_accents",         label: "Drop accents",             desc: "Per-message chance to strip all accents",           def: 40  },
-                { key: "humanize_comma_spacing",        label: "Remove space after comma", desc: "Per-comma chance: hola,como vs hola, como",        def: 50  },
-              ] as { key: keyof SimulationConfig; label: string; desc: string; def: number }[]).map(({ key, label, desc, def }) => {
-                const val = (config[key] as number) ?? def
-                return (
-                  <div key={key}>
-                    <div className="flex items-center justify-between mb-1">
-                      <p className="text-xs font-medium text-admin-text">{label}</p>
-                      <div className="flex items-center gap-1">
-                        <input
-                          type="number"
-                          min={0} max={100}
-                          value={val}
-                          onChange={(e) => onChange({ [key]: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) } as Partial<SimulationConfig>)}
-                          className="w-12 px-1.5 py-0.5 border border-admin-border rounded text-xs bg-admin-surface text-admin-text text-right focus:outline-none focus:border-admin-accent"
-                        />
-                        <span className="text-xs text-admin-faint">%</span>
-                      </div>
-                    </div>
-                    <input
-                      type="range" min={0} max={100} value={val}
-                      onChange={(e) => onChange({ [key]: parseInt(e.target.value) } as Partial<SimulationConfig>)}
-                      className="w-full h-1.5 accent-admin-accent"
-                    />
-                    <p className="text-xs text-admin-faint mt-0.5">{desc}</p>
-                  </div>
-                )
-              })}
-
-              {/* Emoji limit */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-medium text-admin-text">Max emoji per message</p>
-                  <div className="flex items-center gap-1">
-                    <input
-                      type="number" min={-1} max={10}
-                      value={config.humanize_max_emoji ?? 1}
-                      onChange={(e) => onChange({ humanize_max_emoji: parseInt(e.target.value) ?? 1 })}
-                      className="w-12 px-1.5 py-0.5 border border-admin-border rounded text-xs bg-admin-surface text-admin-text text-right focus:outline-none focus:border-admin-accent"
-                    />
-                  </div>
-                </div>
-                <p className="text-xs text-admin-faint">-1 = unlimited · 0 = strip all</p>
-              </div>
+          <div className="px-5 pb-4 border-t border-admin-border pt-3 space-y-4">
+            {/* Mode selector */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium text-admin-muted">Mode:</span>
+              {(["general", "per_agent"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => onChange({ humanize_mode: mode })}
+                  className={`px-3 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                    (config.humanize_mode ?? "general") === mode
+                      ? "bg-admin-accent text-white border-admin-accent"
+                      : "border-admin-border text-admin-muted hover:border-admin-accent/50"
+                  }`}
+                >
+                  {mode === "general" ? "General" : "Per agent"}
+                </button>
+              ))}
+              <span className="text-xs text-admin-faint ml-1">
+                {(config.humanize_mode ?? "general") === "general"
+                  ? "— same settings applied to all agents"
+                  : "— configure each agent independently"}
+              </span>
             </div>
+
+            {(config.humanize_mode ?? "general") === "general" ? (
+              <>
+                <p className="text-xs text-admin-muted">Set the probability (0–100%) for each transformation. 0 = never, 100 = always.</p>
+                <HumanizeRulesEditor
+                  rules={{
+                    strip_hashtags:       config.humanize_strip_hashtags       ?? 100,
+                    strip_inverted_punct: config.humanize_strip_inverted_punct ?? 100,
+                    word_subs:            config.humanize_word_subs            ?? 80,
+                    drop_accents:         config.humanize_drop_accents         ?? 40,
+                    comma_spacing:        config.humanize_comma_spacing        ?? 50,
+                    max_emoji:            config.humanize_max_emoji            ?? 1,
+                  }}
+                  onChange={(r) => onChange({
+                    humanize_strip_hashtags:       r.strip_hashtags,
+                    humanize_strip_inverted_punct: r.strip_inverted_punct,
+                    humanize_word_subs:            r.word_subs,
+                    humanize_drop_accents:         r.drop_accents,
+                    humanize_comma_spacing:        r.comma_spacing,
+                    humanize_max_emoji:            r.max_emoji,
+                  })}
+                />
+              </>
+            ) : (
+              <div className="space-y-4">
+                <p className="text-xs text-admin-muted">Configure humanizer settings per agent. General settings are disabled in this mode.</p>
+                {/* General settings — locked */}
+                <div className="rounded-lg border border-admin-border p-4 space-y-2">
+                  <p className="text-xs font-medium text-admin-muted uppercase tracking-wider">General (locked)</p>
+                  <HumanizeRulesEditor
+                    rules={{
+                      strip_hashtags:       config.humanize_strip_hashtags       ?? 100,
+                      strip_inverted_punct: config.humanize_strip_inverted_punct ?? 100,
+                      word_subs:            config.humanize_word_subs            ?? 80,
+                      drop_accents:         config.humanize_drop_accents         ?? 40,
+                      comma_spacing:        config.humanize_comma_spacing        ?? 50,
+                      max_emoji:            config.humanize_max_emoji            ?? 1,
+                    }}
+                    onChange={() => {}}
+                    disabled
+                  />
+                </div>
+                {/* Per-agent panels */}
+                {agentNames.length === 0 ? (
+                  <p className="text-xs text-admin-faint italic">No agents defined yet. Add agents in the Session or Treatments step first.</p>
+                ) : (
+                  agentNames.map((agentName) => {
+                    const perAgent = config.humanize_per_agent ?? {}
+                    const agentRules: HumanizeRules = perAgent[agentName] ?? { ...DEFAULT_HUMANIZE_RULES }
+                    return (
+                      <div key={agentName} className="rounded-lg border border-admin-border p-4 space-y-3">
+                        <p className="text-xs font-semibold text-admin-text">{agentName}</p>
+                        <HumanizeRulesEditor
+                          rules={agentRules}
+                          onChange={(r) => onChange({
+                            humanize_per_agent: { ...perAgent, [agentName]: r },
+                          })}
+                        />
+                      </div>
+                    )
+                  })
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

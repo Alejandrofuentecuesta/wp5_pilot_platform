@@ -282,6 +282,8 @@ class SimulationSession:
                 "comma_spacing":        int(self.simulation_config.get("humanize_comma_spacing", 50)),
                 "max_emoji":            int(self.simulation_config.get("humanize_max_emoji", 1)),
             },
+            humanize_mode=self.simulation_config.get("humanize_mode", "general"),
+            humanize_per_agent=self.simulation_config.get("humanize_per_agent") or {},
             agent_traits=self._agent_traits if self._agent_mode == "pool" else None,
             rng=self._rng,
         )
@@ -508,6 +510,8 @@ class SimulationSession:
                 "comma_spacing":        int(self.simulation_config.get("humanize_comma_spacing", 50)),
                 "max_emoji":            int(self.simulation_config.get("humanize_max_emoji", 1)),
             },
+            humanize_mode=self.simulation_config.get("humanize_mode", "general"),
+            humanize_per_agent=self.simulation_config.get("humanize_per_agent") or {},
             agent_traits=self._agent_traits if self._agent_mode == "pool" else None,
             rng=self._rng,
         )

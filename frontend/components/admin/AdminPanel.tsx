@@ -515,6 +515,11 @@ export default function AdminPanel() {
       providerParams={meta.provider_params ?? {}}
       adminKey={adminKey}
       onTestResult={handleLlmTestResult}
+      agentNames={
+        (simulation.agent_mode ?? "prompt") === "pool"
+          ? (experimental.agent_pool ?? []).map((a) => a.name)
+          : (simulation.agent_names ?? [])
+      }
     />,
     <StepTreatments
       key="treatments"

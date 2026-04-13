@@ -6,6 +6,15 @@ export interface ProviderKeyStatus {
   extra?: Record<string, { label: string; configured: boolean }>
 }
 
+export interface HumanizeRules {
+  strip_hashtags: number
+  strip_inverted_punct: number
+  word_subs: number
+  drop_accents: number
+  comma_spacing: number
+  max_emoji: number
+}
+
 export interface SimulationConfig {
   random_seed: number
   session_duration_minutes: number
@@ -42,12 +51,14 @@ export interface SimulationConfig {
   action_window_size: number
   performer_memory_size: number
   humanize_output?: boolean
+  humanize_mode?: "general" | "per_agent"
   humanize_strip_hashtags?: number
   humanize_strip_inverted_punct?: number
   humanize_word_subs?: number
   humanize_drop_accents?: number
   humanize_comma_spacing?: number
   humanize_max_emoji?: number
+  humanize_per_agent?: Record<string, HumanizeRules>
   bsc_model_version?: string
   parallel_turns?: number
   agent_mode?: "prompt" | "pool"

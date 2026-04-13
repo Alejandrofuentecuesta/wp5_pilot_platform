@@ -154,6 +154,8 @@ class Orchestrator:
         moderator_prompt_template: Optional[str] = None,
         humanize_output: bool = False,
         humanize_rules: Optional[Dict] = None,
+        humanize_mode: str = "general",
+        humanize_per_agent: Optional[Dict[str, Dict]] = None,
         rng: Optional[random.Random] = None,
     ):
         self.director_llm = director_llm
@@ -198,6 +200,8 @@ class Orchestrator:
         )
         self.humanize_output = humanize_output
         self.humanize_rules = humanize_rules or {}
+        self.humanize_mode = humanize_mode
+        self.humanize_per_agent = humanize_per_agent or {}
 
         # Build the shuffled name mapping (stable for the session lifetime).
         _rng = rng or random.Random()
@@ -721,7 +725,10 @@ class Orchestrator:
         # 6c. Optional post-processing humanization (informal typos, no hashtags…)
         if self.humanize_output:
             from utils.humanizer import humanize as _humanize
-            r = self.humanize_rules
+            if self.humanize_mode == "per_agent" and agent_name in self.humanize_per_agent:
+                r = self.humanize_per_agent[agent_name]
+            else:
+                r = self.humanize_rules
             content = _humanize(
                 content,
                 strip_hashtags=int(r.get("strip_hashtags", 100)),

@@ -372,16 +372,42 @@ function AgentPoolEditor({
                 placeholder="Describe the agent's personality, background, and communication style..."
               />
             </div>
-            {humanizeEnabled && onHumanizePerAgentChange && (
-              <div className="border-t border-admin-border pt-3">
-                <p className="text-xs font-medium text-admin-muted mb-1">Humanizer overrides</p>
-                <p className="text-xs text-admin-faint mb-2">Overrides the general humanizer settings for this agent only. 0–100%.</p>
-                <HumanizeRulesEditor
-                  rules={(humanizePerAgent ?? {})[agent.name] ?? { ...DEFAULT_HUMANIZE_RULES }}
-                  onChange={(r) => onHumanizePerAgentChange({ ...(humanizePerAgent ?? {}), [agent.name]: r })}
-                />
-              </div>
-            )}
+            {humanizeEnabled && onHumanizePerAgentChange && (() => {
+              const perAgent = humanizePerAgent ?? {}
+              const hasOverride = agent.name in perAgent
+              const toggleOverride = () => {
+                if (hasOverride) {
+                  const { [agent.name]: _, ...rest } = perAgent
+                  onHumanizePerAgentChange(rest)
+                } else {
+                  onHumanizePerAgentChange({ ...perAgent, [agent.name]: { ...DEFAULT_HUMANIZE_RULES } })
+                }
+              }
+              return (
+                <div className="border-t border-admin-border pt-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs font-medium text-admin-muted">Humanizer</p>
+                    <button
+                      type="button"
+                      onClick={toggleOverride}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-lg border transition-colors ${
+                        hasOverride
+                          ? "bg-admin-accent text-white border-admin-accent"
+                          : "border-admin-border text-admin-muted hover:border-admin-accent/50"
+                      }`}
+                    >
+                      {hasOverride ? "Override general" : "Use general"}
+                    </button>
+                  </div>
+                  {hasOverride && (
+                    <HumanizeRulesEditor
+                      rules={perAgent[agent.name]}
+                      onChange={(r) => onHumanizePerAgentChange({ ...perAgent, [agent.name]: r })}
+                    />
+                  )}
+                </div>
+              )
+            })()}
           </div>
         ))}
       </div>

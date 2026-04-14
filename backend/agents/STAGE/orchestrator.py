@@ -739,7 +739,8 @@ class Orchestrator:
         # 6c. Optional post-processing humanization (informal typos, no hashtags…)
         if self.humanize_output:
             from utils.humanizer import humanize as _humanize
-            if self.humanize_mode == "per_agent" and agent_name in self.humanize_per_agent:
+            # Use per-agent rules if an override exists for this agent, regardless of humanize_mode.
+            if agent_name in self.humanize_per_agent:
                 r = self.humanize_per_agent[agent_name]
             else:
                 r = self.humanize_rules

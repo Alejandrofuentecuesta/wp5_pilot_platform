@@ -91,7 +91,7 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
             raise ValueError(f"'{k}' must be between 0.0 and 1.0")
         out[k] = v
 
-    defaults = {"director_max_tokens": 1024, "performer_max_tokens": 512, "moderator_max_tokens": 256}
+    defaults = {"director_max_tokens": 1024, "performer_max_tokens": 384, "moderator_max_tokens": 512}
     for k, d in defaults.items():
         v = int(out.get(k, d))
         if v <= 0:

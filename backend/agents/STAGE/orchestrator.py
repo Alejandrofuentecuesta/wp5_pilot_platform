@@ -115,6 +115,54 @@ def deanonymize_text(text: str, reverse_map: Dict[str, str]) -> str:
     return _replace_names_in_text(text, reverse_map)
 
 
+def _strip_target_quote_echo(content: str, target_message: Optional[Message]) -> str:
+    """Remove a copied target message prefix when the moderator echoes quoted text."""
+    if not content or not target_message or not target_message.content:
+        return content
+
+    cleaned = content.strip()
+    target_text = target_message.content.strip()
+    sender_prefix = f"{target_message.sender}:"
+
+    for prefix in (
+        target_text,
+        f"> {target_text}",
+        f"{sender_prefix} {target_text}",
+    ):
+        if cleaned.startswith(prefix):
+            remainder = cleaned[len(prefix):].lstrip("\n\r\t :-")
+            if remainder:
+                return remainder.strip()
+
+    return cleaned
+
+
+def _looks_truncated_response(text: Optional[str]) -> bool:
+    """Heuristic guard for obviously cut-off long generations."""
+    if not text:
+        return False
+
+    cleaned = text.strip()
+    if len(cleaned) < 200:
+        return False
+
+    if re.search(r"[.!?…)\]\"'»”]\s*$", cleaned):
+        return False
+
+    if cleaned.endswith(("😂", "🤣", "😭", "😡", "😤", "💸", "🔥", "🙏", "❤️", "♥")):
+        return False
+
+    if cleaned.endswith((",", ";", ":", "-", "—", "(", "[", "{", "¿", "¡")):
+        return True
+
+    if re.search(r"\b(?:y|o|pero|porque|que|si|aunque|cuando|donde|mientras|como)\s*$", cleaned, re.IGNORECASE):
+        return True
+
+    # If the message already contains sentence endings but stops on a bare
+    # word, it is usually a length cut rather than an intentional style choice.
+    return bool(re.search(r"[.!?…].*[A-Za-zÁÉÍÓÚáéíóúÑñ0-9]\s*$", cleaned, re.DOTALL))
+
+
 def _merge_prompt_context(chatroom_context: str = "", incivility_framework: str = "") -> str:
     """Combine shared experiment context blocks for prompt injection."""
     parts = []
@@ -272,6 +320,29 @@ class Orchestrator:
         # Evaluate and Action system prompts deferred until first execute_turn (need internal_validity_criteria).
         self._evaluate_system_prompt: Optional[str] = None
         self._action_system_prompt: Optional[str] = None
+
+    @staticmethod
+    def _normalize_agent_stance(raw_stance: Optional[str]) -> Optional[str]:
+        """Collapse stance labels to comparable buckets for anti-infighting rules."""
+        if not raw_stance:
+            return None
+        stance = str(raw_stance).strip().lower()
+        if stance in {"agree", "favor", "favour", "support", "pro"}:
+            return "agree"
+        if stance in {"disagree", "against", "oppose", "anti"}:
+            return "disagree"
+        return None
+
+    def _agents_share_measure_side(self, actor_name: Optional[str], target_name: Optional[str]) -> bool:
+        """Return True when both agents hold the same non-neutral stance on the measure."""
+        if not actor_name or not target_name or actor_name == target_name:
+            return False
+
+        actor_traits = self._agent_traits.get(actor_name) or {}
+        target_traits = self._agent_traits.get(target_name) or {}
+        actor_stance = self._normalize_agent_stance(actor_traits.get("stance"))
+        target_stance = self._normalize_agent_stance(target_traits.get("stance"))
+        return actor_stance is not None and actor_stance == target_stance
 
     def set_participant_stance_hint(self, participant_stance_hint: Optional[str]) -> None:
         """Refresh the soft prior used in prompts and report summaries."""
@@ -494,6 +565,36 @@ class Orchestrator:
                     "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
                 }
 
+        # 3c. Prevent direct infighting between agents on the same side of the measure.
+        if action_type in {"reply", "@mention", "message"}:
+            same_side_target = None
+            if target_user and self._agents_share_measure_side(agent_name, target_user):
+                same_side_target = target_user
+            elif target_message_id and target_message_id:
+                target_msg_for_guard = next(
+                    (m for m in self.state.messages if m.message_id == target_message_id),
+                    None,
+                )
+                if target_msg_for_guard and self._agents_share_measure_side(agent_name, target_msg_for_guard.sender):
+                    same_side_target = target_msg_for_guard.sender
+
+            if same_side_target:
+                self.logger.log_error(
+                    "director_same_side_target",
+                    f"Director targeted same-side agents '{agent_name}' -> '{same_side_target}'; converting to a non-targeted message",
+                )
+                action_type = "message"
+                action_data["action_type"] = "message"
+                target_user = None
+                action_data["target_user"] = None
+                target_message_id = None
+                action_data["target_message_id"] = None
+                action_data["performer_instruction"] = {
+                    "objective": "Reinforce your side's position without attacking allied agents.",
+                    "motivation": "You agree on the measure, so infighting would feel incoherent and weaken the discussion.",
+                    "directive": "Sound supportive or additive; do not criticize, mock, or challenge agents who share your stance.",
+                }
+
         # 3b. Handle 'wait' — Director selected the human participant.
         #     Skip Performer/Moderator and restore evaluate counter
         #     (wait turns are not productive turns).
@@ -579,15 +680,17 @@ class Orchestrator:
         # 5. Performer → Moderator loop (max MAX_PERFORMER_RETRIES attempts)
         performer_instruction = action_data.get("performer_instruction", {})
 
-        # Get the selected agent's profile (in anonymous space)
+        # Get the selected agent's profile and restore real names for the performer.
         anon_agent_name = self._name_map.get(agent_name, agent_name)
-        agent_profile = self.agent_profiles.get(anon_agent_name, "")
+        agent_profile = deanonymize_text(
+            self.agent_profiles.get(anon_agent_name, ""),
+            self._reverse_map,
+        )
 
-        # Look up target message if needed, and prepare an anon copy.
+        # Look up target message if needed.
         # For 'message' with a target_user (targeted response), find the
         # target user's most recent message so the Performer has context.
         target_message = None
-        anon_target_message = None
         if target_message_id:
             target_message = next(
                 (m for m in self.state.messages if m.message_id == target_message_id),
@@ -600,23 +703,17 @@ class Orchestrator:
                 if m.sender == target_user:
                     target_message = m
                     break
-        if target_message:
-            anon_target_message = anonymize_message(target_message, self._name_map)
 
-        # Resolve anonymous target_user for the performer prompt
-        anon_target_user = None
-        if target_user:
-            anon_target_user = self._name_map.get(target_user, target_user)
-
-        # Gather this performer's recent messages (anonymized) so it can avoid repetition.
-        anon_recent_by_agent = []
+        # Gather this performer's recent messages with real names so it can avoid repetition
+        # while still knowing who it has interacted with.
+        recent_by_agent = []
         if self.performer_memory_size > 0:
             for m in reversed(self.state.messages):
                 if m.sender == agent_name:
-                    anon_recent_by_agent.append(anonymize_message(m, self._name_map))
-                    if len(anon_recent_by_agent) >= self.performer_memory_size:
+                    recent_by_agent.append(m)
+                    if len(recent_by_agent) >= self.performer_memory_size:
                         break
-            anon_recent_by_agent.reverse()
+            recent_by_agent.reverse()
 
         # Get agent's raw persona for the performer (not anonymized — performer knows their own character)
         agent_obj = next((a for a in agents if a.name == agent_name), None)
@@ -627,9 +724,9 @@ class Orchestrator:
             agent_profile=agent_profile,
             action_type=action_type,
             persona=agent_persona,
-            target_user=anon_target_user,
-            target_message=anon_target_message,
-            recent_messages=anon_recent_by_agent,
+            target_user=target_user,
+            target_message=target_message,
+            recent_messages=recent_by_agent,
             chatroom_context=_merge_prompt_context(
                 chatroom_context=self.chatroom_context,
                 incivility_framework=self.incivility_framework,
@@ -640,16 +737,15 @@ class Orchestrator:
         content = None
 
         # Build (or retrieve cached) per-agent performer system prompt.
-        anon_agent_label = self._name_map.get(agent_name, agent_name)
-        if anon_agent_label not in self._performer_system_prompts:
-            self._performer_system_prompts[anon_agent_label] = build_performer_system_prompt(
+        if agent_name not in self._performer_system_prompts:
+            self._performer_system_prompts[agent_name] = build_performer_system_prompt(
                 chatroom_context=self._performer_prompt_context,
-                agent_name=anon_agent_label,
+                agent_name=agent_name,
                 participant_name=self.state.user_name,
                 agent_traits=self._agent_traits.get(agent_name) if self._agent_traits else None,
                 template=self.performer_prompt_template,
             )
-        performer_system_prompt = self._performer_system_prompts[anon_agent_label]
+        performer_system_prompt = self._performer_system_prompts[agent_name]
 
         for attempt in range(1, MAX_PERFORMER_RETRIES + 1):
             # 5a. Call the Performer
@@ -670,6 +766,14 @@ class Orchestrator:
             )
 
             if not performer_raw:
+                continue
+
+            if _looks_truncated_response(performer_raw):
+                self.logger.log_error(
+                    "performer_output_truncated",
+                    f"Performer output appears truncated (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
+                    context={"agent_name": agent_name, "action_type": action_type},
+                )
                 continue
 
             # 5b. Call the Moderator to extract clean content
@@ -697,6 +801,14 @@ class Orchestrator:
             content = parse_moderator_response(moderator_raw)
 
             if content is not None:
+                if _looks_truncated_response(content):
+                    self.logger.log_error(
+                        "moderator_output_truncated",
+                        f"Moderator output appears truncated (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
+                        context={"agent_name": agent_name, "action_type": action_type},
+                    )
+                    content = None
+                    continue
                 break
             else:
                 self.logger.log_error(
@@ -726,6 +838,9 @@ class Orchestrator:
 
         # 6. Deanonymize any anonymous labels in the generated content.
         content = deanonymize_text(content, self._reverse_map)
+
+        if action_type == "reply" and target_message:
+            content = _strip_target_quote_echo(content, target_message)
 
         # 6b. Strip any @mention prefix the Performer included — the
         #     Orchestrator adds it canonically below, so duplicates must go.

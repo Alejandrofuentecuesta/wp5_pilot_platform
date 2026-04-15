@@ -13,6 +13,7 @@ import {
   pauseExperiment,
   resumeExperiment,
   downloadSessionsCSV,
+  downloadSessionBundle,
   getComplianceStats,
   getProviderKeys,
   setProviderKey,
@@ -507,8 +508,15 @@ function SessionsTab({
         </div>
       ) : (
         <>
-          <SessionTable sessions={activeSessions} title={`Active Sessions (${activeSessions.length})`} />
           <SessionTable
+            adminKey={adminKey}
+            experimentId={experimentId}
+            sessions={activeSessions}
+            title={`Active Sessions (${activeSessions.length})`}
+          />
+          <SessionTable
+            adminKey={adminKey}
+            experimentId={experimentId}
             sessions={completedSessions}
             title={`Completed Sessions (${completedSessions.length})`}
             showEndReason
@@ -1298,20 +1306,45 @@ function formatDuration(startedAt: string | null, endedAt: string | null): strin
 }
 
 function SessionTable({
+  adminKey,
+  experimentId,
   sessions,
   title,
   showEndReason,
 }: {
+  adminKey: string
+  experimentId: string
   sessions: SessionSummary[]
   title: string
   showEndReason?: boolean
 }) {
+  const [downloadingSessionId, setDownloadingSessionId] = useState<string | null>(null)
+  const [downloadError, setDownloadError] = useState("")
+
   if (sessions.length === 0) return null
+
+  const handleDownloadSession = async (sessionId: string) => {
+    setDownloadingSessionId(sessionId)
+    setDownloadError("")
+    try {
+      await downloadSessionBundle(adminKey, sessionId, experimentId)
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Session export failed")
+    } finally {
+      setDownloadingSessionId(null)
+    }
+  }
+
   return (
     <div className="bg-admin-surface rounded-lg border border-admin-border overflow-hidden">
       <div className="px-3 py-2 border-b border-admin-border">
         <h4 className="text-xs font-semibold text-admin-muted">{title}</h4>
       </div>
+      {downloadError && (
+        <div className="px-3 py-2 border-b border-admin-border text-[11px] text-red-600">
+          {downloadError}
+        </div>
+      )}
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
           <thead>
@@ -1321,7 +1354,7 @@ function SessionTable({
               <th className="px-3 py-1.5">Group</th>
               <th className="px-3 py-1.5 text-right">Msgs</th>
               <th className="px-3 py-1.5 text-right">{showEndReason ? "End Reason" : "Duration"}</th>
-              <th className="px-3 py-1.5 text-right">Report</th>
+              <th className="px-3 py-1.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -1335,14 +1368,23 @@ function SessionTable({
                   {showEndReason ? (s.end_reason || "-") : formatDuration(s.started_at, s.ended_at)}
                 </td>
                 <td className="px-3 py-1.5 text-right">
-                  <a
-                    href={`${API_BASE}/session/${s.session_id}/report`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-admin-accent hover:text-admin-accent-hover font-medium"
-                  >
-                    View
-                  </a>
+                  <div className="inline-flex items-center gap-3">
+                    <button
+                      onClick={() => handleDownloadSession(s.session_id)}
+                      disabled={downloadingSessionId === s.session_id}
+                      className="text-admin-muted hover:text-admin-text font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {downloadingSessionId === s.session_id ? "JSON..." : "JSON"}
+                    </button>
+                    <a
+                      href={`${API_BASE}/session/${s.session_id}/report`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-admin-accent hover:text-admin-accent-hover font-medium"
+                    >
+                      View
+                    </a>
+                  </div>
                 </td>
               </tr>
             ))}

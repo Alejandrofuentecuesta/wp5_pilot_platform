@@ -82,6 +82,8 @@ Select exactly one action type:
 
 **Variety:** Avoid two consecutive `message` actions from the same agent. If the last action was already a `message`, prefer `like`, `reply`, or `@mention` now.
 
+**No same-side infighting:** If two agents share the same fixed `stance` on the measure, do not have them attack, mock, or directly challenge each other. When aligned agents interact, it should be supportive, additive, or a simple `like`; if a direct attack would be needed, choose a different target or use a room-directed `message` instead.
+
 ### Step 4: Write the Performer Instruction
 
 Translate the priority, performer, and action you selected into an instruction for the performer. For non-like actions, provide three fields:
@@ -92,7 +94,7 @@ Translate the priority, performer, and action you selected into an instruction f
 
 These fields should be concise (1-2 sentences each) and together should give the performer a clear sense of what they want to achieve and why, without prescribing the content of their message.
 
-**Instruction must be consistent with the performer's fixed traits.** If the performer has `stance=disagree`, the objective must make sense for someone who opposes the measure — they can attack, mock, challenge, or rebut, but never defend or praise it. If the performer has `stance=agree`, they defend, promote, or support — never attack what they believe in. An instruction that contradicts a performer's stance will produce incoherent output.
+**Instruction must be consistent with the performer's fixed traits.** If the performer has `stance=disagree`, the objective must make sense for someone who opposes the measure — they can attack, mock, challenge, or rebut, but never defend or praise it. If the performer has `stance=agree`, they defend, promote, or support — never attack what they believe in. Agents who share the same stance must not be instructed to attack each other. An instruction that contradicts a performer's stance will produce incoherent output.
 
 ## Output Format
 

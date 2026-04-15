@@ -293,6 +293,27 @@ export async function getSessionMessagesForEvaluation(
   return res.json()
 }
 
+export async function downloadSessionBundle(
+  key: string,
+  sessionId: string,
+  experimentId: string,
+): Promise<void> {
+  const params = new URLSearchParams({ experiment_id: experimentId })
+  const res = await adminFetch(`/admin/session/${encodeURIComponent(sessionId)}/export?${params}`, key)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Session export failed" }))
+    throw new Error(err.detail || "Session export failed")
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `${sessionId}_stage_session.json`
+  a.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export async function saveSessionEvaluation(
   key: string,
   sessionId: string,

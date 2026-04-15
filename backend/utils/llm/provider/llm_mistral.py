@@ -8,6 +8,30 @@ from typing import Optional
 load_dotenv()
 
 
+def _extract_text(choice) -> str:
+    content = getattr(getattr(choice, "message", None), "content", "")
+    if isinstance(content, list):
+        parts = []
+        for block in content:
+            if isinstance(block, dict):
+                text = block.get("text")
+            else:
+                text = getattr(block, "text", None)
+            if text:
+                parts.append(text)
+        return "".join(parts).strip()
+    return (content or "").strip()
+
+
+def _is_max_tokens_stop(choice) -> bool:
+    reason = str(getattr(choice, "finish_reason", "") or "").lower()
+    return reason in {"length", "max_tokens"}
+
+
+def _expanded_max_tokens(current: int) -> int:
+    return min(max(current + 256, int(current * 1.5)), 4096)
+
+
 class MistralClient:
     """Client for interacting with the Mistral API (sync + async)."""
 
@@ -24,6 +48,7 @@ class MistralClient:
         """Synchronous response generation."""
         attempts = 0
         last_error = None
+        current_max_tokens = self.max_tokens
 
         while attempts <= max_retries:
             try:
@@ -40,9 +65,19 @@ class MistralClient:
                     kwargs["temperature"] = self.temperature
                 if self.top_p is not None:
                     kwargs["top_p"] = self.top_p
-                kwargs["max_tokens"] = self.max_tokens
+                kwargs["max_tokens"] = current_max_tokens
                 response = self.client.chat.complete(**kwargs)
-                return response.choices[0].message.content
+                choice = response.choices[0]
+                text = _extract_text(choice)
+                if _is_max_tokens_stop(choice):
+                    attempts += 1
+                    last_error = f"Mistral response truncated at max_tokens={current_max_tokens}"
+                    if attempts > max_retries:
+                        print(f"LLM call failed after {max_retries + 1} attempts: {last_error}")
+                        return None
+                    current_max_tokens = _expanded_max_tokens(current_max_tokens)
+                    continue
+                return text
 
             except Exception as e:
                 last_error = str(e)
@@ -58,6 +93,7 @@ class MistralClient:
         """Async response generation using the Mistral async methods."""
         attempts = 0
         last_error = None
+        current_max_tokens = self.max_tokens
 
         while attempts <= max_retries:
             try:
@@ -74,9 +110,19 @@ class MistralClient:
                     kwargs["temperature"] = self.temperature
                 if self.top_p is not None:
                     kwargs["top_p"] = self.top_p
-                kwargs["max_tokens"] = self.max_tokens
+                kwargs["max_tokens"] = current_max_tokens
                 response = await self.client.chat.complete_async(**kwargs)
-                return response.choices[0].message.content
+                choice = response.choices[0]
+                text = _extract_text(choice)
+                if _is_max_tokens_stop(choice):
+                    attempts += 1
+                    last_error = f"Mistral response truncated at max_tokens={current_max_tokens}"
+                    if attempts > max_retries:
+                        print(f"Async LLM call failed after {max_retries + 1} attempts: {last_error}")
+                        return None
+                    current_max_tokens = _expanded_max_tokens(current_max_tokens)
+                    continue
+                return text
 
             except Exception as e:
                 last_error = str(e)

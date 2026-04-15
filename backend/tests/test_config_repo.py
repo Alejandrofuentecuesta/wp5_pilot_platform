@@ -64,8 +64,8 @@ class TestValidateSimulationConfig:
         assert result["moderator_temperature"] == 1.0
         assert result["director_top_p"] == 1.0
         assert result["director_max_tokens"] == 1024
-        assert result["performer_max_tokens"] == 512
-        assert result["moderator_max_tokens"] == 256
+        assert result["performer_max_tokens"] == 384
+        assert result["moderator_max_tokens"] == 512
 
     def test_explicit_values_preserved(self):
         cfg = _minimal_sim()

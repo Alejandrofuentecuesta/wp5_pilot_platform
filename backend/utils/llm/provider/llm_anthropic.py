@@ -8,6 +8,23 @@ from typing import Optional
 load_dotenv()
 
 
+def _extract_text(message) -> str:
+    parts = []
+    for block in getattr(message, "content", []) or []:
+        text = getattr(block, "text", None)
+        if text:
+            parts.append(text)
+    return "".join(parts).strip()
+
+
+def _is_max_tokens_stop(message) -> bool:
+    return str(getattr(message, "stop_reason", "") or "").lower() == "max_tokens"
+
+
+def _expanded_max_tokens(current: int) -> int:
+    return min(max(current + 256, int(current * 1.5)), 4096)
+
+
 class AnthropicClient:
     """Client for interacting with the Anthropic API (sync + async)."""
 
@@ -31,12 +48,13 @@ class AnthropicClient:
         """Synchronous response generation."""
         attempts = 0
         last_error = None
+        current_max_tokens = self.max_tokens
 
         while attempts <= max_retries:
             try:
                 kwargs = dict(
                     model=self.model_name,
-                    max_tokens=self.max_tokens,
+                    max_tokens=current_max_tokens,
                     messages=[
                         {"role": "user", "content": prompt}
                     ],
@@ -48,7 +66,16 @@ class AnthropicClient:
                 elif self.top_p is not None:
                     kwargs["top_p"] = self.top_p
                 message = self.client.messages.create(**kwargs)
-                return message.content[0].text
+                text = _extract_text(message)
+                if _is_max_tokens_stop(message):
+                    attempts += 1
+                    last_error = f"Anthropic response truncated at max_tokens={current_max_tokens}"
+                    if attempts > max_retries:
+                        print(f"LLM call failed after {max_retries + 1} attempts: {last_error}")
+                        return None
+                    current_max_tokens = _expanded_max_tokens(current_max_tokens)
+                    continue
+                return text
 
             except Exception as e:
                 last_error = str(e)
@@ -64,13 +91,14 @@ class AnthropicClient:
         """Async response generation using the async Anthropic client when available."""
         attempts = 0
         last_error = None
+        current_max_tokens = self.max_tokens
 
         while attempts <= max_retries:
             try:
                 if self.aclient is not None:
                     kwargs = dict(
                         model=self.model_name,
-                        max_tokens=self.max_tokens,
+                        max_tokens=current_max_tokens,
                         messages=[
                             {"role": "user", "content": prompt}
                         ],
@@ -82,7 +110,16 @@ class AnthropicClient:
                     elif self.top_p is not None:
                         kwargs["top_p"] = self.top_p
                     message = await self.aclient.messages.create(**kwargs)
-                    return message.content[0].text
+                    text = _extract_text(message)
+                    if _is_max_tokens_stop(message):
+                        attempts += 1
+                        last_error = f"Anthropic response truncated at max_tokens={current_max_tokens}"
+                        if attempts > max_retries:
+                            print(f"Async LLM call failed after {max_retries + 1} attempts: {last_error}")
+                            return None
+                        current_max_tokens = _expanded_max_tokens(current_max_tokens)
+                        continue
+                    return text
                 else:
                     # Fallback: run sync client in executor
                     loop = asyncio.get_running_loop()

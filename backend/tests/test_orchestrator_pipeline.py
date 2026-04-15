@@ -48,6 +48,7 @@ def _make_logger():
 def _make_orchestrator(
     state=None,
     rng=None,
+    agent_traits=None,
 ):
     """Create an Orchestrator with mock LLM clients."""
     if state is None:
@@ -76,6 +77,7 @@ def _make_orchestrator(
         evaluate_interval=10,
         chatroom_context="A test chatroom",
         ecological_criteria="Informal Reddit-like chat with short messages.",
+        agent_traits=agent_traits,
         rng=rng or random.Random(42),
     )
     return orch, logger
@@ -436,6 +438,69 @@ class TestExecuteTurnReply:
         assert result.message.reply_to == target_msg.message_id
         assert result.message.quoted_text == "What do you think?"
 
+    @pytest.mark.asyncio
+    async def test_reply_strips_quoted_prefix_echoed_by_moderator(self):
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="What do you think?"))
+        target_msg = state.messages[0]
+
+        orch, _ = _make_orchestrator(state=state)
+        anon_alice = orch._name_map["Alice"]
+
+        action_resp = _action_json(
+            next_performer=anon_alice,
+            action_type="reply",
+            target_message_id=target_msg.message_id,
+        )
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="I agree!")
+        orch.moderator_llm.generate_response = AsyncMock(
+            return_value="What do you think?\nI agree!"
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.action_type == "reply"
+        assert result.message.reply_to == target_msg.message_id
+        assert result.message.quoted_text == "What do you think?"
+        assert result.message.content == "I agree!"
+
+    @pytest.mark.asyncio
+    async def test_reply_retries_when_moderator_output_looks_truncated(self):
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="What do you think?"))
+        target_msg = state.messages[0]
+
+        orch, logger = _make_orchestrator(state=state)
+        anon_alice = orch._name_map["Alice"]
+
+        action_resp = _action_json(
+            next_performer=anon_alice,
+            action_type="reply",
+            target_message_id=target_msg.message_id,
+        )
+        truncated = (
+            "Primera frase completa. Segunda frase completa. "
+            "Tercera frase completa y de repente se queda en convivencia"
+        ) * 2
+        fixed = "Primera frase completa. Segunda frase completa. Tercera frase completa y cierre final."
+
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="Texto base del performer")
+        orch.moderator_llm.generate_response = AsyncMock(side_effect=[truncated, fixed])
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.message.content == fixed
+        assert orch.moderator_llm.generate_response.await_count == 2
+        logger.log_error.assert_any_call(
+            "moderator_output_truncated",
+            "Moderator output appears truncated (attempt 1/3)",
+            context={"agent_name": "Alice", "action_type": "reply"},
+        )
+
 
 # ── execute_turn: mention action ─────────────────────────────────────────────
 
@@ -464,6 +529,130 @@ class TestExecuteTurnMention:
         assert result.target_user == "Bob"
         assert result.message.content.startswith("@Bob")
         assert result.message.mentions == ["Bob"]
+
+
+class TestPerformerPromptNames:
+
+    @pytest.mark.asyncio
+    async def test_performer_sees_real_names_for_agents_and_targets(self):
+        state = _make_state(
+            agents=[
+                Agent(name="Lucia", persona="Lucia, 32, apoya el plan con calma."),
+                Agent(name="Pilar", persona="Pilar, 44, se opone con dureza."),
+            ]
+        )
+        state.add_message(Message.create(sender="Pilar", content="Esto es una idea nefasta."))
+        target_msg = state.messages[0]
+
+        orch, _ = _make_orchestrator(
+            state=state,
+            agent_traits={
+                "Lucia": {"stance": "agree", "incivility": "civil", "ideology": "left"},
+                "Pilar": {"stance": "disagree", "incivility": "uncivil", "ideology": "right"},
+            },
+        )
+        anon_lucia = orch._name_map["Lucia"]
+        orch.agent_profiles[anon_lucia] = "Lucia ha defendido a Martin frente a Pilar sin perder la calma."
+
+        captured = {}
+
+        async def _capture_performer(prompt, **kwargs):
+            captured["user_prompt"] = prompt
+            captured["system_prompt"] = kwargs.get("system_prompt")
+            return "Creo que hace falta una respuesta mas sensata."
+
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(
+                next_performer=anon_lucia,
+                action_type="reply",
+                target_message_id=target_msg.message_id,
+            )
+        )
+        orch.performer_llm.generate_response = AsyncMock(side_effect=_capture_performer)
+        orch.moderator_llm.generate_response = AsyncMock(return_value="Creo que hace falta una respuesta mas sensata.")
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert "Your name in this chatroom is **Lucia**" in captured["system_prompt"]
+        assert "The human participant's name is **participant**" in captured["system_prompt"]
+        assert "Pilar: Esto es una idea nefasta." in captured["user_prompt"]
+        assert "Lucia ha defendido a Martin frente a Pilar sin perder la calma." in captured["user_prompt"]
+        assert "Performer " not in captured["user_prompt"]
+
+
+class TestSameSideGuard:
+
+    @pytest.mark.asyncio
+    async def test_reply_to_same_side_agent_becomes_room_message(self):
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="We should push this policy harder."))
+        target_msg = state.messages[0]
+
+        orch, logger = _make_orchestrator(
+            state=state,
+            agent_traits={
+                "Alice": {"stance": "agree"},
+                "Bob": {"stance": "agree"},
+            },
+        )
+        anon_alice = orch._name_map["Alice"]
+
+        action_resp = _action_json(
+            next_performer=anon_alice,
+            action_type="reply",
+            target_message_id=target_msg.message_id,
+        )
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="Exactly, we need to make that case clearly.")
+        orch.moderator_llm.generate_response = AsyncMock(return_value="Exactly, we need to make that case clearly.")
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.action_type == "message"
+        assert result.target_message_id is None
+        assert result.target_user is None
+        assert result.message.reply_to is None
+        assert result.message.quoted_text is None
+        logger.log_error.assert_any_call(
+            "director_same_side_target",
+            "Director targeted same-side agents 'Alice' -> 'Bob'; converting to a non-targeted message",
+        )
+
+    @pytest.mark.asyncio
+    async def test_mention_to_same_side_agent_becomes_room_message(self):
+        state = _make_state()
+        orch, logger = _make_orchestrator(
+            state=state,
+            agent_traits={
+                "Alice": {"stance": "disagree"},
+                "Bob": {"stance": "disagree"},
+            },
+        )
+        anon_alice = orch._name_map["Alice"]
+        anon_bob = orch._name_map["Bob"]
+
+        action_resp = _action_json(
+            next_performer=anon_alice,
+            action_type="@mention",
+            target_user=anon_bob,
+        )
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="The bigger issue is whether the plan even works.")
+        orch.moderator_llm.generate_response = AsyncMock(return_value="The bigger issue is whether the plan even works.")
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.action_type == "message"
+        assert result.target_user is None
+        assert result.message.mentions is None
+        assert not result.message.content.startswith("@Bob")
+        logger.log_error.assert_any_call(
+            "director_same_side_target",
+            "Director targeted same-side agents 'Alice' -> 'Bob'; converting to a non-targeted message",
+        )
 
 
 # ── execute_turn: wait (yield to participant) ────────────────────────────────

@@ -1521,6 +1521,88 @@ async def admin_session_messages(
     }
 
 
+@app.get("/admin/session/{session_id}/export")
+async def admin_export_session_bundle(
+    session_id: str,
+    experiment_id: Optional[str] = None,
+    x_admin_key: str = Header(None),
+):
+    """Download a single session bundle with session row, messages, and events."""
+    _require_admin(x_admin_key)
+    eid = experiment_id or get_experiment_id()
+    pool = _get_pool()
+
+    session_row = await session_repo.get_session(pool, session_id)
+    if not session_row or session_row["experiment_id"] != eid:
+        raise HTTPException(status_code=404, detail="Session not found for this experiment")
+
+    messages = await message_repo.get_session_messages(pool, session_id)
+    saved_evaluations = await message_repo.get_manual_evaluations(pool, session_id)
+    agent_blocks = await session_repo.get_agent_blocks(pool, session_id)
+
+    async with pool.acquire() as conn:
+        event_rows = await conn.fetch(
+            """
+            SELECT id, session_id, event_type, occurred_at, data
+            FROM events
+            WHERE experiment_id = $1 AND session_id = $2
+            ORDER BY id ASC
+            """,
+            eid,
+            session_id,
+        )
+
+    sim_cfg = session_row.get("simulation_config")
+    exp_cfg = session_row.get("experimental_config")
+    if isinstance(sim_cfg, str):
+        sim_cfg = json.loads(sim_cfg)
+    if isinstance(exp_cfg, str):
+        exp_cfg = json.loads(exp_cfg)
+
+    payload = {
+        "exported_at": datetime.now(timezone.utc).isoformat(),
+        "session": {
+            "session_id": str(session_row["session_id"]),
+            "experiment_id": session_row["experiment_id"],
+            "token": session_row["token"],
+            "treatment_group": session_row["treatment_group"],
+            "status": session_row["status"],
+            "user_name": session_row["user_name"],
+            "participant_stance": session_row.get("participant_stance"),
+            "started_at": session_row["started_at"].isoformat() if session_row.get("started_at") else None,
+            "ended_at": session_row["ended_at"].isoformat() if session_row.get("ended_at") else None,
+            "end_reason": session_row.get("end_reason"),
+            "random_seed": session_row.get("random_seed"),
+            "simulation_config": sim_cfg,
+            "experimental_config": exp_cfg,
+            "agent_blocks": agent_blocks,
+        },
+        "messages": [
+            {
+                **msg,
+                "manual_evaluation": saved_evaluations.get(msg["message_id"]),
+            }
+            for msg in messages
+        ],
+        "events": [
+            {
+                "id": row["id"],
+                "session_id": str(row["session_id"]),
+                "event_type": row["event_type"],
+                "occurred_at": row["occurred_at"].isoformat(),
+                "data": row["data"] if isinstance(row["data"], dict) else json.loads(row["data"]),
+            }
+            for row in event_rows
+        ],
+    }
+
+    body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
+    headers = {
+        "Content-Disposition": f'attachment; filename="{session_id}_stage_session.json"'
+    }
+    return StreamingResponse(io.BytesIO(body), media_type="application/json; charset=utf-8", headers=headers)
+
+
 @app.put("/admin/session/{session_id}/evaluation")
 async def admin_save_session_evaluation(
     session_id: str,

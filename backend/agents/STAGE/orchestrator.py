@@ -715,6 +715,15 @@ class Orchestrator:
                         break
             recent_by_agent.reverse()
 
+        recent_by_others = []
+        if self.performer_memory_size > 0:
+            for m in reversed(self.state.messages):
+                if m.sender != agent_name:
+                    recent_by_others.append(m)
+                    if len(recent_by_others) >= self.performer_memory_size:
+                        break
+            recent_by_others.reverse()
+
         # Get agent's raw persona for the performer (not anonymized — performer knows their own character)
         agent_obj = next((a for a in agents if a.name == agent_name), None)
         agent_persona = (agent_obj.persona or None) if agent_obj else None
@@ -727,6 +736,7 @@ class Orchestrator:
             target_user=target_user,
             target_message=target_message,
             recent_messages=recent_by_agent,
+            recent_room_messages=recent_by_others,
             chatroom_context=_merge_prompt_context(
                 chatroom_context=self.chatroom_context,
                 incivility_framework=self.incivility_framework,

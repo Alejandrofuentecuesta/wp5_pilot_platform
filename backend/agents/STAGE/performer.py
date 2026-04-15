@@ -9,7 +9,8 @@ The Performer receives:
   6. Target user / target message (for targeted actions; null for standalone)
 
 It does NOT see the full chat log. The Director has already distilled what
-matters into the instruction and agent profile.
+matters into the instruction and agent profile, but it may receive a small
+sample of recent room messages to avoid sounding structurally repetitive.
 """
 from pathlib import Path
 from typing import List, Optional
@@ -32,6 +33,13 @@ def format_recent_messages(messages: List[Message]) -> str:
     if not messages:
         return "(You have not posted any messages yet.)"
     return "\n".join(f"- {m.content}" for m in messages)
+
+
+def format_recent_room_messages(messages: List[Message]) -> str:
+    """Format recent messages from other people in the room."""
+    if not messages:
+        return "(No recent messages from other people.)"
+    return "\n".join(f"- {m.sender}: {m.content}" for m in messages)
 
 
 def _format_target_message(target_message: Optional[Message]) -> str:
@@ -96,6 +104,7 @@ def build_performer_user_prompt(
     target_user: Optional[str] = None,
     target_message: Optional[Message] = None,
     recent_messages: Optional[List[Message]] = None,
+    recent_room_messages: Optional[List[Message]] = None,
     chatroom_context: str = "",
     template: Optional[str] = None,
 ) -> str:
@@ -107,6 +116,7 @@ def build_performer_user_prompt(
     persona_section = f"## Your Character:\n\n{persona.strip()}\n\n" if (persona and persona.strip()) else ""
     profile_str = agent_profile or "(No behavioral history yet — this is the performer's first action.)"
     recent_str = format_recent_messages(recent_messages or [])
+    recent_room_str = format_recent_room_messages(recent_room_messages or [])
     target_str = _format_target_message(target_message)
     target_user_str = target_user or ""
     # Guard: if action requires a target_user but none is set, fall back to plain message.
@@ -120,6 +130,7 @@ def build_performer_user_prompt(
     prompt = prompt.replace("{AGENT_PERSONA_SECTION}", persona_section)
     prompt = prompt.replace("{AGENT_PROFILE}", profile_str)
     prompt = prompt.replace("{RECENT_MESSAGES}", recent_str)
+    prompt = prompt.replace("{RECENT_ROOM_MESSAGES}", recent_room_str)
     prompt = prompt.replace("{OBJECTIVE}", objective)
     prompt = prompt.replace("{MOTIVATION}", motivation)
     prompt = prompt.replace("{DIRECTIVE}", directive)

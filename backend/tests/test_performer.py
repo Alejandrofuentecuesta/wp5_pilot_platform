@@ -7,6 +7,7 @@ from agents.STAGE.performer import (
     _resolve_performer_action_type,
     build_performer_user_prompt,
     build_performer_system_prompt,
+    format_recent_room_messages,
 )
 
 
@@ -65,8 +66,12 @@ class TestBuildPerformerSystemPrompt:
 
     def test_system_prompt_limits_message_length(self):
         result = build_performer_system_prompt()
-        assert "default to 2-3 short sentences" in result
-        assert "do not go beyond 3 sentences" in result
+        assert "most messages should be 1-3 short sentences" in result
+        assert "Sometimes 4 short sentences are fine" in result
+        assert "Very short outbursts are allowed" in result
+        assert "Avoid cross-agent repetition" in result
+        assert "Civil is not formal" in result
+        assert "Avoid robotic framing" in result
 
 
 # ── build_performer_user_prompt ────────────────────────────────────────────
@@ -177,3 +182,31 @@ class TestBuildPerformerUserPrompt:
         assert "Hey there" in result
         # Should NOT include standalone message block
         assert "not responding to anyone" not in result.lower()
+
+    def test_includes_recent_room_messages_from_other_people(self):
+        result = build_performer_user_prompt(
+            instruction=self._instruction(),
+            agent_profile="Active user.",
+            action_type="message",
+            recent_room_messages=[
+                _msg(sender="Bob", content="Que verguenza, de verdad"),
+                _msg(sender="Lucia", content="Otra vez con el mismo cuento"),
+            ],
+        )
+        assert "Recent Messages From Other People In The Room" in result
+        assert "Bob: Que verguenza, de verdad" in result
+        assert "Lucia: Otra vez con el mismo cuento" in result
+
+
+class TestFormatRecentRoomMessages:
+    def test_none_room_messages(self):
+        result = format_recent_room_messages([])
+        assert "no recent messages from other people" in result.lower()
+
+    def test_room_messages_include_sender(self):
+        result = format_recent_room_messages([
+            _msg(sender="Bob", content="Hola"),
+            _msg(sender="Lucia", content="Adios"),
+        ])
+        assert "- Bob: Hola" in result
+        assert "- Lucia: Adios" in result

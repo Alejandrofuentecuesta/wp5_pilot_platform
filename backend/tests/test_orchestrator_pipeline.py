@@ -578,6 +578,8 @@ class TestPerformerPromptNames:
         assert "The human participant's name is **participant**" in captured["system_prompt"]
         assert "Pilar: Esto es una idea nefasta." in captured["user_prompt"]
         assert "Lucia ha defendido a Martin frente a Pilar sin perder la calma." in captured["user_prompt"]
+        assert "Recent Messages From Other People In The Room" in captured["user_prompt"]
+        assert "- Pilar: Esto es una idea nefasta." in captured["user_prompt"]
         assert "Performer " not in captured["user_prompt"]
 
 

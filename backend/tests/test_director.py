@@ -10,6 +10,7 @@ from agents.STAGE.director import (
     format_agent_profiles,
     format_participant_hint,
     format_treatment_fidelity_summary,
+    build_action_system_prompt,
     parse_update_response,
     parse_evaluate_response,
     parse_action_response,
@@ -139,6 +140,18 @@ class TestFormatTreatmentFidelitySummary:
         assert "Incivil messages: 1/2" in result
         assert "Like-minded messages: 1/2" in result
         assert "confidence=high" in result
+
+
+class TestBuildActionSystemPrompt:
+    def test_clarifies_stance_is_relative_to_participant(self):
+        prompt = build_action_system_prompt(
+            chatroom_context="Debate climatico",
+            participant_stance_hint="participant self-report: against the article",
+            participant_name="Martin",
+        )
+        assert "relative to the participant's stance in this session" in prompt
+        assert "If the participant is against the article" in prompt
+        assert "Always reason from alignment with the participant first" in prompt
 
 
 # ── parse_update_response — valid inputs ─────────────────────────────────────

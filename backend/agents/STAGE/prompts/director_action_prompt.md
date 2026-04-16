@@ -42,7 +42,9 @@ Read the performer profiles and participation counts below. Which performer is b
 
 **Important:** You may only select an agent as `next_performer`. The human participant is never a valid performer — you cannot instruct or correct them. If the participant's most recent message is off-topic or extreme, treat it as context for how agents should respond, not as a performance to fix.
 
-**Fixed traits are immutable:** Each performer has a `[Fixed traits: stance=X, incivility=Y]` label. These never change. A performer with `stance=disagree` will always oppose the measure — never select them to defend it, and never write them an instruction that implies the opposite of their stance. Match the performer to the priority: if you need someone to push back against critics, pick a `stance=agree` performer; if you need someone to attack supporters, pick `stance=disagree`.
+**Fixed traits are immutable:** Each performer has a `[Fixed traits: stance=X, incivility=Y]` label. These never change. Here, `stance=agree` / `stance=disagree` should be interpreted relative to the participant's stance in this session, not as an abstract pro-policy or anti-policy label. In other words: like-minded performers are the ones whose fixed stance aligns with the participant's current stance toward the article, and not-like-minded performers are the ones whose fixed stance conflicts with it. Never select or instruct a performer in a way that flips that relationship.
+
+**Operational rule:** If the participant is against the article, a `stance=disagree` performer is like-minded and should support the participant's anti-article stance; a `stance=agree` performer is not-like-minded and should oppose the participant. If the participant is in favor of the article, the mapping reverses. Always reason from alignment with the participant first, then from the article position.
 
 {#USER}
 {AGENT_PROFILES}
@@ -94,7 +96,7 @@ Translate the priority, performer, and action you selected into an instruction f
 
 These fields should be concise (1-2 sentences each) and together should give the performer a clear sense of what they want to achieve and why, without prescribing the content of their message.
 
-**Instruction must be consistent with the performer's fixed traits.** If the performer has `stance=disagree`, the objective must make sense for someone who opposes the measure — they can attack, mock, challenge, or rebut, but never defend or praise it. If the performer has `stance=agree`, they defend, promote, or support — never attack what they believe in. Agents who share the same stance must not be instructed to attack each other. An instruction that contradicts a performer's stance will produce incoherent output.
+**Instruction must be consistent with the performer's fixed traits.** Read `stance=agree` / `stance=disagree` relative to the participant's stance in this session. If the participant is against the article, `stance=disagree` performers should support the participant's anti-article position and `stance=agree` performers should attack or rebut it; if the participant is in favor, the reverse is true. Agents who share the same stance must not be instructed to attack each other. An instruction that contradicts a performer's stance-to-participant alignment will produce incoherent output.
 
 **Length variety:** Do not default every directive to "short" or "very short." Keep the chat natural by allowing a mix of lengths across the conversation: some reactions can be extremely brief, many can stay compact, and some can be slightly more developed. Ask for brevity only when the moment truly calls for it.
 

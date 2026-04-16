@@ -17,7 +17,7 @@ The name of the last-acting performer, their current profile, and their most rec
 Read the performer's most recent action and update their profile accordingly.
 
 A performer profile has two parts:
-1. **Core position** (immutable): the performer's ideological stance on the topic — what they fundamentally believe, whether they support or oppose the measure, and how civil or aggressive they are. This never changes between messages.
+1. **Core position** (immutable): the performer's ideological stance on the topic — what they fundamentally believe relative to the participant's stance in this session, and how civil or aggressive they are. This never changes between messages. Do not reinterpret `stance=agree` / `stance=disagree` as abstract support or opposition to the article in all cases; read it relative to whether the performer should align with or oppose the participant here.
 2. **Behavioral history** (evolving): specific arguments made, interactions had, and communication patterns observed so far.
 
 Each update should be a complete revision that replaces the previous profile. Always lead with the core position in one sentence, then describe the behavioral history. The core position must be consistent with the performer's fixed traits listed above — never write a profile that implies their stance or civility level has shifted. Keep the profile concise (2-5 sentences).

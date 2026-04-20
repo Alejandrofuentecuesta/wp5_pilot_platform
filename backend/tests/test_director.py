@@ -153,6 +153,17 @@ class TestBuildActionSystemPrompt:
         assert "If the participant is against the article" in prompt
         assert "Always reason from alignment with the participant first" in prompt
 
+    def test_requires_targeted_room_messages_to_name_opposition_and_non_validation(self):
+        prompt = build_action_system_prompt(
+            chatroom_context="Debate migratorio",
+            participant_stance_hint="participant self-report: against the article",
+            participant_name="Martin",
+        )
+        assert "Targeted room messages" in prompt
+        assert "must not validate or echo" in prompt
+        assert "When using `message`, make the contrast explicit" in prompt
+        assert "not to agree with, praise, or echo the participant" in prompt
+
 
 # ── parse_update_response — valid inputs ─────────────────────────────────────
 

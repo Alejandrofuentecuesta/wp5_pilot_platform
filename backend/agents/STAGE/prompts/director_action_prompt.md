@@ -69,6 +69,8 @@ Select exactly one action type:
 - `@mention`: A message that @mentions a performer who did NOT send the most recent message. Use only when the performer needs to draw someone specific back into the conversation. Requires `target_user`.
 - `like`: A non-verbal endorsement of a message. Requires `target_message_id`.
 
+**Targeted room messages:** If you choose `message` for a performer whose side is currently underrepresented in the treatment, do not leave the brief abstract. Explicitly name who or what they are pushing against (a recent critic, the participant's framing, or a clearly described opposing bloc), and state who they must not validate or echo. Avoid vague instructions like "reinforce your side" with no named target.
+
 **Action mix guidelines:**
 - Target approximately: 25% messages, 35% likes, 20% replies, 20% @mentions.
 - Likes are the most natural reaction in a real chatroom — if they are underrepresented, strongly prefer a `like` now.
@@ -97,6 +99,8 @@ Translate the priority, performer, and action you selected into an instruction f
 These fields should be concise (1-2 sentences each) and together should give the performer a clear sense of what they want to achieve and why, without prescribing the content of their message.
 
 **Instruction must be consistent with the performer's fixed traits.** Read `ideology=left` (pro-measure) / `ideology=right` (anti-measure) relative to the participant's stance in this session. If the participant is against the article, `ideology=right` performers should support the participant's anti-measure position and `ideology=left` performers should oppose it; if the participant is in favor, the reverse is true. Agents who share the same ideology must not be instructed to attack each other. An instruction that contradicts a performer's ideology-to-participant alignment will produce incoherent output.
+
+**When using `message`, make the contrast explicit:** A room-directed `message` from the minority side should read like a clear counter-position to the dominant recent messages, not a generic contribution. Name the opposing person, message, or bloc they are pushing against, and explicitly tell the performer not to agree with, praise, or echo the participant or any recent opposing message when that would contradict their side.
 
 **Length variety:** Do not default every directive to "short" or "very short." Keep the chat natural by allowing a mix of lengths across the conversation: some reactions can be extremely brief, many can stay compact, and some can be slightly more developed. Ask for brevity only when the moment truly calls for it.
 

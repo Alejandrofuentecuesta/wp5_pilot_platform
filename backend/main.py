@@ -828,7 +828,7 @@ async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
     support before committing to a config.
     """
     _require_admin(x_admin_key)
-    from utils.llm.llm_manager import _create_client
+    from utils.llm.llm_manager import _create_client, _tune_bsc_generation_params
     from utils.llm.provider import PROVIDER_PARAMS
 
     provider = body.provider.lower()
@@ -858,6 +858,19 @@ async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
         bsc_model_version = (body.bsc_model_version or "v1").lower()
         if bsc_model_version not in {"v1", "v2"}:
             raise HTTPException(status_code=422, detail="bsc_model_version must be 'v1' or 'v2'")
+        tuned_temperature, tuned_top_p = _tune_bsc_generation_params(
+            provider,
+            temperature=effective_temperature,
+            top_p=effective_top_p,
+            bsc_model_version=bsc_model_version,
+        )
+        if tuned_temperature != effective_temperature:
+            warnings.append(
+                "bsc v1 (Gemma) now uses a slightly higher effective temperature "
+                "to encourage more creative, less templated phrasing."
+            )
+            effective_temperature = tuned_temperature
+        effective_top_p = tuned_top_p
         call_params["bsc_model_version"] = bsc_model_version
     else:
         bsc_model_version = None
@@ -2061,6 +2074,31 @@ async def admin_tokens_csv(experiment_id: str, x_admin_key: str = Header(None)):
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@app.get("/admin/tokens/{experiment_id}")
+async def admin_tokens_json(experiment_id: str, x_admin_key: str = Header(None)):
+    """Return all tokens for an experiment as JSON for admin inspection."""
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+    from db.repositories import token_repo
+
+    tokens = await token_repo.list_tokens(pool, experiment_id)
+    if not tokens:
+        raise HTTPException(status_code=404, detail="No tokens found for this experiment")
+
+    return {
+        "tokens": [
+            {
+                "token": t["token"],
+                "treatment_group": t["treatment_group"],
+                "used": bool(t["used"]),
+                "used_at": t["used_at"].isoformat() if t.get("used_at") else None,
+                "session_id": str(t["session_id"]) if t.get("session_id") else None,
+            }
+            for t in tokens
+        ]
+    }
 
 
 if __name__ == "__main__":

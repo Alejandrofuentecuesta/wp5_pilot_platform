@@ -154,6 +154,14 @@ export interface TokenGroupStats {
   used: number
 }
 
+export interface ExperimentToken {
+  token: string
+  treatment_group: string
+  used: boolean
+  used_at: string | null
+  session_id: string | null
+}
+
 export interface ComplianceGroupStats {
   group: string
   session_count: number

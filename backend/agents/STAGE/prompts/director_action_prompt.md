@@ -69,6 +69,8 @@ Select exactly one action type:
 - `@mention`: A message that @mentions a performer who did NOT send the most recent message. Use only when the performer needs to draw someone specific back into the conversation. Requires `target_user`.
 - `like`: A non-verbal endorsement of a message. Requires `target_message_id`.
 
+**Use non-targeted room messages sparingly:** A `message` with no `target_user` and no `target_message_id` should be rare. If there is a recent person or message the performer can naturally react to, prefer `reply`, `@mention`, `like`, or a targeted `message` to the latest speaker. Reserve a room-wide opener for cases where the performer is truly introducing a fresh angle to the whole room rather than continuing the current thread.
+
 **Targeted room messages:** If you choose `message` for a performer whose side is currently underrepresented in the treatment, do not leave the brief abstract. Explicitly name who or what they are pushing against (a recent critic, the participant's framing, or a clearly described opposing bloc), and state who they must not validate or echo. Avoid vague instructions like "reinforce your side" with no named target.
 
 **Action mix guidelines:**
@@ -83,6 +85,8 @@ Select exactly one action type:
 - After the direct reply is handled, encourage other agents to `like` or react — this makes the exchange feel like a real group conversation rather than a one-on-one.
 
 **Reply/mention when not addressing the latest message:** If the performer is responding to someone whose message is NOT the most recent in the chat log, always use `reply` (with `target_message_id`) or `@mention` (with `target_user`) — never a plain `message`. This prevents confusing out-of-context responses.
+
+**If the latest message already gives you a natural anchor, use it:** When the room has a clear active thread, do not break it with a new room-wide opener. Prefer a targeted response to the most recent relevant speaker or message unless the validity priority explicitly requires a fresh whole-room intervention.
 
 **Variety:** Avoid two consecutive `message` actions from the same agent. If the last action was already a `message`, prefer `like`, `reply`, or `@mention` now.
 

@@ -1,7 +1,7 @@
 /* Admin API client — all requests include X-Admin-Key header. */
 
 import { API_BASE } from "./constants"
-import type { AdminMeta, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats, ProviderKeyStatus } from "./admin-types"
+import type { AdminMeta, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats, ProviderKeyStatus, ExperimentToken } from "./admin-types"
 
 async function adminFetch(
   path: string,
@@ -237,6 +237,15 @@ export async function getTokenStats(
   const params = experimentId ? `?experiment_id=${encodeURIComponent(experimentId)}` : ""
   const res = await adminFetch(`/admin/tokens/stats${params}`, key)
   if (!res.ok) throw new Error("Failed to load token stats")
+  return res.json()
+}
+
+export async function getExperimentTokens(
+  key: string,
+  experimentId: string,
+): Promise<{ tokens: ExperimentToken[] }> {
+  const res = await adminFetch(`/admin/tokens/${encodeURIComponent(experimentId)}`, key)
+  if (!res.ok) throw new Error("Failed to load tokens")
   return res.json()
 }
 

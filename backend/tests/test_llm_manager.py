@@ -8,7 +8,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 
-from utils.llm.llm_manager import LLMManager, _create_client
+from utils.llm.llm_manager import LLMManager, _create_client, _tune_bsc_generation_params
 from utils.llm.provider.llm_anthropic import AnthropicClient
 from utils.llm.provider.llm_mistral import MistralClient
 
@@ -157,6 +157,34 @@ class TestCreateClient:
             MockBSC.return_value = MagicMock()
             _create_client("bsc", model="incivility", bsc_model_version="v1")
             assert MockBSC.call_args.kwargs["bsc_model_version"] == "v1"
+
+    def test_bsc_v1_gemma_gets_higher_minimum_temperature(self):
+        with patch("utils.llm.provider.llm_bsc.BSCClient") as MockBSC:
+            MockBSC.return_value = MagicMock()
+            _create_client("bsc", model="incivility", temperature=0.8, bsc_model_version="v1")
+            assert MockBSC.call_args.kwargs["temperature"] == 1.1
+
+
+class TestTuneBscGenerationParams:
+    def test_bsc_v1_raises_temperature_floor(self):
+        temperature, top_p = _tune_bsc_generation_params(
+            "bsc",
+            temperature=0.8,
+            top_p=0.8,
+            bsc_model_version="v1",
+        )
+        assert temperature == 1.1
+        assert top_p == 0.8
+
+    def test_non_bsc_params_are_unchanged(self):
+        temperature, top_p = _tune_bsc_generation_params(
+            "anthropic",
+            temperature=0.8,
+            top_p=0.8,
+            bsc_model_version="v1",
+        )
+        assert temperature == 0.8
+        assert top_p == 0.8
 
 
 class TestProviderTruncationRetries:

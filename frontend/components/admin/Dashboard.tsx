@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react"
 import {
   listSessions,
   getTokenStats,
+  getExperimentTokens,
   listExperiments,
   resetSessions,
   deleteExperiment,
@@ -18,7 +19,7 @@ import {
   getProviderKeys,
   setProviderKey,
 } from "../../lib/admin-api"
-import type { SessionSummary, TokenGroupStats, SimulationConfig, ExperimentalConfig, ComplianceGroupStats, ProviderKeyStatus } from "../../lib/admin-types"
+import type { SessionSummary, TokenGroupStats, SimulationConfig, ExperimentalConfig, ComplianceGroupStats, ProviderKeyStatus, ExperimentToken } from "../../lib/admin-types"
 import type { ExperimentSummary, AdminEvent } from "../../lib/admin-api"
 import { API_BASE } from "../../lib/constants"
 import type { AdminTheme } from "./AdminPanel"
@@ -255,6 +256,11 @@ function OverviewTab({
   const [description, setDescription] = useState("")
   const [createdAt, setCreatedAt] = useState("")
   const [configLoading, setConfigLoading] = useState(true)
+  const [tokensExpanded, setTokensExpanded] = useState(false)
+  const [tokenRows, setTokenRows] = useState<ExperimentToken[]>([])
+  const [tokenRowsLoading, setTokenRowsLoading] = useState(false)
+  const [tokenRowsError, setTokenRowsError] = useState("")
+  const [copiedLabel, setCopiedLabel] = useState("")
 
   useEffect(() => {
     let cancelled = false
@@ -273,12 +279,56 @@ function OverviewTab({
     return () => { cancelled = true }
   }, [adminKey, experimentId])
 
+  useEffect(() => {
+    setTokensExpanded(false)
+    setTokenRows([])
+    setTokenRowsLoading(false)
+    setTokenRowsError("")
+    setCopiedLabel("")
+  }, [experimentId])
+
   const activeSessions = sessions.filter((s) => s.status === "active")
   const completedSessions = sessions.filter((s) => s.status === "ended" || s.status === "crashed")
   const crashedSessions = sessions.filter((s) => s.status === "crashed")
   const totalMessages = sessions.reduce((sum, s) => sum + s.message_count, 0)
   const totalTokens = tokenStats.reduce((sum, g) => sum + g.total, 0)
   const usedTokens = tokenStats.reduce((sum, g) => sum + g.used, 0)
+  const groupedTokens = tokenRows.reduce<Record<string, ExperimentToken[]>>((acc, row) => {
+    if (!acc[row.treatment_group]) acc[row.treatment_group] = []
+    acc[row.treatment_group].push(row)
+    return acc
+  }, {})
+
+  const loadTokens = async () => {
+    setTokenRowsLoading(true)
+    setTokenRowsError("")
+    try {
+      const res = await getExperimentTokens(adminKey, experimentId)
+      setTokenRows(res.tokens)
+    } catch (err) {
+      setTokenRowsError(err instanceof Error ? err.message : "Failed to load tokens")
+    } finally {
+      setTokenRowsLoading(false)
+    }
+  }
+
+  const toggleTokensExpanded = async () => {
+    const next = !tokensExpanded
+    setTokensExpanded(next)
+    if (next && tokenRows.length === 0 && !tokenRowsLoading) {
+      await loadTokens()
+    }
+  }
+
+  const copyText = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopiedLabel(label)
+      window.setTimeout(() => setCopiedLabel((current) => (current === label ? "" : current)), 1800)
+    } catch {
+      setTokenRowsError("Could not copy tokens to clipboard")
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -410,6 +460,79 @@ function OverviewTab({
                     </div>
                   ))}
                 </div>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h4 className="text-xs font-semibold text-admin-faint uppercase tracking-wider">Participant Tokens</h4>
+                  <button
+                    onClick={toggleTokensExpanded}
+                    className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-admin-border text-admin-text hover:bg-admin-raised transition-colors"
+                  >
+                    {tokensExpanded ? "Hide tokens" : "Show tokens"}
+                  </button>
+                  {tokensExpanded && tokenRows.length > 0 && (
+                    <button
+                      onClick={() => copyText(tokenRows.map((row) => `${row.token},${row.treatment_group}`).join("\n"), "all")}
+                      className="px-2.5 py-1 text-[11px] font-medium rounded-lg border border-admin-border text-admin-text hover:bg-admin-raised transition-colors"
+                    >
+                      {copiedLabel === "all" ? "Copied all" : "Copy all"}
+                    </button>
+                  )}
+                </div>
+
+                {tokensExpanded && (
+                  <div className="bg-admin-raised rounded-lg border border-admin-border p-3 space-y-3">
+                    {tokenRowsLoading ? (
+                      <p className="text-xs text-admin-faint">Loading tokens...</p>
+                    ) : tokenRowsError ? (
+                      <p className="text-xs text-red-600">{tokenRowsError}</p>
+                    ) : (
+                      <>
+                        <p className="text-[11px] text-admin-muted">
+                          {tokenRows.length} token(s) loaded. You can copy all tokens or only one treatment group.
+                        </p>
+                        <div className="max-h-72 overflow-y-auto space-y-3 pr-1">
+                          {Object.entries(groupedTokens).map(([group, rows]) => (
+                            <div key={group} className="space-y-2">
+                              <div className="flex items-center justify-between gap-3">
+                                <p className="font-mono text-xs font-semibold text-admin-text">
+                                  {group}
+                                  <span className="text-admin-faint ml-1">({rows.length})</span>
+                                </p>
+                                <button
+                                  onClick={() => copyText(rows.map((row) => row.token).join("\n"), group)}
+                                  className="px-2 py-1 text-[11px] font-medium rounded-lg border border-admin-border text-admin-text hover:bg-admin-surface transition-colors"
+                                >
+                                  {copiedLabel === group ? "Copied" : "Copy group"}
+                                </button>
+                              </div>
+                              <div className="grid gap-1.5 sm:grid-cols-2 xl:grid-cols-3">
+                                {rows.map((row) => (
+                                  <div
+                                    key={row.token}
+                                    className="flex items-center justify-between gap-2 rounded-lg border border-admin-border bg-admin-surface px-2.5 py-1.5"
+                                  >
+                                    <span className="font-mono text-[11px] text-admin-text break-all">{row.token}</span>
+                                    <span
+                                      className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                                        row.used
+                                          ? "bg-admin-pastel-amber text-admin-pastel-amber-text"
+                                          : "bg-admin-pastel-green text-admin-pastel-green-text"
+                                      }`}
+                                    >
+                                      {row.used ? "used" : "free"}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             </>
           )}

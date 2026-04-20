@@ -164,6 +164,16 @@ class TestBuildActionSystemPrompt:
         assert "When using `message`, make the contrast explicit" in prompt
         assert "not to agree with, praise, or echo the participant" in prompt
 
+    def test_discourages_room_wide_openers_when_recent_anchor_exists(self):
+        prompt = build_action_system_prompt(
+            chatroom_context="Debate migratorio",
+            participant_stance_hint="participant self-report: against the article",
+            participant_name="Martin",
+        )
+        assert "Use non-targeted room messages sparingly" in prompt
+        assert "If the latest message already gives you a natural anchor, use it" in prompt
+        assert "do not break it with a new room-wide opener" in prompt
+
 
 # ── parse_update_response — valid inputs ─────────────────────────────────────
 

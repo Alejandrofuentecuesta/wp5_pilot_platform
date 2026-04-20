@@ -2,12 +2,42 @@ import asyncio
 from typing import Optional
 
 
+def _tune_bsc_generation_params(
+    provider: str,
+    temperature: float = None,
+    top_p: float = None,
+    bsc_model_version: str = None,
+):
+    """Apply light generation tuning for BSC-hosted models.
+
+    Gemma-based BSC v1 tends to work better with a slightly higher temperature
+    so the model can vary its phrasing more naturally and avoid flat,
+    repetitive completions.
+    """
+    provider = (provider or "").lower()
+    version = (bsc_model_version or "").lower()
+
+    if provider == "bsc" and version == "v1":
+        if temperature is None:
+            temperature = 1.1
+        else:
+            temperature = max(float(temperature), 1.1)
+
+    return temperature, top_p
+
+
 def _create_client(provider: str, model: str = None, temperature: float = None, top_p: float = None, max_tokens: int = None, bsc_model_version: str = None):
     """Create an LLM client for the given provider and optional model name.
 
     Imports are done lazily so only the selected provider's package needs to be installed.
     """
     provider = (provider or "gemini").lower()
+    temperature, top_p = _tune_bsc_generation_params(
+        provider,
+        temperature=temperature,
+        top_p=top_p,
+        bsc_model_version=bsc_model_version,
+    )
 
     kwargs = {}
     if model:

@@ -398,7 +398,29 @@ class Orchestrator:
         """Return True when classifier output clearly conflicts with fixed stance."""
         expected_like_minded = self._expected_like_minded_for_agent(agent_name)
         actual_like_minded = classification.get("is_like_minded")
-        if expected_like_minded is None or actual_like_minded is None:
+        stance_confidence = classification.get("stance_confidence")
+        inferred_participant_stance = self._normalize_participant_stance_hint(
+            classification.get("inferred_participant_stance")
+        )
+        expected_participant_stance = self._normalize_participant_stance_hint(
+            self.participant_stance_hint
+        )
+
+        # Treat the classifier as a soft signal unless it is both explicit
+        # and highly confident. This avoids skipping fluent turns because of
+        # noisy like-mindedness judgments on aggressive or indirect messages.
+        if (
+            expected_like_minded is None
+            or actual_like_minded is None
+            or stance_confidence != "high"
+        ):
+            return False
+
+        if (
+            inferred_participant_stance is not None
+            and expected_participant_stance is not None
+            and inferred_participant_stance != expected_participant_stance
+        ):
             return False
         return bool(actual_like_minded) != expected_like_minded
 

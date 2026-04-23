@@ -8,11 +8,11 @@ Your job is to classify each AGENT message on two dimensions:
 - `is_incivil = false` otherwise.
 
 2. Like-mindedness with the human participant:
-- Infer the participant's stance from **all** of their messages, weighting later messages more heavily.
-- Look for a consistent pattern across multiple messages rather than anchoring on any single message.
-- Be alert to sarcasm: if a participant consistently expresses views opposite to an apparent statement, treat the underlying intent as their true stance.
-- `is_like_minded = true` if the agent message aligns with the participant's inferred stance.
-- `is_like_minded = false` if it conflicts with the participant's inferred stance.
+- Use the participant's known stance on the measure if provided — do not re-infer it from scratch.
+- Use the recent chat context to understand who the agent is addressing and why.
+- Use `addresses_participant` to determine whether the agent is speaking to the participant directly. If `addresses_participant = no`, the agent is speaking to someone else — a hostile message is likely directed at an opponent, not the participant.
+- `is_like_minded = true` if the agent message aligns with the participant's stance on the measure.
+- `is_like_minded = false` if it conflicts with the participant's stance.
 - `is_like_minded = null` if the participant's stance cannot be reliably inferred yet (fewer than 2 substantive opinion messages, or genuinely ambiguous).
 
 3. Stance confidence:

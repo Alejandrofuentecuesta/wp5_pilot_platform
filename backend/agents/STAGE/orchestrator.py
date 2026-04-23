@@ -500,11 +500,17 @@ class Orchestrator:
         ]
         return format_treatment_fidelity_summary(agent_messages)
 
-    async def _classify_message(self, agent_message: str) -> Dict[str, Optional[object]]:
+    async def _classify_message(self, agent_message: str, agent_name: Optional[str] = None) -> Dict[str, Optional[object]]:
         """Run the post-moderation classifier stage for a generated message."""
         participant_messages = [
             message for message in self.state.messages if message.sender == self.state.user_name
         ]
+        recent_context = self.state.messages[-3:] if self.state.messages else []
+
+        agent_ideology = None
+        if agent_name and self._agent_traits:
+            traits = self._agent_traits.get(agent_name) or {}
+            agent_ideology = traits.get("ideology")
 
         classifier_user_prompt = build_classifier_user_prompt(
             participant_messages=participant_messages,
@@ -514,6 +520,10 @@ class Orchestrator:
                 chatroom_context=self.chatroom_context,
                 incivility_framework=self.incivility_framework,
             ),
+            agent_ideology=agent_ideology,
+            participant_name=self.state.user_name,
+            agent_name=agent_name,
+            recent_context=recent_context,
         )
 
         classifier_raw = None
@@ -1099,7 +1109,7 @@ class Orchestrator:
             # to avoid burning tokens on messages that will be discarded anyway.
             # Classification for the final approved message happens after the loop.
             if self._expected_like_minded_for_agent(agent_name) is not None:
-                pre_classification = await self._classify_message(agent_message=candidate_content)
+                pre_classification = await self._classify_message(agent_message=candidate_content, agent_name=agent_name)
                 if self._message_contradicts_fixed_stance(agent_name, pre_classification):
                     expected_like_minded = self._expected_like_minded_for_agent(agent_name)
                     actual_like_minded = pre_classification.get("is_like_minded")
@@ -1145,7 +1155,7 @@ class Orchestrator:
 
         # Classify the final approved message once, outside the retry loop.
         if content is not None:
-            classification = await self._classify_message(agent_message=content)
+            classification = await self._classify_message(agent_message=content, agent_name=agent_name)
 
         if content is None:
             self.logger.log_error(

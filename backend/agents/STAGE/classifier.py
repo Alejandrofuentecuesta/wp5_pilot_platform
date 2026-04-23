@@ -24,6 +24,17 @@ def _format_participant_messages(messages: List[Message]) -> str:
     return "\n".join(lines)
 
 
+def _format_recent_context(messages: List[Message], participant_name: str) -> str:
+    """Format up to 3 recent messages before the agent message for context."""
+    if not messages:
+        return "(No recent context)"
+    lines = []
+    for m in messages:
+        label = "Participant" if m.sender == participant_name else m.sender
+        lines.append(f"- {label}: {m.content}")
+    return "\n".join(lines)
+
+
 def build_classifier_system_prompt(chatroom_context: str = "") -> str:
     prompt = _SYSTEM_TEMPLATE
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
@@ -36,6 +47,10 @@ def build_classifier_user_prompt(
     agent_message: str,
     prompt_template: Optional[str] = None,
     chatroom_context: str = "",
+    agent_ideology: Optional[str] = None,
+    participant_name: Optional[str] = None,
+    agent_name: Optional[str] = None,
+    recent_context: Optional[List[Message]] = None,
 ) -> str:
     template = (
         prompt_template
@@ -46,6 +61,34 @@ def build_classifier_user_prompt(
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
     prompt = prompt.replace("{PARTICIPANT_MESSAGES}", _format_participant_messages(participant_messages))
     prompt = prompt.replace("{AGENT_MESSAGE}", agent_message)
+
+    # Agent ideology hint
+    if agent_ideology:
+        ideology_line = f"Agent ideology: {agent_ideology} (left=pro-measure, right=anti-measure, center=neutral)"
+    else:
+        ideology_line = ""
+    prompt = prompt.replace("{AGENT_IDEOLOGY}", ideology_line)
+
+    # Whether the agent message directly addresses the participant
+    mentions_participant = False
+    if participant_name and agent_name:
+        lower_msg = agent_message.lower()
+        lower_participant = participant_name.lower()
+        mentions_participant = (
+            f"@{lower_participant}" in lower_msg
+            or lower_participant in lower_msg
+        )
+    addresses_participant = "yes" if mentions_participant else "no"
+    prompt = prompt.replace("{ADDRESSES_PARTICIPANT}", addresses_participant)
+
+    # Recent chat context (last 3 messages before the agent message)
+    ctx_messages = (recent_context or [])[-3:]
+    context_str = _format_recent_context(
+        ctx_messages,
+        participant_name=participant_name or "",
+    )
+    prompt = prompt.replace("{RECENT_CONTEXT}", context_str)
+
     return prompt
 
 

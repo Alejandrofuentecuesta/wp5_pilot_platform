@@ -1,6 +1,13 @@
 # Classifier Task
 
-Infer the participant's stance from the participant messages below and classify the agent message.
+## Agent Context
+
+{AGENT_IDEOLOGY}
+Directly addresses participant: {ADDRESSES_PARTICIPANT}
+
+## Recent Chat Context (last messages before the agent message)
+
+{RECENT_CONTEXT}
 
 ## Participant Messages
 

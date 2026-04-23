@@ -48,6 +48,33 @@ Read the performer profiles and participation counts below. Which performer is b
 
 **Qualified participant stances:** If the participant self-report says they are only *qualifiedly* in favor or against (for example, they support the general goal but think this specific measure is too weak, or they reject this measure without sharing the opposite camp's whole worldview), keep the treatment mapping on the same broad side (`qualified_favor` counts with favor, `qualified_against` counts with against). But when choosing performers, prefer disagreement that is close to the participant's frame before jumping to the hardest ideological opposition. In those cases, a good `not-like-minded` choice often disagrees about the adequacy, realism, or design of the measure rather than rejecting the whole underlying goal.
 
+**Secondary topic-stance selector:** In addition to the participant's stance on the measure, infer a softer `participant_topic_stance` from the participant's actual messages, using the self-report only as a hint:
+- `pro_topic`: they support the broader underlying cause or group (for example, pro immigration, or pro climate action).
+- `anti_topic`: they oppose the broader underlying cause or group.
+- `unclear`: you cannot tell reliably.
+
+Use this only as a secondary selector. Do **not** redefine `like-minded` or `not-like-minded` with it.
+
+- The participant's stance on the **measure** still decides who is `like-minded` and who is `not-like-minded`.
+- The inferred `participant_topic_stance` only decides what **kind** of support or opposition will feel most natural.
+
+If `participant_topic_stance = pro_topic`:
+- and the participant is `favor` on the measure:
+  - prefer `like-minded` performers who are also broadly `pro_topic`;
+  - prefer `not-like-minded` performers who oppose the participant from the harder anti-topic side.
+- and the participant is `against` on the measure:
+  - prefer `like-minded` performers who are still broadly `pro_topic` but criticize this specific measure;
+  - allow `not-like-minded` performers of two natural kinds:
+    - performers who are broadly `pro_topic` but defend the measure;
+    - performers who are broadly `anti_topic` and oppose the participant from a harder ideological position.
+
+If `participant_topic_stance = anti_topic`:
+- prefer `like-minded` performers who are also broadly `anti_topic`;
+- prefer `not-like-minded` performers who are broadly `pro_topic`.
+
+If `participant_topic_stance = unclear`:
+- ignore this secondary signal and choose performers only from the participant's stance on the measure.
+
 {#USER}
 {AGENT_PROFILES}
 

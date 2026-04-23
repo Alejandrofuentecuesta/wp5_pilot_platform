@@ -105,7 +105,20 @@ function normalizeExperimentalConfig(config: ExperimentalConfig): ExperimentalCo
     incivility_framework: config.incivility_framework ?? "",
     ecological_validity_criteria: config.ecological_validity_criteria ?? "",
     redirect_url: config.redirect_url ?? "",
-    groups: config.groups ?? {},
+    agent_pool: config.agent_pool
+      ? config.agent_pool.map((agent) => ({ ...agent }))
+      : undefined,
+    groups: Object.fromEntries(
+      Object.entries(config.groups ?? {}).map(([name, group]) => [
+        name,
+        {
+          ...group,
+          features: [...(group.features ?? [])],
+          seed: group.seed ? { ...group.seed } : undefined,
+          pool_agent_ids: group.pool_agent_ids ? [...group.pool_agent_ids] : undefined,
+        },
+      ])
+    ),
   }
 }
 

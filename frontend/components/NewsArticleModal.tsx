@@ -37,11 +37,17 @@ export default function NewsArticleModal({
   const title = message.headline || "News article"
   const source = message.source || "Source not specified"
   const body = message.body || message.content
+  const combinedText = `${title}\n${body}`.toLowerCase()
+  const topicQualifiedAgainstLabel = /(climate|clima|emissions|emisiones|co2|carbon|fossil|global warming|calentamiento)/.test(combinedText)
+    ? "In favor of climate action, but against this measure"
+    : /(immigration|inmigr|migrant|migraci|asylum|refugee|frontera|border)/.test(combinedText)
+      ? "Pro immigration, but against this measure"
+      : "In favor of the topic, but against this measure"
   const stanceLabels: Record<NonNullable<ParticipantStance>, string> = {
-    favor: "In favor",
-    against: "Against",
+    favor: "In favor of the measure",
+    against: "Against the measure",
     qualified_favor: "In favor, but with important reservations",
-    qualified_against: "Against, but not aligned with the opposite side",
+    qualified_against: topicQualifiedAgainstLabel,
     skeptical: "Skeptical / unsure",
   }
   const currentStance = selectedStance || participantStance
@@ -121,11 +127,9 @@ export default function NewsArticleModal({
               <option value="" disabled>
                 Select one option
               </option>
-              <option value="favor">In favor</option>
-              <option value="qualified_favor">In favor, but this measure is flawed / insufficient</option>
-              <option value="against">Against</option>
-              <option value="qualified_against">Against, but not for the usual opposite-side reasons</option>
-              <option value="skeptical">Skeptical / unsure</option>
+              <option value="favor">In favor of the measure</option>
+              <option value="against">Against the measure</option>
+              <option value="qualified_against">{topicQualifiedAgainstLabel}</option>
             </select>
             <p className="text-xs text-secondary">
               Selected: <span className="font-medium text-primary">{stanceLabel}</span>

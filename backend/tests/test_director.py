@@ -169,6 +169,28 @@ class TestBuildActionSystemPrompt:
         assert "prefer disagreement that is close to the participant's frame" in prompt
         assert "adequacy, realism, or design of the measure" in prompt
 
+    def test_adds_secondary_topic_stance_selector_without_redefining_like_minded(self):
+        prompt = build_action_system_prompt(
+            chatroom_context="Debate migratorio",
+            participant_stance_hint="participant self-report: against the article",
+            participant_name="Martin",
+        )
+        assert "Secondary topic-stance selector" in prompt
+        assert "Do **not** redefine `like-minded` or `not-like-minded` with it" in prompt
+        assert "The participant's stance on the **measure** still decides" in prompt
+        assert "what **kind** of support or opposition will feel most natural" in prompt
+
+    def test_topic_stance_rules_cover_pro_topic_against_measure_case(self):
+        prompt = build_action_system_prompt(
+            chatroom_context="Debate migratorio",
+            participant_stance_hint="participant self-report: broadly against the measure as framed, but not necessarily aligned with the opposite ideological camp",
+            participant_name="Martin",
+        )
+        assert "If `participant_topic_stance = pro_topic`" in prompt
+        assert "prefer `like-minded` performers who are still broadly `pro_topic` but criticize this specific measure" in prompt
+        assert "performers who are broadly `pro_topic` but defend the measure" in prompt
+        assert "performers who are broadly `anti_topic` and oppose the participant from a harder ideological position" in prompt
+
     def test_requires_targeted_room_messages_to_name_opposition_and_non_validation(self):
         prompt = build_action_system_prompt(
             chatroom_context="Debate migratorio",

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { ExperimentalConfig, TreatmentGroup, SeedArticle, FeatureMeta, PoolAgent, HumanizeRules } from "../../../lib/admin-types"
 import { createExperimental3x3Preset } from "../../../lib/treatment-presets"
 import { createSeedFromTemplate, getNewsTemplateById, NEWS_TEMPLATE_OPTIONS, type NewsTemplateId } from "../../../lib/news-story-options"
@@ -18,6 +18,17 @@ interface StepTreatmentsProps {
 
 const inputClass = "w-full px-3 py-2 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30"
 const DEFAULT_GROUP_FEATURES = ["news_article", "gate_until_user_post"]
+
+function detectGlobalTemplateId(groups: Record<string, TreatmentGroup>): string {
+  const templateIds = Object.values(groups)
+    .filter((group) => (group.features ?? DEFAULT_GROUP_FEATURES).includes("news_article"))
+    .map((group) => group.seed?.template_id)
+    .filter((templateId): templateId is string => Boolean(templateId))
+
+  if (templateIds.length === 0) return ""
+  const [first] = templateIds
+  return templateIds.every((templateId) => templateId === first) ? first : ""
+}
 
 function SeedEditor({
   seed,
@@ -588,6 +599,11 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
   const [dimB, setDimB] = useState({ name: "", levels: ["", ""] })
   const [selectedNewsTemplate, setSelectedNewsTemplate] = useState("")
 
+  useEffect(() => {
+    const detectedTemplateId = detectGlobalTemplateId(config.groups)
+    setSelectedNewsTemplate((current) => (current === detectedTemplateId ? current : detectedTemplateId))
+  }, [config.groups])
+
   const groupEntries = Object.entries(config.groups)
   const agentPool = config.agent_pool || []
 
@@ -665,10 +681,36 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
     return nextGroups
   }
 
+  const applyTemplateToAllNewsGroups = (
+    groups: Record<string, TreatmentGroup>,
+    templateId: string
+  ): Record<string, TreatmentGroup> => {
+    const templateSeed = createSeedFromTemplate(templateId)
+    if (!templateSeed) return groups
+
+    const nextGroups: Record<string, TreatmentGroup> = {}
+    for (const [groupName, group] of Object.entries(groups)) {
+      const groupFeatures = group.features ?? DEFAULT_GROUP_FEATURES
+      if (!groupFeatures.includes("news_article")) {
+        nextGroups[groupName] = group
+        continue
+      }
+
+      nextGroups[groupName] = {
+        ...group,
+        features: groupFeatures,
+        seed: {
+          ...templateSeed,
+        },
+      }
+    }
+    return nextGroups
+  }
+
   const applyTemplateToCurrentGroups = (templateId: string) => {
     let nextConfig: ExperimentalConfig = {
       ...config,
-      groups: populateEmptySeedFields(config.groups, templateId),
+      groups: applyTemplateToAllNewsGroups(config.groups, templateId),
     }
 
     if (agentMode === "pool" && templateId) {
@@ -693,7 +735,9 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
 
     onChange({
       ...config,
-      groups: populateEmptySeedFields(nextGroups, selectedNewsTemplate),
+      groups: selectedNewsTemplate
+        ? applyTemplateToAllNewsGroups(nextGroups, selectedNewsTemplate)
+        : populateEmptySeedFields(nextGroups, selectedNewsTemplate),
     })
   }
 
@@ -758,7 +802,9 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
     const preset = createExperimental3x3Preset(selectedNewsTemplate || undefined)
     let nextConfig: ExperimentalConfig = {
       ...preset,
-      groups: populateEmptySeedFields(preset.groups, selectedNewsTemplate),
+      groups: selectedNewsTemplate
+        ? applyTemplateToAllNewsGroups(preset.groups, selectedNewsTemplate)
+        : populateEmptySeedFields(preset.groups, selectedNewsTemplate),
     }
 
     if (agentMode === "pool" && selectedNewsTemplate) {
@@ -801,7 +847,7 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
             ))}
           </select>
           <p className="text-xs text-admin-faint mt-1">
-            Applies to all treatments with <code>news_article</code> and only fills empty fields. You can edit every treatment manually afterwards.
+            Applies to all treatments with <code>news_article</code> and replaces the current article seed in those groups. You can edit every treatment manually afterwards.
             {agentMode === "pool" ? " In agent mode, selecting a story also loads its matching topic pool preset." : ""}
           </p>
         </div>

@@ -64,7 +64,7 @@ function AgentModeHelpModal({ onClose }: { onClose: () => void }) {
                   <li>Build the agent pool in the <strong>Treatments</strong> step — assign each agent a stance, incivility level, and persona.</li>
                   <li>Per treatment, pick the candidate agent IDs (<em>pool_agent_ids</em>) the backend may draw from.</li>
                   <li>Set <code>LIKEMINDED_TARGET</code> and <code>INCIVILITY_TARGET</code> percentages in the validity criteria.</li>
-                  <li>When a participant joins, the backend reads their self-report (favor / against / qualified favor / qualified against / skeptical) and selects the agents that best satisfy the treatment quotas.</li>
+                  <li>When a participant joins, the backend reads their self-report (in favor of the measure / against the measure / in favor of the topic but against the measure) and selects the agents that best satisfy the treatment quotas.</li>
                   <li>The Director still orchestrates turn-by-turn, but the agents&apos; trait labels are fixed — no prompting is needed to enforce stance or incivility.</li>
                 </ol>
               </div>

@@ -32,7 +32,7 @@ export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is define
   Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism.
   This includes restricting freedoms, delegitimizing elections or institutions, promoting autocratic rule, or using authoritarian patriotic slogans in an endorsing way.
   Do not code this dimension if the message only describes, reports on, or analyses threats to democracy without endorsing them.
-  Examples: "Todo el proceso electoral es una farsa. Nuestros votos no importan", "No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene", "Con Franco se vivia mejor", "Arriba Espana!".
+  Examples: "Todo el proceso electoral es una farsa. Nuestros votos no importan", "No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene", "Con Franco se vivia mejor", "¡Arriba España!".
 
 - Hate Speech and Stereotyping:
   Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or racist insults is included.
@@ -74,7 +74,7 @@ Incivility level mapping:
   - Allowed incivility at this level is limited to mild rudeness, sarcasm, mockery, or dismissive tone.
 
 - medium:
-  - Impoliteness: medium including sarcasm, mockery, dismissiveness.
+  - Impoliteness: medium including sarcasm, mockery, dismissiveness, as well as name-calling.
   - Hate speech and stereotyping: indirect or problematic group generalizations may appear, but without slurs or explicit dehumanization.
   - Threats to democratic freedoms: mild delegitimizing or manipulative anti-democratic claims may appear.
   - Style: short and natural.
@@ -82,8 +82,8 @@ Incivility level mapping:
 
 - high:
   - Impoliteness: all uncivil messages must be obviously impolite. Include strong insults, rudeness, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
-  - Hate speech and stereotyping: stronger stereotyped group contempt may appear, but without explicit dehumanization. Slurs may appear frequently.
-  - Threats to democratic freedoms: strong delegitimizing or pro-authoritarian framing may appear.
+  - Hate speech and stereotyping: strong stereotyped group contempt with frequent slurs should appear, but without explicit dehumanization. 
+  - Threats to democratic freedoms: strong delegitimizing or pro-authoritarian framing should appear.
   - Style: short, sharp, and confrontational. Prioritize hostility rather than elaborate arguments.
   - Uncivility should read as very incivil to a human coder.
 

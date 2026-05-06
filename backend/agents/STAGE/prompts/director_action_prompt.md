@@ -95,23 +95,19 @@ Select exactly one action type:
   Do not use `message` for older messages or for general room-wide commentary unless there is no natural target.
 - `reply`: A quote-reply to a specific earlier message that is not the most recent one. Requires `target_message_id`.
 - `@mention`: A message that explicitly calls a specific performer back into the conversation when that performer did not send the most recent message. Requires `target_user`.
-- `like`: A non-verbal endorsement of a message. Requires `target_message_id`.
-
 Rules:
 - Prefer reacting to a recent person or message rather than speaking to the room in general.
 - A non-targeted room-wide `message` should be rare, maximum 3 times in a session.
-- If there is a natural recent target, use `message`, `reply`, `@mention`, or `like` instead of a room-wide opener.
+- If there is a natural recent target, use `message`, `reply`, or `@mention` instead of a room-wide opener.
 - If using `message` for an underrepresented side, name who or what the performer is pushing against, and who they must not validate or echo. Avoid vague instructions like "reinforce your side" with no named target.
 
 **Action mix guidelines:**
-- Target approximately: 40% messages, 15% likes, 30% replies, 15% @mentions.
+- Target approximately: 45% messages, 35% replies, 20% @mentions.
 - After any agent or participant posts a substantive message, at least one other agent should `reply` to it before the conversation moves on.
-- When choosing `like`, pick the most recent message that has not yet been liked by the chosen performer.
 
 **Chained reactions - participant interaction:**
 - If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This overrides all other considerations.
-- If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back. Other agents may then `like` or `reply` to continue the thread.
-- After the direct reply is handled, encourage other agents to `like` or react - this makes the exchange feel like a real group conversation rather than a one-on-one.
+- If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back.
 
 **Reply/mention when not addressing the latest message:** If the performer is responding to someone whose message is NOT the most recent in the chat log, always use `reply` (with `target_message_id`) or `@mention` (with `target_user`) - never a plain `message`. This prevents confusing out-of-context responses.
 
@@ -119,7 +115,7 @@ Rules:
 
 **Variety:** Avoid two consecutive actions from the same agent unless a direct follow-up from that same agent is clearly necessary.
 
-**No same-cell infighting:** If two agents share the same fixed `alignment_cell`, do not have them attack, mock, or directly challenge each other. When agents from the same cell interact, it should be supportive, additive, or a simple `like`; if a direct attack would be needed, choose a different target or use a room-directed `message` instead.
+**No same-cell infighting:** If two agents share the same fixed `alignment_cell`, do not have them attack, mock, or directly challenge each other. When agents from the same cell interact, it should be supportive or additive; if a direct attack would be needed, choose a different target or use a room-directed `message` instead.
 
 **Protect the participant from severe direct abuse:** Even in incivil treatments, do not instruct agents to use severe personal insults directly at the human participant. They may strongly criticize the participant's opinion, reasoning, framing, or coalition. Mild direct labels such as "ingenuo" or "ignorante" are acceptable when natural, but stronger abuse, degrading name-calling, or direct personal humiliation toward the participant is not.
 
@@ -127,7 +123,7 @@ Rules:
 
 Translate the priority, performer, and action into an instruction for the performer.
 
-For non-like actions, provide three fields:
+Provide three fields:
 
 - **Objective** - The outcome this action should achieve. Describe the desired result, not the action itself.
 - **Motivation** - Why this performer is moved to do this now.
@@ -151,7 +147,7 @@ Respond with a JSON object using exactly this structure:
   "performer_rationale": "Why this performer is best positioned to address the priority (1 sentence).",
   "action_rationale": "Why this action type and target allow the performer to deliver on the priority (1 sentence).",
   "next_performer": "performer_name",
-  "action_type": "message | reply | @mention | like",
+  "action_type": "message | reply | @mention",
   "target_user": "username or null",
   "target_message_id": "msg_id or null",
   "performer_instruction": {
@@ -164,5 +160,5 @@ Respond with a JSON object using exactly this structure:
 
 **Conditions:**
 - `target_user`: The member being targeted, or null if addressing the room.
-- `target_message_id`: Required for `reply` and `like`, null otherwise.
-- `performer_instruction`: Required unless `action_type` is `like`.
+- `target_message_id`: Required for `reply`, null otherwise.
+- `performer_instruction`: Always required.

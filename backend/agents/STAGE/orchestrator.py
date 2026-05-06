@@ -258,6 +258,7 @@ class Orchestrator:
 
         # Build the shuffled name mapping (stable for the session lifetime).
         _rng = rng or random.Random()
+        self._rng = _rng
         agent_names = [a.name for a in state.agents]
         self._name_map = build_name_map(agent_names, state.user_name, _rng)
         self._reverse_map = {v: k for k, v in self._name_map.items()}
@@ -285,6 +286,12 @@ class Orchestrator:
         self._action_counts: Dict[str, int] = {
             "message": 0, "reply": 0, "@mention": 0, "like": 0,
         }
+
+        # Probabilistic like injection: probability that a turn becomes an
+        # automatic random like (resolved locally, never sent to the LLM).
+        # How many of the most recent messages are eligible targets.
+        self.auto_like_probability: float = 0.15
+        self.auto_like_recency_window: int = 5
 
         # Per-performer action counts (keyed by anonymous name).
         self._performer_counts: Dict[str, int] = {
@@ -870,6 +877,62 @@ class Orchestrator:
         """Map an anonymous label back to the real name."""
         return self._reverse_map.get(anon_name, anon_name)
 
+    def _try_auto_like(
+        self,
+        allowed_performers: Optional[Set[str]],
+        rng: random.Random,
+    ) -> Optional[TurnResult]:
+        """Attempt to inject a probabilistic like without calling the LLM.
+
+        Picks a random eligible agent and the most recent message that agent
+        has not already liked.  Returns a ready TurnResult, or None if no
+        valid target exists or the RNG roll fails.
+        """
+        if rng.random() >= self.auto_like_probability:
+            return None
+
+        agents = [a.name for a in self.state.agents if a.name != self.state.user_name]
+        if allowed_performers is not None:
+            agents = [n for n in agents if n in allowed_performers]
+        if not agents:
+            return None
+
+        # Candidate messages: N most recent, from anyone.
+        recent = self.state.messages[-self.auto_like_recency_window:]
+        if not recent:
+            return None
+
+        rng.shuffle(agents)
+        for agent_name in agents:
+            likeable = [
+                m for m in reversed(recent)
+                if agent_name not in (m.liked_by or set())
+                and m.sender != agent_name
+            ]
+            if not likeable:
+                continue
+
+            target = likeable[0]
+            self._action_counts["like"] += 1
+            anon_name = self._name_map.get(agent_name, agent_name)
+            self._performer_counts[anon_name] = self._performer_counts.get(anon_name, 0) + 1
+            self._last_agent = anon_name
+            self._last_action_type = "like"
+            self.logger.log_error(
+                "auto_like",
+                f"Auto-like: '{agent_name}' -> {target.message_id} ({target.sender})",
+            )
+            return TurnResult(
+                action_type="like",
+                agent_name=agent_name,
+                target_message_id=target.message_id,
+                priority="low",
+                performer_rationale="auto",
+                action_rationale="probabilistic like injection",
+            )
+
+        return None
+
     async def execute_turn(
         self,
         internal_validity_criteria: str,
@@ -955,6 +1018,11 @@ class Orchestrator:
         allowed_anon.add(self._anon_user)
         action_profiles = {k: v for k, v in self.agent_profiles.items() if k in allowed_anon}
         action_perf_counts = {k: v for k, v in self._performer_counts.items() if k in allowed_anon}
+
+        # Probabilistic like: resolve locally before calling the LLM.
+        auto_like = self._try_auto_like(base_allowed_real, self._rng)
+        if auto_like is not None:
+            return auto_like
 
         action_data = await self._director_action(
             anon_recent_action,

@@ -1666,7 +1666,7 @@ function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimen
         <div className="px-5 py-3 border-b border-admin-border">
           <h3 className="text-sm font-semibold text-admin-text">Treatment Fidelity by Group</h3>
           <p className="text-xs text-admin-muted mt-0.5">
-            Shows actual incivility and like-mindedness rates across all agent messages in completed/active sessions.
+            Shows actual incivility and structural like-mindedness rates across all agent messages in completed/active sessions.
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -1708,7 +1708,7 @@ function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimen
       </div>
 
       <p className="text-[10px] text-admin-faint">
-        Refreshes every 15 seconds. Incivility and like-mindedness rates are computed from agent messages only (participant messages are excluded). Like-mindedness denominator excludes messages where participant stance could not be inferred.
+        Refreshes every 15 seconds. Incivility and like-mindedness rates are computed from agent messages only (participant messages are excluded). Like-mindedness uses structural alignment from the participant cell and the agent pool, and excludes messages where that alignment could not be resolved.
       </p>
     </div>
   )

@@ -38,6 +38,112 @@ def _parse_iso_datetime(raw: str) -> datetime:
     return datetime.fromisoformat(raw.replace("Z", "+00:00"))
 
 
+def _normalize_participant_stance_hint(raw_stance: Optional[str]) -> Optional[str]:
+    value = (raw_stance or "").strip().lower()
+    if value in {"favor", "supports", "support", "pro", "agree"}:
+        return "favor"
+    if value in {"against", "oppose", "opposes", "anti", "disagree"}:
+        return "against"
+    if value in {
+        "qualified_against",
+        "pro_topic_but_against_measure",
+        "broadly against the measure as framed, but not necessarily aligned with the opposite ideological camp",
+    }:
+        return "qualified_against"
+    return value or None
+
+
+def _participant_alignment_cell_from_hint(raw_stance: Optional[str]) -> Optional[str]:
+    stance = _normalize_participant_stance_hint(raw_stance)
+    if stance == "favor":
+        return "pro_policy_pro_topic"
+    if stance == "qualified_against":
+        return "anti_policy_pro_topic"
+    if stance == "against":
+        return "anti_policy_anti_topic"
+    return None
+
+
+def _participant_alignment_cell_from_message(message_text: Optional[str]) -> Optional[str]:
+    text = (message_text or "").strip().lower()
+    if not text:
+        return None
+
+    pro_topic_markers = [
+        "la inmigracion es un derecho",
+        "los inmigrantes necesitan",
+        "mas garantias",
+        "combatir el cambio climatico",
+        "accion climatica",
+        "hay que actuar contra el cambio climatico",
+    ]
+    anti_topic_markers = [
+        "sobran inmigrantes",
+        "traer a mas gente",
+        "no quiero inmigrantes",
+        "el cambio climatico es una farsa",
+        "no existe el cambio climatico",
+        "cuento climatico",
+    ]
+    anti_policy_markers = [
+        "este plan es",
+        "esta medida es",
+        "este acuerdo es",
+        "me parece mal",
+        "es una porqueria",
+        "es una mierda",
+        "es insuficiente",
+        "esta mal planteado",
+        "no me convence",
+    ]
+    pro_policy_markers = [
+        "me parece bien",
+        "esta bien",
+        "es necesario",
+        "hay que aprobarlo",
+        "apoyo el plan",
+        "apoyo la medida",
+        "apoyo el acuerdo",
+    ]
+
+    has_pro_topic = any(marker in text for marker in pro_topic_markers)
+    has_anti_topic = any(marker in text for marker in anti_topic_markers)
+    has_anti_policy = any(marker in text for marker in anti_policy_markers)
+    has_pro_policy = any(marker in text for marker in pro_policy_markers)
+
+    if has_pro_topic and has_anti_policy and not has_anti_topic:
+        return "anti_policy_pro_topic"
+    if has_anti_topic and has_anti_policy:
+        return "anti_policy_anti_topic"
+    if has_pro_topic and has_pro_policy:
+        return "pro_policy_pro_topic"
+    return None
+
+
+def _resolve_participant_alignment_cell(raw_stance: Optional[str], first_message_text: Optional[str]) -> Optional[str]:
+    return _participant_alignment_cell_from_message(first_message_text) or _participant_alignment_cell_from_hint(raw_stance)
+
+
+def _agent_alignment_cell_from_pool_agent(agent: Dict[str, Any]) -> Optional[str]:
+    explicit = str(agent.get("alignment_cell", "")).strip().lower()
+    if explicit in {
+        "pro_policy_pro_topic",
+        "anti_policy_pro_topic",
+        "anti_policy_anti_topic",
+    }:
+        return explicit
+
+    policy_stance = str(agent.get("policy_stance", "")).strip().lower()
+    topic_stance = str(agent.get("topic_stance", "")).strip().lower()
+    if policy_stance == "pro_policy" and topic_stance == "pro_topic":
+        return "pro_policy_pro_topic"
+    if policy_stance == "anti_policy" and topic_stance == "pro_topic":
+        return "anti_policy_pro_topic"
+    if policy_stance == "anti_policy" and topic_stance == "anti_topic":
+        return "anti_policy_anti_topic"
+    return None
+
+
 # ── Configuration ─────────────────────────────────────────────────────────────
 
 DATABASE_URL = os.environ.get(
@@ -1695,7 +1801,7 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
     - classified_count: agent messages that were classified (is_incivil not null)
     - incivil_count / incivil_pct: number and % of incivil agent messages
     - like_minded_count / like_minded_pct: number and % of like-minded agent messages
-      (denominator is stance_classified_count, i.e. only messages where like-mindedness was determined)
+      (denominator is stance_classified_count, i.e. only messages where structural alignment could be resolved)
     """
     _require_admin(x_admin_key)
     pool = _get_pool()
@@ -1704,23 +1810,34 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
     if not experiment:
         raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
 
+    exp_config = await config_repo.get_experiment_config(pool, experiment_id)
+    agent_pool = ((exp_config or {}).get("experimental") or {}).get("agent_pool") or []
+    agent_cell_by_name: Dict[str, str] = {}
+    for agent in agent_pool:
+        if not isinstance(agent, dict):
+            continue
+        name = str(agent.get("name", "")).strip()
+        cell = _agent_alignment_cell_from_pool_agent(agent)
+        if name and cell:
+            agent_cell_by_name[name] = cell
+
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT
+                s.session_id,
                 s.treatment_group,
-                COUNT(DISTINCT s.session_id)                                        AS session_count,
-                COUNT(m.message_id) FILTER (WHERE m.is_incivil IS NOT NULL)         AS classified_count,
-                COUNT(m.message_id) FILTER (WHERE m.is_incivil = true)              AS incivil_count,
-                COUNT(m.message_id) FILTER (WHERE m.is_like_minded IS NOT NULL)     AS stance_classified_count,
-                COUNT(m.message_id) FILTER (WHERE m.is_like_minded = true)          AS like_minded_count
+                s.user_name,
+                s.participant_stance,
+                m.sender,
+                m.content,
+                m.is_incivil,
+                m.sent_at
             FROM sessions s
             LEFT JOIN messages m
                 ON s.session_id = m.session_id
-                AND m.sender != s.user_name
             WHERE s.experiment_id = $1
-            GROUP BY s.treatment_group
-            ORDER BY s.treatment_group
+            ORDER BY s.treatment_group, s.session_id, m.sent_at
             """,
             experiment_id,
         )
@@ -1728,15 +1845,72 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
     def _pct(num, den):
         return round(100.0 * num / den, 1) if den > 0 else None
 
-    groups = []
+    session_data: Dict[str, Dict[str, Any]] = {}
     for r in rows:
-        classified = r["classified_count"]
-        incivil = r["incivil_count"]
-        stance_classified = r["stance_classified_count"]
-        like_minded = r["like_minded_count"]
+        session_id = r["session_id"]
+        if session_id not in session_data:
+            session_data[session_id] = {
+                "group": r["treatment_group"],
+                "user_name": r["user_name"],
+                "participant_stance": r["participant_stance"],
+                "messages": [],
+            }
+        if r["sender"] is not None:
+            session_data[session_id]["messages"].append({
+                "sender": r["sender"],
+                "content": r["content"],
+                "is_incivil": r["is_incivil"],
+            })
+
+    grouped: Dict[str, Dict[str, int]] = {}
+    for data in session_data.values():
+        group = data["group"]
+        stats = grouped.setdefault(group, {
+            "session_count": 0,
+            "classified_count": 0,
+            "incivil_count": 0,
+            "stance_classified_count": 0,
+            "like_minded_count": 0,
+        })
+        stats["session_count"] += 1
+
+        participant_name = data["user_name"]
+        participant_messages = [
+            m for m in data["messages"]
+            if m["sender"] == participant_name and (m.get("content") or "").strip()
+        ]
+        first_participant_text = participant_messages[0]["content"] if participant_messages else None
+        participant_cell = _resolve_participant_alignment_cell(
+            data["participant_stance"],
+            first_participant_text,
+        )
+
+        for message in data["messages"]:
+            sender = message["sender"]
+            if sender == participant_name:
+                continue
+
+            if message["is_incivil"] is not None:
+                stats["classified_count"] += 1
+                if message["is_incivil"] is True:
+                    stats["incivil_count"] += 1
+
+            agent_cell = agent_cell_by_name.get(str(sender))
+            if participant_cell and agent_cell:
+                stats["stance_classified_count"] += 1
+                if agent_cell == participant_cell:
+                    stats["like_minded_count"] += 1
+
+    groups = []
+    for group_name in sorted(grouped):
+        stats = grouped[group_name]
+        classified = stats["classified_count"]
+        incivil = stats["incivil_count"]
+        stance_classified = stats["stance_classified_count"]
+        like_minded = stats["like_minded_count"]
         groups.append({
-            "group": r["treatment_group"],
-            "session_count": r["session_count"],
+            "group": group_name,
+            "session_count": stats["session_count"],
             "classified_count": classified,
             "incivil_count": incivil,
             "incivil_pct": _pct(incivil, classified),

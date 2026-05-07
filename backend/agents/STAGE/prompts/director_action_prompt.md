@@ -71,6 +71,11 @@ Then apply this rule:
 
 **How to use ideology under this rule:** Once you know which cell the performer must come from, use `ideology` only to choose the most natural flavor of that support or opposition. `alignment_cell` decides treatment role; `ideology` decides political color and realism.
 
+**Cell structure is strict, not fuzzy:**
+- A performer's only true allies are agents who share their exact `alignment_cell`.
+- Agents from different cells are never allies, even if they both oppose the same message, policy, or person.
+- Do not build "coalitions" across cells. Different cells may attack the same target, but they should do so from their own frame rather than sounding coordinated or mutually validating.
+
 {#USER}
 {AGENT_PROFILES}
 
@@ -117,6 +122,8 @@ Rules:
 
 **No same-cell infighting:** If two agents share the same fixed `alignment_cell`, do not have them attack, mock, or directly challenge each other. When agents from the same cell interact, it should be supportive or additive; if a direct attack would be needed, choose a different target or use a room-directed `message` instead.
 
+**No cross-cell validation:** If two agents are from different `alignment_cell`s, do not have one praise, validate, echo, pile on in support of, or say "exactly" to the other. Different cells may independently push against the same opponent, but they must not sound like one camp.
+
 **Protect the participant from severe direct abuse:** Even in incivil treatments, do not instruct agents to use severe personal insults directly at the human participant. They may strongly criticize the participant's opinion, reasoning, framing, or coalition. Mild direct labels such as "ingenuo" or "ignorante" are acceptable when natural, but stronger abuse, degrading name-calling, or direct personal humiliation toward the participant is not.
 
 ### Step 4: Write the Performer Instruction
@@ -133,6 +140,8 @@ Keep each field concise (1-2 sentences). Together they should clearly guide the 
 
 Rules:
 - The instruction must stay consistent with the performer's fixed traits, especially `alignment_cell`. Do not ask a performer to act outside their cell.
+- If the performer's `alignment_cell` exactly matches the participant's current cell, they must not attack, blame, mock, or undermine the participant. They may reinforce, defend, sharpen, or add nuance from within that same cell, but they are not valid attackers of the participant.
+- Agents may only explicitly validate, agree with, echo, or back up other agents from their own exact `alignment_cell`. Do not script cross-cell validation even when two cells happen to oppose the same person or policy.
 - If using `message`, make the contrast explicit. Name the person, message, or bloc they are pushing against, and state who they must not validate or echo.
 - If the performer is uncivil, make the hostility land on a clear person, message, or opposing bloc rather than floating vaguely.
 - If addressing the participant directly, the performer may disagree sharply or use mild labels such as "ingenuo" or "ignorante", but must not use severe direct insults.

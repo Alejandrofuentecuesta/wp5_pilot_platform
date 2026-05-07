@@ -221,6 +221,18 @@ class TestBuildActionSystemPrompt:
         assert "share the same fixed `alignment_cell`" in prompt
         assert "share the same `alignment_cell` must not be instructed to attack each other" in prompt
 
+    def test_forbids_cross_cell_validation_and_like_minded_attacks_on_participant(self):
+        prompt = build_action_system_prompt(
+            chatroom_context="Debate migratorio",
+            participant_stance_hint="participant self-report: against the article",
+            participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
+            participant_name="Martin",
+        )
+        assert "No cross-cell validation" in prompt
+        assert "do not have one praise, validate, echo, pile on in support of" in prompt
+        assert "must not attack, blame, mock, or undermine the participant" in prompt
+        assert "Agents may only explicitly validate, agree with, echo, or back up other agents from their own exact `alignment_cell`" in prompt
+
     def test_evaluate_prompt_requests_short_assessments(self):
         prompt = build_evaluate_system_prompt(
             internal_validity_criteria="Balance",

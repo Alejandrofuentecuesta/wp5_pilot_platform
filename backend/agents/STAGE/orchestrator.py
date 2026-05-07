@@ -358,6 +358,33 @@ class Orchestrator:
         target_cell = self._agent_alignment_cell_from_traits(target_traits)
         return actor_cell is not None and actor_cell == target_cell
 
+    def _agents_have_different_alignment_cells(self, actor_name: Optional[str], target_name: Optional[str]) -> bool:
+        """Return True when both agents have known alignment cells and they differ."""
+        if not actor_name or not target_name or actor_name == target_name:
+            return False
+
+        actor_traits = self._agent_traits.get(actor_name) or {}
+        target_traits = self._agent_traits.get(target_name) or {}
+        actor_cell = self._agent_alignment_cell_from_traits(actor_traits)
+        target_cell = self._agent_alignment_cell_from_traits(target_traits)
+        return actor_cell is not None and target_cell is not None and actor_cell != target_cell
+
+    @staticmethod
+    def _looks_like_agent_validation(content: Optional[str]) -> bool:
+        """Heuristic guard for explicit agreement language between agents."""
+        if not content:
+            return False
+        normalized = " ".join(str(content).lower().split())
+        return bool(re.search(
+            r"\b("
+            r"exacto|exactamente|tal cual|totalmente de acuerdo|"
+            r"estoy de acuerdo|coincido|tienes raz[oó]n|llevas raz[oó]n|"
+            r"muy de acuerdo|completamente de acuerdo|"
+            r"eso mismo|justo eso|pienso igual|opino igual"
+            r")\b",
+            normalized,
+        ))
+
     @staticmethod
     def _normalize_participant_stance_hint(raw_stance: Optional[str]) -> Optional[str]:
         """Collapse participant stance hints to comparable buckets."""
@@ -1178,6 +1205,8 @@ class Orchestrator:
                     "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
                 }
 
+        cross_cell_target = None
+
         # 3c. Prevent direct infighting between agents in the same alignment cell.
         if action_type in {"reply", "@mention", "message"}:
             same_side_target = None
@@ -1207,6 +1236,47 @@ class Orchestrator:
                     "motivation": "You occupy the same alignment cell, so infighting would feel incoherent and weaken the discussion.",
                     "directive": "Sound supportive or additive; do not criticize, mock, or challenge agents who share your alignment cell.",
                 }
+            else:
+                if target_user and self._agents_have_different_alignment_cells(agent_name, target_user):
+                    cross_cell_target = target_user
+                elif target_message_id and target_message_id:
+                    target_msg_for_guard = next(
+                        (m for m in self.state.messages if m.message_id == target_message_id),
+                        None,
+                    )
+                    if (
+                        target_msg_for_guard
+                        and self._agents_have_different_alignment_cells(agent_name, target_msg_for_guard.sender)
+                    ):
+                        cross_cell_target = target_msg_for_guard.sender
+
+                if cross_cell_target:
+                    existing_instruction = dict(action_data.get("performer_instruction") or {})
+                    directive = (existing_instruction.get("directive") or "").strip()
+                    contrastive_clause = (
+                        "You are addressing an agent from a different alignment cell: do not agree with, praise, "
+                        "validate, echo, or pile on in support of them. If you engage, make the contrast between "
+                        "your cell and theirs explicit."
+                    )
+                    existing_instruction["directive"] = (
+                        f"{directive} {contrastive_clause}".strip()
+                        if directive else contrastive_clause
+                    )
+                    action_data["performer_instruction"] = existing_instruction
+
+        if action_type in {"reply", "@mention", "message"} and target_user == self.state.user_name:
+            if self._expected_like_minded_for_agent(agent_name) is True:
+                existing_instruction = dict(action_data.get("performer_instruction") or {})
+                directive = (existing_instruction.get("directive") or "").strip()
+                support_clause = (
+                    "Your alignment cell matches the participant's current cell: do not attack, blame, mock, or "
+                    "undermine the participant. You may defend them, reinforce them, or sharpen their shared case."
+                )
+                existing_instruction["directive"] = (
+                    f"{directive} {support_clause}".strip()
+                    if directive else support_clause
+                )
+                action_data["performer_instruction"] = existing_instruction
 
         # 3b. Handle 'wait' — Director selected the human participant.
         #     Skip Performer/Moderator and restore evaluate counter
@@ -1494,6 +1564,32 @@ class Orchestrator:
                 candidate_reply_to = target_message_id
                 if target_message:
                     candidate_quoted_text = target_message.content
+
+            target_agent_for_validation = None
+            if target_user and target_user != self.state.user_name:
+                target_agent_for_validation = target_user
+            elif target_message and target_message.sender != self.state.user_name:
+                target_agent_for_validation = target_message.sender
+
+            if (
+                target_agent_for_validation
+                and self._agents_have_different_alignment_cells(agent_name, target_agent_for_validation)
+                and self._looks_like_agent_validation(candidate_content)
+            ):
+                self.logger.log_error(
+                    "performer_cross_cell_validation_retry",
+                    f"Generated message for '{agent_name}' validated '{target_agent_for_validation}' across alignment cells; retrying",
+                    context={"action_type": action_type},
+                )
+                performer_user_prompt = (
+                    f"{base_performer_user_prompt}\n\n"
+                    "Important correction:\n"
+                    "Your last draft sounded validating toward an agent from a different alignment cell.\n"
+                    "Rewrite it so you stay clearly inside your own cell. You may attack the same opponent or "
+                    "respond to the same topic, but do not agree with, praise, echo, or pile on in support of the target."
+                )
+                content = None
+                continue
 
             # Stance guard: only classify when a fixed-stance check is possible,
             # to avoid burning tokens on messages that will be discarded anyway.

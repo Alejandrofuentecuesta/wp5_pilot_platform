@@ -245,6 +245,12 @@ class TestOrchestratorInit:
             },
         )
         assert orch._agents_share_alignment_cell("Alice", "Bob") is False
+        assert orch._agents_have_different_alignment_cells("Alice", "Bob") is True
+
+    def test_validation_detector_catches_explicit_agreement_language(self):
+        assert Orchestrator._looks_like_agent_validation("Totalmente de acuerdo contigo.") is True
+        assert Orchestrator._looks_like_agent_validation("Exacto, eso mismo digo yo.") is True
+        assert Orchestrator._looks_like_agent_validation("No, eso no funciona.") is False
 
 
 # ── execute_turn: first turn (skip Update, warm-up Evaluate) ─────────────────
@@ -452,6 +458,52 @@ class TestExecuteTurnMessage:
         assert result.message is not None
         assert result.message.sender == "Alice"
         assert result.message.content == "Hello everyone!"
+
+    @pytest.mark.asyncio
+    async def test_cross_cell_validation_reply_retries_and_rewrites(self):
+        state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob")])
+        target = Message.create(sender="Bob", content="Esto es una farsa total.")
+        state.add_message(target)
+        orch, logger = _make_orchestrator(
+            state=state,
+            agent_traits={
+                "Alice": {"alignment_cell": "anti_policy_pro_topic"},
+                "Bob": {"alignment_cell": "anti_policy_anti_topic"},
+            },
+        )
+        anon_alice = orch._name_map["Alice"]
+
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(
+                next_performer=anon_alice,
+                action_type="reply",
+                target_message_id=target.message_id,
+            )
+        )
+        orch.performer_llm.generate_response = AsyncMock(
+            side_effect=[
+                "Totalmente de acuerdo contigo.",
+                "No, eso no arregla nada y lo planteas desde otro marco.",
+            ]
+        )
+        orch.moderator_llm.generate_response = AsyncMock(
+            side_effect=[
+                "Totalmente de acuerdo contigo.",
+                "No, eso no arregla nada y lo planteas desde otro marco.",
+            ]
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.message is not None
+        assert result.message.content == "No, eso no arregla nada y lo planteas desde otro marco."
+        assert orch.performer_llm.generate_response.call_count == 2
+        logger.log_error.assert_any_call(
+            "performer_cross_cell_validation_retry",
+            "Generated message for 'Alice' validated 'Bob' across alignment cells; retrying",
+            context={"action_type": "reply"},
+        )
 
 
 # ── execute_turn: like action ────────────────────────────────────────────────

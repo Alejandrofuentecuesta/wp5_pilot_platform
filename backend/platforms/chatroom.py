@@ -23,10 +23,8 @@ def _parse_target_percentage(criteria: str, label: str, default: int) -> int:
 
 def _incivility_order(target: int) -> List[str]:
     if target >= 67:
-        return ["uncivil", "moderate", "civil"]
-    if target <= 33:
-        return ["civil", "moderate", "uncivil"]
-    return ["moderate", "civil", "uncivil"]
+        return ["uncivil", "civil"]
+    return ["civil", "uncivil"]
 
 
 def _non_uncivil_order(target: int) -> List[str]:

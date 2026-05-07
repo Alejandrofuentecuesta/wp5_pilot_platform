@@ -259,9 +259,8 @@ export function getAgentPoolPreset(templateId?: string): PoolAgent[] {
 }
 
 function preferredIncivilityOrder(incivilityPct: number): AgentIncivility[] {
-  if (incivilityPct >= 67) return ["uncivil", "civil", "moderate"]
-  if (incivilityPct <= 33) return ["civil", "uncivil", "moderate"]
-  return ["civil", "uncivil", "moderate"]
+  if (incivilityPct >= 67) return ["uncivil", "civil"]
+  return ["civil", "uncivil"]
 }
 
 /**

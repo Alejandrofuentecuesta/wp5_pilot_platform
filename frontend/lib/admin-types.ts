@@ -64,7 +64,7 @@ export interface SimulationConfig {
   agent_mode?: "prompt" | "pool"
 }
 
-export type AgentIncivility = "civil" | "moderate" | "uncivil"
+export type AgentIncivility = "civil" | "uncivil"
 export type AgentIdeology = "left" | "center" | "right"
 export type AgentPolicyStance = "pro_policy" | "anti_policy"
 export type AgentTopicStance = "pro_topic" | "anti_topic"

@@ -400,6 +400,32 @@ class Orchestrator:
         ))
 
     @staticmethod
+    def _performer_output_needs_moderator(content: Optional[str]) -> bool:
+        """Return True only when performer output looks too messy to publish directly."""
+        if not content:
+            return True
+        text = str(content).strip()
+        if not text or text == "NO_CONTENT":
+            return True
+        if "```" in text:
+            return True
+        if text.startswith("{") or text.startswith("["):
+            return True
+        if re.search(
+            r"^\s*(mensaje|respuesta|message|objective|motivation|directive)\s*:",
+            text,
+            re.IGNORECASE | re.MULTILINE,
+        ):
+            return True
+        if re.search(r"^\s*[-*]\s+", text, re.MULTILINE):
+            return True
+        if text.count("\n") > 0:
+            lines = [line.strip() for line in text.splitlines() if line.strip()]
+            if len(lines) > 1:
+                return True
+        return False
+
+    @staticmethod
     def _normalize_participant_stance_hint(raw_stance: Optional[str]) -> Optional[str]:
         """Collapse participant stance hints to comparable buckets."""
         if not raw_stance:
@@ -1808,45 +1834,48 @@ class Orchestrator:
                 )
                 continue
 
-            # 5b. Call the Moderator to extract clean content
-            moderator_user_prompt = build_moderator_user_prompt(
-                performer_output=performer_raw,
-                template=self.moderator_prompt_template,
-            )
-
-            moderator_raw = None
-            try:
-                moderator_raw = await self.moderator_llm.generate_response(
-                    moderator_user_prompt, max_retries=1,
-                    system_prompt=self._moderator_system_prompt,
+            # 5b. Only call the Moderator when the performer output looks messy.
+            if self._performer_output_needs_moderator(performer_raw):
+                moderator_user_prompt = build_moderator_user_prompt(
+                    performer_output=performer_raw,
+                    template=self.moderator_prompt_template,
                 )
-            except Exception as e:
-                self.logger.log_error("moderator_llm_call", str(e))
 
-            self.logger.log_llm_call(
-                agent_name="__moderator__",
-                prompt=f"[SYSTEM]\n{self._moderator_system_prompt}\n\n[USER]\n{moderator_user_prompt}",
-                response=moderator_raw,
-                error=None if moderator_raw else f"Moderator LLM returned no response (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
-            )
+                moderator_raw = None
+                try:
+                    moderator_raw = await self.moderator_llm.generate_response(
+                        moderator_user_prompt, max_retries=1,
+                        system_prompt=self._moderator_system_prompt,
+                    )
+                except Exception as e:
+                    self.logger.log_error("moderator_llm_call", str(e))
 
-            content = parse_moderator_response(moderator_raw)
-
-            if content is None:
-                self.logger.log_error(
-                    "moderator_no_content",
-                    f"Moderator could not extract content from performer output (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
+                self.logger.log_llm_call(
+                    agent_name="__moderator__",
+                    prompt=f"[SYSTEM]\n{self._moderator_system_prompt}\n\n[USER]\n{moderator_user_prompt}",
+                    response=moderator_raw,
+                    error=None if moderator_raw else f"Moderator LLM returned no response (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
                 )
-                continue
 
-            if _looks_truncated_response(content):
-                self.logger.log_error(
-                    "moderator_output_truncated",
-                    f"Moderator output appears truncated (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
-                    context={"agent_name": agent_name, "action_type": action_type},
-                )
-                content = None
-                continue
+                content = parse_moderator_response(moderator_raw)
+
+                if content is None:
+                    self.logger.log_error(
+                        "moderator_no_content",
+                        f"Moderator could not extract content from performer output (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
+                    )
+                    continue
+
+                if _looks_truncated_response(content):
+                    self.logger.log_error(
+                        "moderator_output_truncated",
+                        f"Moderator output appears truncated (attempt {attempt}/{MAX_PERFORMER_RETRIES})",
+                        context={"agent_name": agent_name, "action_type": action_type},
+                    )
+                    content = None
+                    continue
+            else:
+                content = performer_raw.strip()
 
             # Canonicalize the candidate text before stance validation so the
             # classifier sees the same message that would be published.

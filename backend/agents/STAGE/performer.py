@@ -101,6 +101,37 @@ def build_performer_system_prompt(
     return prompt
 
 
+def _build_length_instruction(target_word_count: Optional[int]) -> str:
+    """Return a per-turn length instruction for the performer prompt."""
+    if target_word_count is None:
+        return "Target length: 1–3 sentences, as short as feels natural."
+    n = target_word_count
+    if n <= 1:
+        return (
+            "Target length: exactly 1 word. Write a single word — an insult, exclamation, "
+            "or short reaction that fits the tone. Nothing else."
+        )
+    if n <= 3:
+        return (
+            f"Target length: approximately {n} words. "
+            "Write a very short outburst — an insult, expletive, or terse reaction. "
+            "No full sentence needed. Make it punch hard."
+        )
+    if n <= 8:
+        return (
+            f"Target length: approximately {n} words (a very short message). "
+            "One brief sentence or fragment at most."
+        )
+    if n <= 20:
+        return f"Target length: approximately {n} words (1–2 short sentences)."
+    if n <= 50:
+        return f"Target length: approximately {n} words (2–4 sentences)."
+    return (
+        f"Target length: approximately {n} words. "
+        "You may write a longer message with several sentences, but stay conversational and avoid dense paragraphs."
+    )
+
+
 def build_performer_user_prompt(
     instruction: dict,
     agent_profile: str,
@@ -111,6 +142,7 @@ def build_performer_user_prompt(
     recent_messages: Optional[List[Message]] = None,
     recent_room_messages: Optional[List[Message]] = None,
     chatroom_context: str = "",
+    target_word_count: Optional[int] = None,
     template: Optional[str] = None,
 ) -> str:
     """Build the Performer user prompt from the Director's output."""
@@ -141,5 +173,6 @@ def build_performer_user_prompt(
     prompt = prompt.replace("{DIRECTIVE}", directive)
     prompt = prompt.replace("{TARGET_USER}", target_user_str)
     prompt = prompt.replace("{TARGET_MESSAGE}", target_str)
+    prompt = prompt.replace("{MESSAGE_LENGTH_INSTRUCTION}", _build_length_instruction(target_word_count))
 
     return prompt

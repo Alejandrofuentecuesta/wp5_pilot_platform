@@ -1771,6 +1771,16 @@ class Orchestrator:
         agent_obj = next((a for a in agents if a.name == agent_name), None)
         agent_persona = (agent_obj.persona or None) if agent_obj else None
 
+        agent_length_traits = (self._agent_traits.get(agent_name) or {}) if self._agent_traits else {}
+        _len_min = agent_length_traits.get("message_length_min")
+        _len_max = agent_length_traits.get("message_length_max")
+        target_word_count: Optional[int] = None
+        if _len_min is not None and _len_max is not None:
+            try:
+                target_word_count = random.randint(int(_len_min), max(int(_len_min), int(_len_max)))
+            except (ValueError, TypeError):
+                pass
+
         base_performer_user_prompt = build_performer_user_prompt(
             instruction=performer_instruction,
             agent_profile=agent_profile,
@@ -1784,6 +1794,7 @@ class Orchestrator:
                 chatroom_context=self.chatroom_context,
                 incivility_framework=self.incivility_framework,
             ),
+            target_word_count=target_word_count,
             template=self.performer_prompt_template,
         )
         performer_user_prompt = base_performer_user_prompt

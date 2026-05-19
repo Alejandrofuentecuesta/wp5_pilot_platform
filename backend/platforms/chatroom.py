@@ -567,6 +567,8 @@ class SimulationSession:
                 "policy_stance": a.get("policy_stance", ""),
                 "topic_stance": a.get("topic_stance", ""),
                 "alignment_cell": a.get("alignment_cell", ""),
+                "message_length_min": a.get("message_length_min"),
+                "message_length_max": a.get("message_length_max"),
             }
         return agent_names, agent_personas, traits
 

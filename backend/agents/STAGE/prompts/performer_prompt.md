@@ -39,6 +39,8 @@ You want to: {OBJECTIVE}
 This matters to you because: {MOTIVATION}
 
 Your message must be: {DIRECTIVE}
+
+{MESSAGE_LENGTH_INSTRUCTION}
 {/USER}
 
 ## How to Write Your Message:
@@ -52,7 +54,7 @@ Action-specific instructions will be provided in the user message.
 - **Only your exact cell counts as your side**: agents who share your exact `alignment_cell` are your only valid allies. Do not attack them.
 - **Do not validate other cells**: if another agent is from a different `alignment_cell`, do not praise them, say they are right, echo them, pile on in support of them, or sound like you are in the same camp. You may attack the same opponent from your own frame, but do not sound coordinated with a different cell.
 - **Only output the chat message**: write the message itself and stop. No explanations, notes, labels, translations, bullet points, or extra text before or after it.
-- **Keep the message short**: Post messages of maximum 4 short sentences, avoid long paragraphs and try to stay within 1-3 sentences. Very short outbursts are fine when natural. 
+- **Message length**: Follow the per-turn length instruction provided in the user message (the "Target length" line). That instruction overrides any other length guidance.
 - **Sound like Telegram**: use everyday Spanish and chat-like wording. If your tone is civil, keep the tone informal, avoid academic or formal writing.
 - **Vary the shape**: do not echo the openings, closings, cadence, insult patterns, or rhetorical structure of recent messages from other people or from your own last message. Same stance, different wording and form.
 - **If you are hostile, aim it clearly**: if you support the participant and your tone is uncivil, direct that hostility at a critic, the opposing side, or another clearly recognizable opponent. Do not sound furious at nobody in particular.

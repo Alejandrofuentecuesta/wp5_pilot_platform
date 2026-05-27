@@ -417,6 +417,7 @@ class SimulationSession:
             humanize_mode=self.simulation_config.get("humanize_mode", "general"),
             humanize_per_agent=self.simulation_config.get("humanize_per_agent") or {},
             agent_traits=traits,
+            boost_replies_mentions=bool(self.simulation_config.get("boost_replies_mentions", False)),
             rng=self._rng,
         )
         orc.set_participant_stance_hint(self.participant_stance_hint)

@@ -68,9 +68,8 @@ class TestBuildPerformerSystemPrompt:
         result = build_performer_system_prompt()
         assert "Only output the chat message" in result
         assert "write the message itself and stop" in result
-        assert "maximum 4 short sentences" in result
-        assert "stay within 1-3 sentences" in result
-        assert "Very short outbursts are fine" in result
+        assert "Message length" in result
+        assert "Follow the per-turn length instruction" in result
         assert "Keep the same position" in result
         assert "Your alignment cell is fixed" in result
         assert "Sound like Telegram" in result
@@ -226,6 +225,14 @@ class TestBuildPerformerUserPrompt:
         assert "Bob: Que verguenza, de verdad" in result
         assert "Lucia: Otra vez con el mismo cuento" in result
 
+    def test_length_instructions_in_user_prompt(self):
+        result = build_performer_user_prompt(
+            instruction=self._instruction(),
+            agent_profile="Active user.",
+            action_type="message",
+            target_word_count=40,
+        )
+        assert "Target length: approximately 40 words" in result
 
 class TestFormatRecentRoomMessages:
     def test_none_room_messages(self):

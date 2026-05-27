@@ -21,6 +21,7 @@ _PROMPTS_DIR = Path(__file__).parent / "prompts"
 _UPDATE_TEMPLATE = (_PROMPTS_DIR / "director_update_prompt.md").read_text(encoding="utf-8")
 _EVALUATE_TEMPLATE = (_PROMPTS_DIR / "director_evaluate_prompt.md").read_text(encoding="utf-8")
 _ACTION_TEMPLATE = (_PROMPTS_DIR / "director_action_prompt.md").read_text(encoding="utf-8")
+_BOOSTED_ACTION_TEMPLATE = (_PROMPTS_DIR / "director_action_boosted_prompt.md").read_text(encoding="utf-8")
 
 
 def _format_chat_message_content(message: Message) -> str:

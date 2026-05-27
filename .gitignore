@@ -181,3 +181,10 @@ $RECYCLE.BIN/
 *.temp
 *.bak
 *.backup
+
+# ============================================
+# Local Test Data & Results
+# ============================================
+dades_proves_alex.sql
+*.csv
+/results/

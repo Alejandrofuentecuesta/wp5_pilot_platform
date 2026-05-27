@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useState, useCallback, useEffect } from "react"
 import PassphraseGate from "./PassphraseGate"
@@ -59,6 +59,7 @@ const DEFAULT_SIMULATION: SimulationConfig = {
   performer_memory_size: 3,
   parallel_turns: 1,
   agent_mode: "prompt",
+  boost_replies_mentions: false,
 }
 
 const DEFAULT_EXPERIMENTAL: ExperimentalConfig = createExperimental3x3Preset()

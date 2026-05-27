@@ -150,6 +150,8 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         raise ValueError("'bsc_model_version' must be 'v1' or 'v2'")
     out["bsc_model_version"] = bsc_model_version
 
+    out["boost_replies_mentions"] = bool(out.get("boost_replies_mentions", False))
+
     return out
 
 

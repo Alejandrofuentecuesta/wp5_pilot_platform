@@ -62,6 +62,7 @@ export interface SimulationConfig {
   bsc_model_version?: string
   parallel_turns?: number
   agent_mode?: "prompt" | "pool"
+  boost_replies_mentions?: boolean
 }
 
 export type AgentIncivility = "civil" | "uncivil"

@@ -1,4 +1,4 @@
-﻿"""Tests for the full Orchestrator pipeline (Director Update â†’ Evaluate â†’ Act â†’ Performer â†’ Moderator).
+"""Tests for the full Orchestrator pipeline (Director Update â†’ Evaluate â†’ Act â†’ Performer â†’ Moderator).
 
 Uses mock LLM clients to test the orchestration logic without external API calls.
 Anonymization helpers are tested separately in test_anonymization.py â€” these tests
@@ -598,6 +598,7 @@ class TestExecuteTurnMessage:
         state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob")])
         target = Message.create(sender="Bob", content="Esto es una farsa total.")
         state.add_message(target)
+        state.add_message(Message.create(sender="Alice", content="Dummy message from Alice"))
         orch, logger = _make_orchestrator(
             state=state,
             agent_traits={
@@ -647,9 +648,10 @@ class TestExecuteTurnMessage:
         )
         participant_msg = Message.create(
             sender="participant",
-            content="Esto beneficia a empresarios y deja tirados a los migrantes",
+            content="Esto ayuda a empresarios y deja tirados a los migrantes",
         )
         state.add_message(participant_msg)
+        state.add_message(Message.create(sender="Alice", content="Dummy message from Alice"))
         orch, logger = _make_orchestrator(
             state=state,
             agent_traits={
@@ -760,6 +762,7 @@ class TestExecuteTurnReply:
         state = _make_state()
         state.add_message(Message.create(sender="Bob", content="What do you think?"))
         target_msg = state.messages[0]
+        state.add_message(Message.create(sender="Charlie", content="Dummy message to prevent downgrade"))
 
         orch, _ = _make_orchestrator(state=state)
         anon_alice = orch._name_map["Alice"]
@@ -785,6 +788,7 @@ class TestExecuteTurnReply:
         state = _make_state()
         state.add_message(Message.create(sender="Bob", content="What do you think?"))
         target_msg = state.messages[0]
+        state.add_message(Message.create(sender="Charlie", content="Dummy message to prevent downgrade"))
 
         orch, _ = _make_orchestrator(state=state)
         anon_alice = orch._name_map["Alice"]
@@ -813,6 +817,7 @@ class TestExecuteTurnReply:
         state = _make_state()
         state.add_message(Message.create(sender="Bob", content="What do you think?"))
         target_msg = state.messages[0]
+        state.add_message(Message.create(sender="Charlie", content="Dummy message to prevent downgrade"))
 
         orch, logger = _make_orchestrator(state=state)
         anon_alice = orch._name_map["Alice"]
@@ -829,7 +834,7 @@ class TestExecuteTurnReply:
         fixed = "Primera frase completa. Segunda frase completa. Tercera frase completa y cierre final."
 
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
-        orch.performer_llm.generate_response = AsyncMock(return_value="Texto base del performer")
+        orch.performer_llm.generate_response = AsyncMock(return_value="mensaje: Texto base del performer")
         orch.moderator_llm.generate_response = AsyncMock(side_effect=[truncated, fixed])
 
         result = await orch.execute_turn("criteria_A")
@@ -970,6 +975,7 @@ class TestSameSideGuard:
         state.add_message(Message.create(sender="Bob", content="Aliado same-cell"))
         state.add_message(Message.create(sender="participant", content="Yo lo apoyo"))
         participant_msg = state.messages[-1]
+        state.add_message(Message.create(sender="Bob", content="Dummy message from Bob"))
 
         orch, logger = _make_orchestrator(
             state=state,
@@ -1597,7 +1603,7 @@ class TestExecuteTurnErrors:
         assert result["target_message_id"] == valid_target_msg.message_id
         logger.log_error.assert_any_call(
             "director_action_invalid_reply_target",
-            f"attempt 1/3: Director returned reply target '{same_cell_msg.message_id}' for '{anon_alice}', but that message is not a valid direct target",
+            f"attempt 1/3: Director returned reply target '{same_cell_msg.message_id}' for '{anon_alice}', but that message is not a valid reply target for the chosen speaker",
         )
 
     @pytest.mark.asyncio
@@ -1684,7 +1690,7 @@ class TestPerformerRetry:
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
 
         orch.performer_llm.generate_response = AsyncMock(
-            side_effect=["bad output", "good output"]
+            side_effect=["mensaje: bad output", "mensaje: good output"]
         )
         orch.moderator_llm.generate_response = AsyncMock(
             side_effect=["NO_CONTENT", "Cleaned output"]
@@ -1759,6 +1765,183 @@ class TestTurnResult:
         assert result.priority is None
         assert result.performer_rationale is None
         assert result.action_rationale is None
+
+
+class TestUpgradeAndStripping:
+
+    @pytest.mark.asyncio
+    async def test_upgrade_out_of_turn_targeted_message(self):
+        state = _make_state()
+        m1 = Message.create(sender="Alice", content="Hello")
+        m2 = Message.create(sender="participant", content="Hi")
+        # Alice is the target, but her message is not the last one in the chat (m2 is)
+        state.add_message(m1)
+        state.add_message(m2)
+
+        orch, logger = _make_orchestrator(state=state)
+        anon_alice = orch._name_map["Alice"]
+        anon_bob = orch._name_map["Bob"]
+
+        action_resp = json.dumps({
+            "next_performer": anon_bob,
+            "action_type": "message",
+            "target_user": anon_alice,
+            "priority": "normal",
+            "performer_rationale": "bob rational",
+            "action_rationale": "act rational",
+            "performer_instruction": {
+                "objective": "obj",
+                "motivation": "mot",
+                "directive": "dir"
+            }
+        })
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="Hola!")
+        orch.moderator_llm.generate_response = AsyncMock(return_value="Hola!")
+
+        result = await orch.execute_turn("criteria_A")
+        assert result is not None
+        assert result.action_type == "reply"
+        assert result.target_message_id == m1.message_id
+        assert result.message.reply_to == m1.message_id
+
+    def test_strip_vocative_prefixes(self):
+        state = _make_state()
+        orch, _ = _make_orchestrator(state=state)
+        
+        orch._name_map = {"Alice": "Performer 1", "Bob": "Performer 2"}
+        orch._reverse_map = {"Performer 1": "Alice", "Performer 2": "Bob"}
+
+        assert orch._strip_vocative_prefix("Alice, hola!") == "Hola!"
+        assert orch._strip_vocative_prefix("Bob: Qué tal?") == "Qué tal?"
+        assert orch._strip_vocative_prefix("¿Alice... qué dices?") == "¿Qué dices?"
+        assert orch._strip_vocative_prefix("¡Bob - no hagas eso!") == "¡No hagas eso!"
+        
+        orch._name_map["Lucía"] = "Performer 3"
+        orch._reverse_map["Performer 3"] = "Lucía"
+        assert orch._strip_vocative_prefix("Lucia, cómo estás?") == "Cómo estás?"
+        assert orch._strip_vocative_prefix("¿Lucía: dónde vas?") == "¿Dónde vas?"
+        
+        assert orch._strip_vocative_prefix("Charlie, hello") == "Charlie, hello"
+
+
+class TestDowngradePrecedingTarget:
+
+    @pytest.mark.asyncio
+    async def test_reply_to_last_message_downgrades_to_plain_message(self):
+        state = _make_state()
+        m1 = Message.create(sender="Bob", content="Hello")
+        state.add_message(m1)
+
+        orch, logger = _make_orchestrator(state=state)
+        anon_alice = orch._name_map["Alice"]
+
+        action_resp = json.dumps({
+            "next_performer": anon_alice,
+            "action_type": "reply",
+            "target_message_id": m1.message_id,
+            "priority": "normal",
+            "performer_rationale": "alice rational",
+            "action_rationale": "act rational",
+            "performer_instruction": {
+                "objective": "original objective",
+                "motivation": "original motivation",
+                "directive": "original directive"
+            }
+        })
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="My reply response")
+        orch.moderator_llm.generate_response = AsyncMock(return_value="My reply response")
+
+        result = await orch.execute_turn("criteria_A")
+        assert result is not None
+        assert result.action_type == "message"
+        assert result.target_message_id is None
+        assert result.target_user is None
+        assert result.message.reply_to is None
+        assert result.message.quoted_text is None
+        assert result.message.content == "My reply response"
+        logger.log_error.assert_any_call(
+            "downgrade_immediate_reply",
+            f"Downgrading reply for 'Alice' to message because it targets the immediately preceding message {m1.message_id}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_mention_to_last_sender_downgrades_to_plain_message(self):
+        state = _make_state()
+        m1 = Message.create(sender="Bob", content="Hello")
+        state.add_message(m1)
+
+        orch, logger = _make_orchestrator(state=state)
+        anon_alice = orch._name_map["Alice"]
+        anon_bob = orch._name_map["Bob"]
+
+        action_resp = json.dumps({
+            "next_performer": anon_alice,
+            "action_type": "@mention",
+            "target_user": anon_bob,
+            "priority": "normal",
+            "performer_rationale": "alice rational",
+            "action_rationale": "act rational",
+            "performer_instruction": {
+                "objective": "original objective",
+                "motivation": "original motivation",
+                "directive": "original directive"
+            }
+        })
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="My mention response")
+        orch.moderator_llm.generate_response = AsyncMock(return_value="My mention response")
+
+        result = await orch.execute_turn("criteria_A")
+        assert result is not None
+        assert result.action_type == "message"
+        assert result.target_user is None
+        assert result.target_message_id is None
+        assert result.message.content == "My mention response"
+        logger.log_error.assert_any_call(
+            "downgrade_immediate_mention",
+            "Downgrading mention for 'Alice' to message because it targets the sender of the immediately preceding message 'Bob'"
+        )
+
+    @pytest.mark.asyncio
+    async def test_targeted_message_to_last_sender_clears_target(self):
+        state = _make_state()
+        m1 = Message.create(sender="Bob", content="Hello")
+        state.add_message(m1)
+
+        orch, logger = _make_orchestrator(state=state)
+        anon_alice = orch._name_map["Alice"]
+        anon_bob = orch._name_map["Bob"]
+
+        action_resp = json.dumps({
+            "next_performer": anon_alice,
+            "action_type": "message",
+            "target_user": anon_bob,
+            "priority": "normal",
+            "performer_rationale": "alice rational",
+            "action_rationale": "act rational",
+            "performer_instruction": {
+                "objective": "original objective",
+                "motivation": "original motivation",
+                "directive": "original directive"
+            }
+        })
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(return_value="My message response")
+        orch.moderator_llm.generate_response = AsyncMock(return_value="My message response")
+
+        result = await orch.execute_turn("criteria_A")
+        assert result is not None
+        assert result.action_type == "message"
+        assert result.target_user is None
+        assert result.target_message_id is None
+        logger.log_error.assert_any_call(
+            "downgrade_immediate_targeted_message",
+            "Removing target_user for 'Alice' because it targets the sender of the immediately preceding message 'Bob'"
+        )
+
+
 
 
 

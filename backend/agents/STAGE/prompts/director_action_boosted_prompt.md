@@ -105,19 +105,22 @@ Read the recent chat log and current action distribution below. What action type
 
 Select exactly one action type:
 
-- `message`: A standalone chat message. Can be a reaction to the general conversation, to something said recently, or a new thread entirely — without quoting or @mentioning anyone. This is the most natural action and should be used freely.
+- `message`: A standalone chat message. Can be a reaction to the general conversation, to something said recently, or a new thread entirely — without quoting or @mentioning anyone.
 - `reply`: A quote-reply to a specific earlier message. Use when directly engaging a particular message adds clarity or drama. Requires `target_message_id`.
 - `@mention`: A message that explicitly calls someone back into the conversation. Use when the performer is picking up a thread that has moved on. Requires `target_user`.
 
 Rules:
-- `message` is the default. Only use `reply` or `@mention` when the quoting or calling-out adds something — tension, precision, drama. Do not use them just because an anchor exists.
-- A performer can react to the mood or content of the conversation without targeting anyone specifically. That is normal chat behavior.
-- Room-wide openers are fine and realistic. People post standalone opinions without replying to anyone all the time.
-- If using `message` for an underrepresented side, name who or what the performer is pushing against, and who they must not validate or echo. Avoid vague instructions like "reinforce your side" with no named target.
+- **Active interaction is highly encouraged**: Prioritize using `reply` and `@mention` to link messages and keep the debate alive. Aim to have at least 3 or 4 programmatic replies or @mentions in each session by actively linking performers' responses to older, relevant messages in the chat log that need addressing.
+- Only use a plain `message` when introducing a completely new topic, room-wide stance, or when responding directly to the immediately preceding message.
+- A performer can react to the mood or content of the conversation without targeting anyone specifically, but linking to older messages is preferred when possible.
 
 **Action mix guidelines:**
-- Target approximately: 55% messages, 30% replies, 15% @mentions.
-- Not every substantive message needs a direct reply. Let some messages go unanswered or be responded to indirectly through a standalone `message`.
+- Target approximately: 40% messages, 40% replies, 20% @mentions.
+- Actively seek to connect different viewpoints or challenge earlier statements using `reply` or `@mention`.
+
+**Avoid targeting the immediately preceding message/sender with reply/@mention:**
+- Responding to the immediately preceding message is automatically treated as a plain conversational continuation. Do **NOT** use `reply` or `@mention` for this; if you want to respond to the immediately preceding turn, select `message`.
+- **Actively target older messages (2-5 messages back in the log) or their senders**: If you want to use a `reply` or `@mention` (which is highly encouraged), you **must** choose an anchor message or target user from earlier in the chat log. This links the discussion threads together naturally and prevents downgrades.
 
 **Chained reactions - participant interaction:**
 - If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This overrides all other considerations.
@@ -126,18 +129,6 @@ Rules:
 **Reply/mention when not addressing the latest message:** If the performer is responding to someone whose message is NOT the most recent in the chat log, you MUST use `reply` (quote-reply) or `@mention` instead of a plain `message` so the target is programmatically linked.
 
 **Speaker-specific target constraints:** Once you choose a performer, obey the target constraints listed for that speaker. The listed best recent anchor is a suggestion, not a requirement — use it only if a targeted response genuinely fits.
-
-**Do not over-convert entries into replies:** A performer entering an active thread does not need to quote anyone. A plain `message` that joins the conversation is often more natural.
-
-**Variety:** Avoid two consecutive actions from the same agent unless a direct follow-up from that same agent is clearly necessary.
-
-**No same-cell infighting:** If two agents share the same fixed `alignment_cell`, do not have them attack, mock, or directly challenge each other. When agents from the same cell interact, it should be supportive or additive; if a direct attack would be needed, choose a different target or use a room-directed `message` instead.
-
-**No cross-cell validation:** If two agents are from different `alignment_cell`s, do not have one praise, validate, echo, pile on in support of, or say "exactly" to the other. Different cells may independently push against the same opponent, but they must not sound like one camp.
-
-**When two different cells attack the same target, keep the frames separate:** If the chosen performer engages a different-cell agent who is attacking the same person, policy, or bloc, do not script the response as agreement-first. Do not open with "exacto", "tal cual", "eso mismo", or similar validation. Make the performer pivot into their own reason, emphasis, and blame structure from their own cell.
-
-**Protect the participant from severe direct abuse:** Even in incivil treatments, do not instruct agents to use severe personal insults directly at the human participant. They may strongly criticize the participant's opinion, reasoning, framing, or coalition. Mild direct labels such as "ingenuo" or "ignorante" are acceptable when natural, but stronger abuse, degrading name-calling, or direct personal humiliation toward the participant is not.
 
 ### Step 4: Write the Performer Instruction
 
@@ -185,4 +176,3 @@ Respond with a JSON object using exactly this structure:
 - `target_user`: The member being targeted, or null if addressing the room.
 - `target_message_id`: Required for `reply`, null otherwise.
 - `performer_instruction`: Always required.
-

@@ -202,6 +202,7 @@ class Orchestrator:
         humanize_rules: Optional[Dict] = None,
         humanize_mode: str = "general",
         humanize_per_agent: Optional[Dict[str, Dict]] = None,
+        boost_replies_mentions: bool = False,
         rng: Optional[random.Random] = None,
     ):
         self.director_llm = director_llm
@@ -248,6 +249,7 @@ class Orchestrator:
         self.humanize_rules = humanize_rules or {}
         self.humanize_mode = humanize_mode
         self.humanize_per_agent = humanize_per_agent or {}
+        self.boost_replies_mentions = boost_replies_mentions
 
         # Build the shuffled name mapping (stable for the session lifetime).
         _rng = rng or random.Random()
@@ -307,6 +309,10 @@ class Orchestrator:
         self._turns_since_evaluate: int = 0
         self._has_completed_first_interval: bool = False
 
+        # Evaluate and Action system prompts deferred until first execute_turn (need internal_validity_criteria).
+        self._evaluate_system_prompt: Optional[str] = None
+        self._action_system_prompt: Optional[str] = None
+
         prompt_context = _merge_prompt_context(
             chatroom_context=chatroom_context,
             incivility_framework=incivility_framework,
@@ -327,9 +333,11 @@ class Orchestrator:
         self._classifier_system_prompt = build_classifier_system_prompt(
             chatroom_context=prompt_context,
         )
-        # Evaluate and Action system prompts deferred until first execute_turn (need internal_validity_criteria).
-        self._evaluate_system_prompt: Optional[str] = None
-        self._action_system_prompt: Optional[str] = None
+
+    def _should_boost_replies_mentions(self) -> bool:
+        import os
+        env_val = os.getenv("BOOST_REPLIES_MENTIONS", "false").lower() in ("true", "1")
+        return env_val or getattr(self, "boost_replies_mentions", False)
 
     @staticmethod
     def _normalize_agent_ideology(raw_ideology: Optional[str]) -> Optional[str]:
@@ -974,16 +982,18 @@ class Orchestrator:
         actor_name: str,
         recent_messages: List[Message],
         exclude_senders: Optional[Set[str]] = None,
+        exclude_message_ids: Optional[Set[str]] = None,
     ) -> Optional[Message]:
         """Pick the best recent message this actor can target directly."""
         excluded = exclude_senders or set()
+        excluded_ids = exclude_message_ids or set()
         for message in reversed(recent_messages):
-            if message.sender in excluded:
+            if message.sender in excluded or message.message_id in excluded_ids:
                 continue
             if self._can_directly_target_message(actor_name, message):
                 return message
         for message in reversed(self.state.messages):
-            if message.sender in excluded:
+            if message.sender in excluded or message.message_id in excluded_ids:
                 continue
             if self._can_directly_target_message(actor_name, message):
                 return message
@@ -999,10 +1009,6 @@ class Orchestrator:
             latest = recent_messages[-1]
             if self._can_directly_target_message(actor_name, latest):
                 return latest
-
-        for message in reversed(self.state.messages):
-            if self._can_directly_target_message(actor_name, message):
-                return message
         return None
 
     def _can_like_message(self, actor_name: str, message: Message) -> bool:
@@ -1012,6 +1018,45 @@ class Orchestrator:
         if message.sender == self.state.user_name:
             return self._expected_like_minded_for_agent(actor_name) is True
         return self._agents_share_alignment_cell(actor_name, message.sender)
+
+    def _make_accent_insensitive_regex(self, name: str) -> str:
+        # Maps Spanish/Catalan/common vowels to character classes
+        mapping = {
+            'a': '[aáàâä]', 'á': '[aáàâä]', 'à': '[aáàâä]', 'â': '[aáàâä]', 'ä': '[aáàâä]',
+            'e': '[eéèêë]', 'é': '[eéèêë]', 'è': '[eéèêë]', 'ê': '[eéèêë]', 'ë': '[eéèêë]',
+            'i': '[iíìîï]', 'í': '[iíìîï]', 'ì': '[iíìîï]', 'î': '[iíìîï]', 'ï': '[iíìîï]',
+            'o': '[oóòôö]', 'ó': '[oóòôö]', 'ò': '[oóòôö]', 'ô': '[oóòôö]', 'ö': '[oóòôö]',
+            'u': '[uúùûü]', 'ú': '[uúùûü]', 'ù': '[uúùûü]', 'û': '[uúùûü]', 'ü': '[uúùûü]',
+        }
+        pattern_parts = []
+        for char in name.lower():
+            if char in mapping:
+                pattern_parts.append(mapping[char])
+            else:
+                pattern_parts.append(re.escape(char))
+        return "".join(pattern_parts)
+
+    def _strip_vocative_prefix(self, text: str) -> str:
+        if not text:
+            return text
+        names = list(self._name_map.keys())
+        if not names:
+            return text
+        # Sort names by length descending to prevent greedy matching on substrings
+        names.sort(key=len, reverse=True)
+        
+        names_patterns = [self._make_accent_insensitive_regex(name) for name in names]
+        names_pattern = "|".join(names_patterns)
+        
+        pattern = r"^([¿¡]*)\s*@?(?:" + names_pattern + r")\s*(?:,|\.{3}|…|[:\-—!?])\s*(.*)$"
+        match = re.match(pattern, text, re.IGNORECASE)
+        if match:
+            leading_punct = match.group(1) or ""
+            remaining_text = match.group(2) or ""
+            if remaining_text:
+                remaining_text = remaining_text[0].upper() + remaining_text[1:]
+            return leading_punct + remaining_text
+        return text
 
     def _format_target_constraints_by_speaker(
         self,
@@ -1045,7 +1090,19 @@ class Orchestrator:
                 else:
                     valid_targets.append(target_anon)
 
-            best_anchor = self._find_best_direct_target_message(speaker_real, recent_messages)
+            exclude_senders = None
+            exclude_ids = None
+            if self._should_boost_replies_mentions() and self.state.messages:
+                last_msg = self.state.messages[-1]
+                exclude_senders = {last_msg.sender}
+                exclude_ids = {last_msg.message_id}
+
+            best_anchor = self._find_best_direct_target_message(
+                speaker_real,
+                recent_messages,
+                exclude_senders=exclude_senders,
+                exclude_message_ids=exclude_ids,
+            )
             best_anchor_text = None
             if best_anchor is not None:
                 best_anchor_text = f"{best_anchor.sender} [{best_anchor.message_id}]"
@@ -1376,6 +1433,21 @@ class Orchestrator:
         performer_rationale = action_data.get("performer_rationale")
         action_rationale = action_data.get("action_rationale")
 
+        # Upgrade out-of-turn targeted message to a reply
+        if action_type == "message" and target_user:
+            target_msg = None
+            for m in reversed(self.state.messages):
+                if m.sender == target_user:
+                    target_msg = m
+                    break
+            if target_msg and self.state.messages and target_msg.message_id != self.state.messages[-1].message_id:
+                action_type = "reply"
+                action_data["action_type"] = "reply"
+                target_message_id = target_msg.message_id
+                action_data["target_message_id"] = target_message_id
+                target_user = None
+                action_data["target_user"] = None
+
         # 3a. If the participant's most recent message in the window @mentions or
         #     addresses a specific agent that has NOT yet replied to it, force
         #     that agent to reply.  We scan backwards through the window to find
@@ -1629,6 +1701,53 @@ class Orchestrator:
                 if directive else support_clause
             )
             action_data["performer_instruction"] = existing_instruction
+
+        # Downgrade replies/mentions that target the immediately preceding message/sender to plain messages
+        if self.state.messages:
+            last_msg = self.state.messages[-1]
+            if action_type == "reply" and target_message_id == last_msg.message_id:
+                self.logger.log_error(
+                    "downgrade_immediate_reply",
+                    f"Downgrading reply for '{agent_name}' to message because it targets the immediately preceding message {target_message_id}",
+                )
+                action_type = "message"
+                action_data["action_type"] = "message"
+                target_message_id = None
+                action_data["target_message_id"] = None
+                target_user = None
+                action_data["target_user"] = None
+                if action_data.get("performer_instruction"):
+                    action_data["performer_instruction"] = {
+                        "objective": "Post a message responding to the conversation.",
+                        "motivation": action_data["performer_instruction"].get("motivation", ""),
+                        "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
+                    }
+            elif action_type == "@mention" and target_user == last_msg.sender:
+                self.logger.log_error(
+                    "downgrade_immediate_mention",
+                    f"Downgrading mention for '{agent_name}' to message because it targets the sender of the immediately preceding message '{target_user}'",
+                )
+                action_type = "message"
+                action_data["action_type"] = "message"
+                target_user = None
+                action_data["target_user"] = None
+                target_message_id = None
+                action_data["target_message_id"] = None
+                if action_data.get("performer_instruction"):
+                    action_data["performer_instruction"] = {
+                        "objective": "Post a message responding to the conversation.",
+                        "motivation": action_data["performer_instruction"].get("motivation", ""),
+                        "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
+                    }
+            elif action_type == "message" and target_user == last_msg.sender:
+                self.logger.log_error(
+                    "downgrade_immediate_targeted_message",
+                    f"Removing target_user for '{agent_name}' because it targets the sender of the immediately preceding message '{target_user}'",
+                )
+                target_user = None
+                action_data["target_user"] = None
+                target_message_id = None
+                action_data["target_message_id"] = None
 
         # 3b. Handle 'wait' — Director selected the human participant.
         #     Skip Performer/Moderator and restore evaluate counter
@@ -1888,9 +2007,8 @@ class Orchestrator:
             else:
                 content = performer_raw.strip()
 
-            # Canonicalize the candidate text before stance validation so the
-            # classifier sees the same message that would be published.
             candidate_content = deanonymize_text(content, self._reverse_map)
+            candidate_content = self._strip_vocative_prefix(candidate_content)
 
             if action_type == "reply" and target_message:
                 candidate_content = _strip_target_quote_echo(candidate_content, target_message)
@@ -1961,6 +2079,8 @@ class Orchestrator:
                 participant_target_for_validation = self.state.user_name
             elif target_message and target_message.sender == self.state.user_name:
                 participant_target_for_validation = self.state.user_name
+
+
 
             if (
                 participant_target_for_validation
@@ -2198,6 +2318,10 @@ class Orchestrator:
         """
         # Cache Action system prompt (session-static)
         if self._action_system_prompt is None:
+            action_template = self.director_action_prompt_template
+            if self._should_boost_replies_mentions() and not action_template:
+                from agents.STAGE.director import _BOOSTED_ACTION_TEMPLATE
+                action_template = _BOOSTED_ACTION_TEMPLATE
             self._action_system_prompt = build_action_system_prompt(
                 chatroom_context=_merge_prompt_context(
                     chatroom_context=self.chatroom_context,
@@ -2206,7 +2330,7 @@ class Orchestrator:
                 participant_stance_hint=self._participant_hint_text,
                 participant_alignment_cell=self._participant_alignment_cell_text,
                 participant_name=self.state.user_name,
-                template=self.director_action_prompt_template,
+                template=action_template,
             )
 
         profiles = override_profiles if override_profiles is not None else self.agent_profiles
@@ -2229,6 +2353,11 @@ class Orchestrator:
                 for real_name, traits in self._agent_traits.items()
                 if self._name_map.get(real_name, real_name) in profiles
             }
+
+        action_template = self.director_action_prompt_template
+        if self._should_boost_replies_mentions() and not action_template:
+            from agents.STAGE.director import _BOOSTED_ACTION_TEMPLATE
+            action_template = _BOOSTED_ACTION_TEMPLATE
 
         action_user = build_action_user_prompt(
             messages=anon_recent,
@@ -2253,7 +2382,7 @@ class Orchestrator:
             action_counts=self._action_counts,
             exclude_performer=self._anon_user,
             agent_traits=anon_traits,
-            template=self.director_action_prompt_template,
+            template=action_template,
         )
 
         valid_direct_targets_by_speaker: Dict[str, Set[str]] = {}
@@ -2346,7 +2475,8 @@ class Orchestrator:
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned target_user '{selected_target_user}' "
                     f"for '{selected_performer}', but that target is not valid for the chosen speaker",
                 )
-                continue
+                if attempt < MAX_ACTION_ATTEMPTS - 1:
+                    continue
 
             if action_data.get("action_type") == "reply" and action_data.get("target_message_id"):
                 speaker_real = self._deanon_name(selected_performer)
@@ -2354,14 +2484,15 @@ class Orchestrator:
                     (message for message in self.state.messages if message.message_id == action_data["target_message_id"]),
                     None,
                 )
-                if reply_target is not None and not self._can_reply_to_message(speaker_real, reply_target):
+                if reply_target is not None and not self._can_directly_target_message(speaker_real, reply_target):
                     self.logger.log_error(
                         "director_action_invalid_reply_target",
                         f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned reply target "
                         f"'{action_data['target_message_id']}' for '{selected_performer}', but that message is not "
                         "a valid reply target for the chosen speaker",
                     )
-                    continue
+                    if attempt < MAX_ACTION_ATTEMPTS - 1:
+                        continue
 
             return action_data
 

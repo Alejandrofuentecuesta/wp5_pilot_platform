@@ -79,6 +79,7 @@ export default function StepReview({
         <KV label="Action window" value={simulation.action_window_size} />
         <KV label="Performer memory" value={simulation.performer_memory_size} />
         <KV label="Random seed" value={simulation.random_seed} />
+        <KV label="Boost replies" value={simulation.boost_replies_mentions ? "Yes" : "No"} />
       </Section>
 
       <Section title="LLM Pipeline">

@@ -1,4 +1,4 @@
-﻿"use client"
+"use client"
 
 import { useEffect, useState } from "react"
 import type { SimulationConfig } from "../../../lib/admin-types"
@@ -443,6 +443,26 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
               </p>
             </div>
           )}
+        </div>
+
+        {/* Boost replies/mentions */}
+        <div className="border-t border-admin-border pt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-admin-text">
+                Boost replies to older messages
+              </label>
+              <p className="text-xs text-admin-faint mt-0.5">
+                Increase the frequency of replies and mentions targeting older messages (aiming for 3-4 per session) instead of immediately preceding turns. Makes the conversation more interactive and threaded.
+              </p>
+            </div>
+            <button
+              onClick={() => onChange({ boost_replies_mentions: !config.boost_replies_mentions })}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${config.boost_replies_mentions ? "bg-admin-accent" : "bg-admin-border"}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${config.boost_replies_mentions ? "translate-x-4" : "translate-x-1"}`} />
+            </button>
+          </div>
         </div>
       </div>
     </div>

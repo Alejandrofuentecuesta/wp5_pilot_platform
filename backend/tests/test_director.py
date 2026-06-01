@@ -1,4 +1,4 @@
-﻿"""Unit tests for agents/STAGE/director.py â€” parsing and formatting (Update + Evaluate + Action)."""
+"""Unit tests for agents/STAGE/director.py â€” parsing and formatting (Update + Evaluate + Action)."""
 import json
 import pytest
 from datetime import datetime, timezone
@@ -232,10 +232,9 @@ class TestBuildActionSystemPrompt:
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
             participant_name="Martin",
         )
-        assert "A non-targeted room-wide `message` should be rare" in prompt
-        assert "Do not use `message` for older messages or for general room-wide commentary unless there is no natural target" in prompt
-        assert "If the latest message already gives you a natural anchor, use it" in prompt
-        assert "treat a new room-wide opener as the wrong choice" in prompt
+        assert "`message` is the default" in prompt
+        assert "Room-wide openers are fine and realistic" in prompt
+
 
     def test_protects_participant_from_severe_direct_abuse(self):
         prompt = build_action_system_prompt(

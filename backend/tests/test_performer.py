@@ -8,6 +8,8 @@ from agents.STAGE.performer import (
     build_performer_user_prompt,
     build_performer_system_prompt,
     format_recent_room_messages,
+    build_incivility_instruction_block,
+    INCIVILITY_DIMENSIONS,
 )
 
 
@@ -254,3 +256,21 @@ class TestFormatRecentRoomMessages:
         ])
         assert "- Bob: Hola" in result
         assert "[news]" not in result
+
+
+class TestIncivilityInjection:
+    def test_dimensions_exist(self):
+        assert "impoliteness" in INCIVILITY_DIMENSIONS
+        assert "hate_speech" in INCIVILITY_DIMENSIONS
+        assert "democratic_threats" in INCIVILITY_DIMENSIONS
+
+    def test_empty_dimensions_returns_empty_string(self):
+        assert build_incivility_instruction_block([]) == ""
+
+    def test_build_instruction_block_formats_correctly(self):
+        block = build_incivility_instruction_block(["impoliteness", "democratic_threats"])
+        assert "## Incivility Requirements:" in block
+        assert "Impoliteness" in block
+        assert "Threats to Democratic Freedoms" in block
+        assert "Hate Speech" not in block
+

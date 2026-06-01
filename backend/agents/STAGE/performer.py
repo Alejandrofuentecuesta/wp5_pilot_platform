@@ -176,3 +176,44 @@ def build_performer_user_prompt(
     prompt = prompt.replace("{MESSAGE_LENGTH_INSTRUCTION}", _build_length_instruction(target_word_count))
 
     return prompt
+
+
+INCIVILITY_DIMENSIONS = {
+    "impoliteness": {
+        "title": "Impoliteness",
+        "definition": "Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.",
+        "examples": "'friki', 'chiflado', 'estupido', 'farsa', 'infame', 'maldito', 'mierda', 'DEVOLVEDLOS A SU PAIS!!!!'."
+    },
+    "hate_speech": {
+        "title": "Hate Speech and Stereotyping",
+        "definition": "Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or racist insults is included. Groups may be defined by gender, race, religion, nationality, sexuality, ideology, disability, or similar social identity markers. This also includes fake claims used to dehumanize or discriminate against identity-based groups.",
+        "examples": "'Conducia una mujer?', 'Los zurdos son la verguenza de nuestra nacion', 'Los moros simpatizan con los terroristas', 'Todos los hombres son violadores'."
+    },
+    "democratic_threats": {
+        "title": "Threats to Democratic Freedoms",
+        "definition": "Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism. This includes restricting freedoms, delegitimizing elections or institutions, promoting autocratic rule, or using authoritarian patriotic slogans in an endorsing way.",
+        "examples": "'Todo el proceso electoral es una farsa. Nuestros votos no importan', 'No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene', 'Con Franco se vivia mejor', '¡Arriba España!'."
+    }
+}
+
+
+def build_incivility_instruction_block(selected_dims: List[str]) -> str:
+    """Build a formatted markdown block directing the performer to use specific incivility dimensions."""
+    if not selected_dims:
+        return ""
+
+    lines = [
+        "## Incivility Requirements:",
+        "Your message must be incivil. Specifically, you must use the following types of incivility:",
+        ""
+    ]
+    for dim_key in selected_dims:
+        dim = INCIVILITY_DIMENSIONS.get(dim_key)
+        if dim:
+            lines.append(f"- **{dim['title']}**:")
+            lines.append(f"  {dim['definition']}")
+            lines.append(f"  Examples: {dim['examples']}")
+            lines.append("")
+
+    return "\n".join(lines)
+

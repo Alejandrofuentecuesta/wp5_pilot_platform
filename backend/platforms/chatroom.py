@@ -563,6 +563,7 @@ class SimulationSession:
         traits: Dict[str, Dict[str, str]] = {}
         for a in pool_agents:
             traits[a["name"]] = {
+                "stance": a.get("stance", ""),
                 "incivility": a.get("incivility", "civil"),
                 "ideology": a.get("ideology", "center"),
                 "policy_stance": a.get("policy_stance", ""),

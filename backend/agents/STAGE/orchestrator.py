@@ -30,7 +30,11 @@ from agents.STAGE.director import (
     format_participant_hint, format_participant_alignment_cell,
     format_target_constraints_by_speaker,
 )
-from agents.STAGE.performer import build_performer_system_prompt, build_performer_user_prompt
+from agents.STAGE.performer import (
+    build_performer_system_prompt,
+    build_performer_user_prompt,
+    build_incivility_instruction_block,
+)
 from agents.STAGE.moderator import build_moderator_system_prompt, build_moderator_user_prompt, parse_moderator_response
 from agents.STAGE.classifier import (
     DEFAULT_CLASSIFIER_PROMPT_TEMPLATE,
@@ -168,6 +172,33 @@ def _merge_prompt_context(chatroom_context: str = "", incivility_framework: str 
     if incivility_framework.strip():
         parts.append(f"Incivility framework:\n{incivility_framework.strip()}")
     return "\n\n".join(parts)
+
+
+def select_incivility_dimensions(rng: random.Random) -> List[str]:
+    """Select incivility dimensions based on target probabilities.
+
+    Target rates: 80% Impoliteness, 50% Hate Speech, 50% Democratic Threats.
+    Ensures at least one dimension is always selected.
+    """
+    selected = []
+    if rng.random() < 0.80:
+        selected.append("impoliteness")
+    if rng.random() < 0.50:
+        selected.append("hate_speech")
+    if rng.random() < 0.50:
+        selected.append("democratic_threats")
+
+    # Fallback to make sure at least one is selected
+    if not selected:
+        r = rng.random() * 1.80
+        if r < 0.80:
+            selected.append("impoliteness")
+        elif r < 1.30:
+            selected.append("hate_speech")
+        else:
+            selected.append("democratic_threats")
+
+    return selected
 
 
 class Orchestrator:
@@ -2006,6 +2037,13 @@ class Orchestrator:
             template=self.performer_prompt_template,
         )
         performer_user_prompt = base_performer_user_prompt
+
+        if self._agent_civility_bucket(agent_name) == "uncivil":
+            selected_dims = select_incivility_dimensions(self._rng)
+            incivility_instructions = build_incivility_instruction_block(selected_dims)
+            if incivility_instructions:
+                performer_user_prompt = performer_user_prompt.rstrip() + "\n\n" + incivility_instructions
+
 
         content = None
         classification = {}

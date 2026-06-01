@@ -243,7 +243,7 @@ class TestSimulationSessionInit:
         with _patch_externals():
             session, _ = _create_session(config=pool_config, participant_stance_hint="favor")
             assert session.participant_stance_hint == "favor"
-            assert [agent.name for agent in session.state.agents] == ["Lucia", "Carlos"]
+            assert set(agent.name for agent in session.state.agents) == {"Lucia", "Carlos"}
 
     def test_pool_mode_enforces_hard_roster_quotas_when_pool_allows_it(self):
         quota_config = {

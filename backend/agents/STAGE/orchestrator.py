@@ -987,17 +987,47 @@ class Orchestrator:
         """Pick the best recent message this actor can target directly."""
         excluded = exclude_senders or set()
         excluded_ids = exclude_message_ids or set()
-        for message in reversed(recent_messages):
-            if message.sender in excluded or message.message_id in excluded_ids:
-                continue
-            if self._can_directly_target_message(actor_name, message):
-                return message
-        for message in reversed(self.state.messages):
-            if message.sender in excluded or message.message_id in excluded_ids:
-                continue
-            if self._can_directly_target_message(actor_name, message):
-                return message
-        return None
+
+        if self._should_boost_replies_mentions():
+            eligible_msgs = []
+            seen_ids = set()
+            for message in reversed(recent_messages):
+                if message.sender in excluded or message.message_id in excluded_ids:
+                    continue
+                if message.message_id in seen_ids:
+                    continue
+                if self._can_directly_target_message(actor_name, message):
+                    eligible_msgs.append(message)
+                    seen_ids.add(message.message_id)
+            for message in reversed(self.state.messages):
+                if message.sender in excluded or message.message_id in excluded_ids:
+                    continue
+                if message.message_id in seen_ids:
+                    continue
+                if self._can_directly_target_message(actor_name, message):
+                    eligible_msgs.append(message)
+                    seen_ids.add(message.message_id)
+            
+            if not eligible_msgs:
+                return None
+            
+            # Weighted random choice using geometric decay (factor 0.7)
+            # More recent eligible messages have higher probability
+            decay = 0.7
+            weights = [decay ** i for i in range(len(eligible_msgs))]
+            return self._rng.choices(eligible_msgs, weights=weights, k=1)[0]
+        else:
+            for message in reversed(recent_messages):
+                if message.sender in excluded or message.message_id in excluded_ids:
+                    continue
+                if self._can_directly_target_message(actor_name, message):
+                    return message
+            for message in reversed(self.state.messages):
+                if message.sender in excluded or message.message_id in excluded_ids:
+                    continue
+                if self._can_directly_target_message(actor_name, message):
+                    return message
+            return None
 
     def _find_latest_message_anchor(
         self,
@@ -1077,12 +1107,22 @@ class Orchestrator:
             for anon_name in self._performer_counts.keys()
             if anon_name != self._anon_user
         )
+        spoken_agent_reals = {
+            m.sender for m in self.state.messages
+            if m.sender != self.state.user_name and m.sender != "[news]"
+        }
+        spoken_agent_anons = {
+            self._name_map.get(real, real) for real in spoken_agent_reals
+        }
+
         for speaker_anon in visible_speakers:
             speaker_real = self._deanon_name(speaker_anon)
             valid_targets: List[str] = []
             forbidden_targets: List[str] = []
             for target_anon in all_agent_targets:
                 if target_anon == speaker_anon:
+                    continue
+                if target_anon not in spoken_agent_anons:
                     continue
                 target_real = self._deanon_name(target_anon)
                 if self._agents_share_alignment_cell(speaker_real, target_real):
@@ -1701,6 +1741,55 @@ class Orchestrator:
                 if directive else support_clause
             )
             action_data["performer_instruction"] = existing_instruction
+
+        # Guard: Downgrade replies/mentions targeting agents who haven't spoken yet
+        spoken_senders = {m.sender for m in self.state.messages if m.sender != "[news]"}
+        # The participant is always considered active
+        spoken_senders.add(self.state.user_name)
+
+        target_inactive = False
+        inactive_reason = ""
+        if target_user and target_user not in spoken_senders:
+            target_inactive = True
+            inactive_reason = f"target_user '{target_user}' has not spoken yet"
+        elif target_message_id:
+            target_msg = next(
+                (m for m in self.state.messages if m.message_id == target_message_id),
+                None,
+            )
+            if not target_msg:
+                target_inactive = True
+                inactive_reason = f"target_message_id '{target_message_id}' not found"
+            elif target_msg.sender not in spoken_senders:
+                target_inactive = True
+                inactive_reason = f"sender '{target_msg.sender}' of targeted message has not spoken yet"
+
+        if target_inactive and action_type in {"reply", "@mention"}:
+            self.logger.log_error(
+                "downgrade_inactive_target",
+                f"Downgrading {action_type} for '{agent_name}' to message because {inactive_reason}",
+            )
+            action_type = "message"
+            action_data["action_type"] = "message"
+            target_user = None
+            action_data["target_user"] = None
+            target_message_id = None
+            action_data["target_message_id"] = None
+            if action_data.get("performer_instruction"):
+                action_data["performer_instruction"] = {
+                    "objective": "Post a message responding to the conversation.",
+                    "motivation": action_data["performer_instruction"].get("motivation", ""),
+                    "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
+                }
+        elif action_type == "message" and target_user and target_user not in spoken_senders:
+            self.logger.log_error(
+                "remove_inactive_target",
+                f"Removing target_user for '{agent_name}' because target_user '{target_user}' has not spoken yet",
+            )
+            target_user = None
+            action_data["target_user"] = None
+            target_message_id = None
+            action_data["target_message_id"] = None
 
         # Downgrade replies/mentions that target the immediately preceding message/sender to plain messages
         if self.state.messages:

@@ -110,17 +110,17 @@ Select exactly one action type:
 - `@mention`: A message that explicitly calls someone back into the conversation. Use when the performer is picking up a thread that has moved on. Requires `target_user`.
 
 Rules:
-- **Active interaction is highly encouraged**: Prioritize using `reply` and `@mention` to link messages and keep the debate alive. Aim to have at least 3 or 4 programmatic replies or @mentions in each session by actively linking performers' responses to older, relevant messages in the chat log that need addressing.
-- Only use a plain `message` when introducing a completely new topic, room-wide stance, or when responding directly to the immediately preceding message.
-- A performer can react to the mood or content of the conversation without targeting anyone specifically, but linking to older messages is preferred when possible.
+- **`message` is the default**: In a natural online discussion, most posts are plain messages. A plain `message` is the correct action when an agent is naturally responding to the immediately preceding message (continuing the current thread) or posting a general, room-wide comment. Do **NOT** use `reply` or `@mention` just because an anchor exists.
+- **Selective threaded interaction**: Use `reply` (quote-reply) or `@mention` selectively to link a performer's response to an older message from further up the chat log (2-5 messages back). Aim to have approximately 3 to 4 programmatic replies or @mentions in a full session to create realistic branches without making the conversation look like a rigid chain of quotes.
+- A performer can react to the mood or content of the conversation without targeting anyone specifically.
 
 **Action mix guidelines:**
-- Target approximately: 40% messages, 40% replies, 20% @mentions.
-- Actively seek to connect different viewpoints or challenge earlier statements using `reply` or `@mention`.
+- Target approximately: 60% messages, 30% replies, 10% @mentions.
+- Interleave these actions organically to mimic a realistic Reddit thread where users post general comments, chat directly, and occasionally quote-reply to older comments.
 
 **Avoid targeting the immediately preceding message/sender with reply/@mention:**
 - Responding to the immediately preceding message is automatically treated as a plain conversational continuation. Do **NOT** use `reply` or `@mention` for this; if you want to respond to the immediately preceding turn, select `message`.
-- **Actively target older messages (2-5 messages back in the log) or their senders**: If you want to use a `reply` or `@mention` (which is highly encouraged), you **must** choose an anchor message or target user from earlier in the chat log. This links the discussion threads together naturally and prevents downgrades.
+- **Actively target older messages (2-5 messages back in the log) or their senders**: If you want to use a `reply` or `@mention` (which is encouraged to link the debate), you **must** choose an anchor message or target user from earlier in the chat log. This links the discussion threads together naturally and prevents downgrades.
 
 **Chained reactions - participant interaction:**
 - If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This overrides all other considerations.

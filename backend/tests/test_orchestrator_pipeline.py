@@ -856,6 +856,8 @@ class TestExecuteTurnMention:
     @pytest.mark.asyncio
     async def test_mention_prepends_at_tag(self):
         state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="Hello"))
+        state.add_message(Message.create(sender="Alice", content="Hi Bob"))
         orch, _ = _make_orchestrator(state=state)
         anon_alice = orch._name_map["Alice"]
         anon_bob = orch._name_map["Bob"]

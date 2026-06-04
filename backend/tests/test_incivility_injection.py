@@ -28,14 +28,15 @@ def test_select_incivility_dimensions_probabilities():
     assert empty_runs == 0
     
     # Expected probabilities including fallback:
-    # impoliteness: ~83.5%
-    # hate_speech: ~52.2%
-    # democratic_threats: ~31.3%
+    # impoliteness: ~84.3%
+    # hate_speech: ~52.7%
+    # democratic_threats: ~21.1%
     
     impoliteness_rate = impoliteness_count / trials
     hate_speech_rate = hate_speech_count / trials
     democratic_threats_rate = democratic_threats_count / trials
     
-    assert 0.80 <= impoliteness_rate <= 0.85
-    assert 0.49 <= hate_speech_rate <= 0.54
-    assert 0.49 <= democratic_threats_rate <= 0.54
+    assert 0.82 <= impoliteness_rate <= 0.87
+    assert 0.50 <= hate_speech_rate <= 0.55
+    assert 0.18 <= democratic_threats_rate <= 0.24
+

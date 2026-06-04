@@ -177,7 +177,7 @@ def _merge_prompt_context(chatroom_context: str = "", incivility_framework: str 
 def select_incivility_dimensions(rng: random.Random) -> List[str]:
     """Select incivility dimensions based on target probabilities.
 
-    Target rates: 80% Impoliteness, 50% Hate Speech, 50% Democratic Threats.
+    Target rates: 80% Impoliteness, 50% Hate Speech, 20% Democratic Threats.
     Ensures at least one dimension is always selected.
     """
     selected = []
@@ -185,12 +185,12 @@ def select_incivility_dimensions(rng: random.Random) -> List[str]:
         selected.append("impoliteness")
     if rng.random() < 0.50:
         selected.append("hate_speech")
-    if rng.random() < 0.50:
+    if rng.random() < 0.20:
         selected.append("democratic_threats")
 
     # Fallback to make sure at least one is selected
     if not selected:
-        r = rng.random() * 1.80
+        r = rng.random() * 1.50
         if r < 0.80:
             selected.append("impoliteness")
         elif r < 1.30:
@@ -199,6 +199,7 @@ def select_incivility_dimensions(rng: random.Random) -> List[str]:
             selected.append("democratic_threats")
 
     return selected
+
 
 
 class Orchestrator:

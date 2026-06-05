@@ -36,13 +36,21 @@ export interface BlockEvent {
 
 export type WSIncoming = Message | LikeEvent | ReportEvent | BlockEvent
 
-export interface UserMessagePayload {
-  type: "user_message"
-  content: string
-  reply_to?: string
-  quoted_text?: string
-  mentions?: string[]
+export interface EmotionsCheckupResponsePayload {
+  type: "emotions_checkup_response"
+  emotion: string
+  tempted_to_report: boolean
 }
+
+export type UserMessagePayload =
+  | {
+      type: "user_message"
+      content: string
+      reply_to?: string
+      quoted_text?: string
+      mentions?: string[]
+    }
+  | EmotionsCheckupResponsePayload
 
 export interface SessionStartResponse {
   session_id: string

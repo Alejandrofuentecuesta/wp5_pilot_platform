@@ -511,6 +511,23 @@ class TestHandleUserMessage:
             # The wrapped websocket_send should have been called as fallback
 
 
+# ── Seeking Information ───────────────────────────────────────────────────────
+
+class TestHandleSeekingInformation:
+
+    @pytest.mark.asyncio
+    async def test_seeking_information_logs_event(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            with patch.object(session.logger, "log_event") as mock_log:
+                await session.handle_seeking_information({"duration_seconds": 12.5})
+                mock_log.assert_called_once_with(
+                    "seeking_information",
+                    {"duration_seconds": 12.5}
+                )
+
+
 # ── Blocked agent filtering ─────────────────────────────────────────────────
 
 class TestBlockedAgentFiltering:

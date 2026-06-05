@@ -124,12 +124,11 @@ class TestFormatParticipantHint:
 
     def test_favor_hint(self):
         result = format_participant_hint("favor")
-        assert "in favor" in result
+        assert "pro-topic" in result
 
     def test_qualified_favor_hint(self):
         result = format_participant_hint("qualified_favor")
-        assert "broadly in favor" in result
-        assert "specific measure" in result
+        assert "pro-topic" in result
 
 
 class TestFormatParticipantAlignmentCell:

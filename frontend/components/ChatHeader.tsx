@@ -1,11 +1,15 @@
 interface ChatHeaderProps {
   participantCount: number
   isConnected: boolean
+  onExitClick?: () => void
+  onSearchInfoClick?: () => void
 }
 
 export default function ChatHeader({
   participantCount,
   isConnected,
+  onExitClick,
+  onSearchInfoClick,
 }: ChatHeaderProps) {
   return (
     <header className="flex items-center gap-3 px-4 py-3 bg-bg-surface border-b border-border shrink-0">
@@ -34,15 +38,31 @@ export default function ChatHeader({
           {participantCount} participant{participantCount !== 1 ? "s" : ""}
         </p>
       </div>
-      <div className="flex items-center gap-1.5">
-        <div
-          className={`w-2 h-2 rounded-full ${
-            isConnected ? "bg-success animate-pulse" : "bg-danger"
-          }`}
-        />
-        <span className="text-[11px] text-tertiary">
-          {isConnected ? "Connected" : "Reconnecting"}
-        </span>
+      <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-1.5">
+          <div
+            className={`w-2 h-2 rounded-full ${
+              isConnected ? "bg-success animate-pulse" : "bg-danger"
+            }`}
+          />
+          <span className="text-[11px] text-tertiary">
+            {isConnected ? "Connected" : "Reconnecting"}
+          </span>
+        </div>
+        <button
+          onClick={onSearchInfoClick || (() => window.open("https://www.google.com", "_blank", "noopener,noreferrer"))}
+          className="px-2.5 py-1 text-xs border border-accent/35 hover:border-accent/60 bg-accent/5 hover:bg-accent/10 text-accent font-medium rounded-lg transition-colors cursor-pointer"
+        >
+          Buscar información
+        </button>
+        {onExitClick && (
+          <button
+            onClick={onExitClick}
+            className="px-2.5 py-1 text-xs border border-danger/35 hover:border-danger/60 bg-danger/5 hover:bg-danger/10 text-danger font-medium rounded-lg transition-colors cursor-pointer"
+          >
+            Exit
+          </button>
+        )}
       </div>
     </header>
   )

@@ -63,6 +63,8 @@ export interface SimulationConfig {
   parallel_turns?: number
   agent_mode?: "prompt" | "pool"
   boost_replies_mentions?: boolean
+  emotions_checkup_enabled?: boolean
+  emotions_checkup_time_minutes?: number
 }
 
 export type AgentIncivility = "civil" | "uncivil"

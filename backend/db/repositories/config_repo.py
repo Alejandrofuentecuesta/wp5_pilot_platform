@@ -152,6 +152,14 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
 
     out["boost_replies_mentions"] = bool(out.get("boost_replies_mentions", False))
 
+    out["emotions_checkup_enabled"] = bool(out.get("emotions_checkup_enabled", False))
+    out["emotions_checkup_time_minutes"] = int(out.get("emotions_checkup_time_minutes", 1))
+    if out["emotions_checkup_enabled"]:
+        if out["emotions_checkup_time_minutes"] <= 0:
+            raise ValueError("'emotions_checkup_time_minutes' must be > 0")
+        if out["emotions_checkup_time_minutes"] > out["session_duration_minutes"]:
+            raise ValueError("'emotions_checkup_time_minutes' cannot exceed 'session_duration_minutes'")
+
     return out
 
 
@@ -168,15 +176,17 @@ def validate_experimental_config(
 
     chatroom_context = out.get("chatroom_context", "")
     if chatroom_context is None:
-        out["chatroom_context"] = ""
+        chatroom_context = ""
     elif not isinstance(chatroom_context, str):
         raise ValueError("'chatroom_context' must be a string")
+    out["chatroom_context"] = chatroom_context
 
     incivility_framework = out.get("incivility_framework", "")
     if incivility_framework is None:
-        out["incivility_framework"] = ""
+        incivility_framework = ""
     elif not isinstance(incivility_framework, str):
         raise ValueError("'incivility_framework' must be a string")
+    out["incivility_framework"] = incivility_framework
 
     evc = out.get("ecological_validity_criteria", "")
     if isinstance(evc, str) and not evc.strip():

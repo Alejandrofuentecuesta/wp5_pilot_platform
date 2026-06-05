@@ -189,14 +189,42 @@ class TestValidateSimulationConfig:
         result = config_repo.validate_simulation_config(cfg)
         assert result["num_agents"] == 0
 
-    def test_bsc_model_version_defaults_to_v2(self):
+    def test_bsc_model_version_defaults_to_v1(self):
         result = config_repo.validate_simulation_config(_minimal_sim())
-        assert result["bsc_model_version"] == "v2"
+        assert result["bsc_model_version"] == "v1"
 
     def test_invalid_bsc_model_version(self):
         cfg = _minimal_sim()
         cfg["bsc_model_version"] = "v3"
         with pytest.raises(ValueError, match="bsc_model_version"):
+            config_repo.validate_simulation_config(cfg)
+
+    def test_emotions_checkup_default(self):
+        result = config_repo.validate_simulation_config(_minimal_sim())
+        assert result["emotions_checkup_enabled"] is False
+        assert result["emotions_checkup_time_minutes"] == 1
+
+    def test_emotions_checkup_valid(self):
+        cfg = _minimal_sim()
+        cfg["emotions_checkup_enabled"] = True
+        cfg["emotions_checkup_time_minutes"] = 5
+        result = config_repo.validate_simulation_config(cfg)
+        assert result["emotions_checkup_enabled"] is True
+        assert result["emotions_checkup_time_minutes"] == 5
+
+    def test_emotions_checkup_invalid_negative_time(self):
+        cfg = _minimal_sim()
+        cfg["emotions_checkup_enabled"] = True
+        cfg["emotions_checkup_time_minutes"] = -1
+        with pytest.raises(ValueError, match="emotions_checkup_time_minutes"):
+            config_repo.validate_simulation_config(cfg)
+
+    def test_emotions_checkup_invalid_exceed_duration(self):
+        cfg = _minimal_sim()
+        cfg["session_duration_minutes"] = 10
+        cfg["emotions_checkup_enabled"] = True
+        cfg["emotions_checkup_time_minutes"] = 11
+        with pytest.raises(ValueError, match="emotions_checkup_time_minutes"):
             config_repo.validate_simulation_config(cfg)
 
 
@@ -229,19 +257,19 @@ class TestValidateExperimentalConfig:
             config_repo.validate_experimental_config(cfg, available_features=[])
 
     def test_missing_internal_validity_criteria(self):
-        cfg = {"groups": {"g1": {"internal_validity_criteria": "", "features": []}}}
+        cfg = {"ecological_validity_criteria": "realistic", "groups": {"g1": {"internal_validity_criteria": "", "features": []}}}
         with pytest.raises(ValueError, match="missing an internal_validity_criteria"):
             config_repo.validate_experimental_config(cfg, available_features=[])
 
     def test_unknown_feature(self):
-        cfg = {"groups": {"g1": {"internal_validity_criteria": "be nice", "features": ["nonexistent"]}}}
+        cfg = {"ecological_validity_criteria": "realistic", "groups": {"g1": {"internal_validity_criteria": "be nice", "features": ["nonexistent"]}}}
         with pytest.raises(ValueError, match="unknown feature"):
             config_repo.validate_experimental_config(
                 cfg, available_features=["news_article"]
             )
 
     def test_valid_feature(self):
-        cfg = {"groups": {"g1": {"internal_validity_criteria": "be nice", "features": ["news_article"]}}}
+        cfg = {"ecological_validity_criteria": "realistic", "groups": {"g1": {"internal_validity_criteria": "be nice", "features": ["news_article"]}}}
         result = config_repo.validate_experimental_config(
             cfg, available_features=["news_article", "gate_until_user_post"]
         )

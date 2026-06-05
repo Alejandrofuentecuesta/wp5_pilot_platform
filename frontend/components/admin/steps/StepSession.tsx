@@ -254,6 +254,45 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
       </div>
 
       <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-admin-muted uppercase tracking-wider">Emotions Checkup</h3>
+            <p className="text-xs text-admin-faint mt-0.5">
+              Ask participants how they feel and remind them of the reporting features during the session.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange({ emotions_checkup_enabled: !config.emotions_checkup_enabled })}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${config.emotions_checkup_enabled ? "bg-admin-accent" : "bg-admin-border"}`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${config.emotions_checkup_enabled ? "translate-x-4" : "translate-x-1"}`} />
+          </button>
+        </div>
+
+        {config.emotions_checkup_enabled && (
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-admin-border">
+            <div>
+              <label className="block text-sm font-medium text-admin-text mb-1">
+                Trigger time (minutes)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={config.session_duration_minutes}
+                value={config.emotions_checkup_time_minutes ?? 1}
+                onChange={(e) => onChange({ emotions_checkup_time_minutes: Math.max(1, Math.min(config.session_duration_minutes, parseInt(e.target.value) || 1)) })}
+                className={inputClass}
+              />
+              <p className="text-xs text-admin-muted mt-1">
+                The popup will appear after this many minutes. Must be less than or equal to the session duration.
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">
         <h3 className="text-sm font-semibold text-admin-muted uppercase tracking-wider">Agents</h3>
         <div>
           <label className="block text-sm font-medium text-admin-text mb-1">

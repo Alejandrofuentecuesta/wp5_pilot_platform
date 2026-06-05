@@ -46,6 +46,12 @@ export default function ChatApp() {
       dismissNewsArticle={chat.dismissNewsArticle}
       openNewsArticle={chat.openNewsArticle}
       participantStance={chat.participantStance}
+      emotionsCheckupOpen={chat.emotionsCheckupOpen}
+      onSubmitEmotionsCheckup={chat.submitEmotionsCheckup}
+      exitModalOpen={chat.exitModalOpen}
+      setExitModalOpen={chat.setExitModalOpen}
+      exitSession={chat.exitSession}
+      onSearchInfoClick={chat.startSeekingInformation}
     />
   )
 }

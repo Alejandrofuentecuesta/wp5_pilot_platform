@@ -11,7 +11,11 @@ export function useLocalStorage<T>(
   useEffect(() => {
     try {
       const stored = localStorage.getItem(key)
-      if (stored !== null) setValue(JSON.parse(stored) as T)
+      if (stored !== null) {
+        setValue(JSON.parse(stored) as T)
+      } else {
+        setValue(fallback)
+      }
     } catch {
       // ignore localStorage errors (SSR, private browsing, etc.)
     }

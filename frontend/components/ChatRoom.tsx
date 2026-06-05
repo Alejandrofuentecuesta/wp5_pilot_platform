@@ -6,6 +6,8 @@ import MessageFeed from "./MessageFeed"
 import InputBar from "./InputBar"
 import ReportModal from "./ReportModal"
 import NewsArticleModal from "./NewsArticleModal"
+import EmotionsCheckupModal from "./EmotionsCheckupModal"
+import ExitConfirmationModal from "./ExitConfirmationModal"
 import type { ParticipantStance } from "@/lib/types"
 
 interface ChatRoomProps {
@@ -38,6 +40,12 @@ interface ChatRoomProps {
   dismissNewsArticle: () => void
   openNewsArticle: () => void
   participantStance: ParticipantStance | null
+  emotionsCheckupOpen: boolean
+  onSubmitEmotionsCheckup: (emotion: string, tempted: boolean) => void
+  exitModalOpen: boolean
+  setExitModalOpen: (open: boolean) => void
+  exitSession: () => void
+  onSearchInfoClick?: () => void
 }
 
 export default function ChatRoom({
@@ -63,12 +71,20 @@ export default function ChatRoom({
   dismissNewsArticle,
   openNewsArticle,
   participantStance,
+  emotionsCheckupOpen,
+  onSubmitEmotionsCheckup,
+  exitModalOpen,
+  setExitModalOpen,
+  exitSession,
+  onSearchInfoClick,
 }: ChatRoomProps) {
   return (
     <div className="flex flex-col h-dvh max-w-3xl mx-auto bg-bg-surface shadow-lg relative">
       <ChatHeader
         participantCount={participants.length}
         isConnected={isConnected}
+        onExitClick={() => setExitModalOpen(true)}
+        onSearchInfoClick={onSearchInfoClick}
       />
 
       <MessageFeed
@@ -113,6 +129,20 @@ export default function ChatRoom({
           open={newsArticleModalOpen}
           onClose={dismissNewsArticle}
           participantStance={participantStance}
+        />
+      )}
+
+      {/* Emotions checkup popup */}
+      {emotionsCheckupOpen && (
+        <EmotionsCheckupModal
+          onSubmit={onSubmitEmotionsCheckup}
+        />
+      )}
+
+      {exitModalOpen && (
+        <ExitConfirmationModal
+          onConfirm={exitSession}
+          onClose={() => setExitModalOpen(false)}
         />
       )}
     </div>

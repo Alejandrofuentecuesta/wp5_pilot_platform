@@ -60,6 +60,8 @@ const DEFAULT_SIMULATION: SimulationConfig = {
   parallel_turns: 1,
   agent_mode: "prompt",
   boost_replies_mentions: false,
+  emotions_checkup_enabled: false,
+  emotions_checkup_time_minutes: 1,
 }
 
 const DEFAULT_EXPERIMENTAL: ExperimentalConfig = createExperimental3x3Preset()
@@ -307,6 +309,12 @@ export default function AdminPanel() {
         if (simulation.evaluate_interval < 1) return "Validity check interval must be at least 1."
         if (simulation.action_window_size < 1) return "Action window size must be at least 1."
         if (simulation.performer_memory_size < 0) return "Performer memory size must be at least 0."
+        if (simulation.emotions_checkup_enabled) {
+          if (!simulation.emotions_checkup_time_minutes || simulation.emotions_checkup_time_minutes < 1)
+            return "Emotions checkup trigger time must be at least 1 minute."
+          if (simulation.emotions_checkup_time_minutes > simulation.session_duration_minutes)
+            return "Emotions checkup trigger time cannot exceed session duration."
+        }
         return null
       }
       case 2: {

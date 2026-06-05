@@ -12,7 +12,7 @@ from agents.STAGE.classifier import DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
 from agents.STAGE.orchestrator import Orchestrator
 from features import load_features
 from db import connection as db_conn
-from db.repositories import session_repo, message_repo, config_repo
+from db.repositories import session_repo, message_repo, config_repo, event_repo
 from cache import redis_client
 
 
@@ -354,6 +354,10 @@ class SimulationSession:
             session_id=session_id,
             experiment_id=experiment_id,
         )
+        self.emotions_checkup_enabled = bool(self.simulation_config.get("emotions_checkup_enabled", False))
+        self.emotions_checkup_time_minutes = float(self.simulation_config.get("emotions_checkup_time_minutes", 1))
+        self._emotions_checkup_triggered = False
+
 
     def _build_orchestrator(self, agent_names_subset: Optional[List[str]] = None) -> Orchestrator:
         """Instantiate a single Orchestrator for the current session config.
@@ -634,6 +638,20 @@ class SimulationSession:
             return
         self.running = True
         self._seeded = True
+
+        if self.emotions_checkup_enabled:
+            try:
+                pool = db_conn.get_pool()
+                events = await event_repo.get_session_events(
+                    pool,
+                    self.session_id,
+                    ["emotions_checkup_trigger"],
+                )
+                if events:
+                    self._emotions_checkup_triggered = True
+            except Exception as exc:
+                self.logger.log_error("restore_checkup_state", str(exc))
+
         self.clock_task = asyncio.create_task(self._clock_loop())
         print(f"Session {self.session_id} resumed (crash recovery)")
 
@@ -719,6 +737,12 @@ class SimulationSession:
                 if self._paused:
                     await asyncio.sleep(tick_interval)
                     continue
+
+                if self.emotions_checkup_enabled and not self._emotions_checkup_triggered:
+                    elapsed_minutes = (datetime.now(timezone.utc) - self.state.start_time).total_seconds() / 60.0
+                    if elapsed_minutes >= self.emotions_checkup_time_minutes:
+                        self._emotions_checkup_triggered = True
+                        await self._publish_emotions_checkup_trigger()
 
                 if self._rng.random() < post_probability:
                     if self._parallel_turns > 1:
@@ -859,6 +883,42 @@ class SimulationSession:
         except Exception as exc:
             self.logger.log_error("publish_session_end", str(exc))
 
+    async def _publish_emotions_checkup_trigger(self) -> None:
+        """Publish an emotions_checkup event via Redis pub/sub so the client opens the modal."""
+        event = {
+            "event_type": "emotions_checkup_trigger",
+            "session_id": self.session_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            r = redis_client.get_redis()
+            await redis_client.publish_event(r, self.session_id, event)
+            self.logger.log_event("emotions_checkup_trigger", {"triggered": True})
+        except Exception as exc:
+            self.logger.log_error("publish_emotions_checkup_trigger", str(exc))
+
+    async def handle_emotions_checkup_response(self, data: dict) -> None:
+        """Handle an incoming emotions checkup response — log as an event."""
+        if not self.running:
+            return
+        emotion = data.get("emotion")
+        tempted = bool(data.get("tempted_to_report", False))
+
+        self.logger.log_event("emotions_checkup_response", {
+            "emotion": emotion,
+            "tempted_to_report": tempted
+        })
+
+    async def handle_seeking_information(self, data: dict) -> None:
+        """Handle an incoming seeking information event — log as an event."""
+        if not self.running:
+            return
+        duration = float(data.get("duration_seconds", 0.0))
+
+        self.logger.log_event("seeking_information", {
+            "duration_seconds": duration
+        })
+
     # ── User message handling ─────────────────────────────────────────────────
 
     async def handle_user_message(
@@ -962,6 +1022,25 @@ class SimulationSession:
         self._subscriber_task = asyncio.create_task(
             self._pubsub_loop(self.websocket_send)
         )
+
+        # Check if emotions checkup was triggered but not answered. If so, re-send trigger.
+        if self.emotions_checkup_enabled:
+            try:
+                events = await event_repo.get_session_events(
+                    pool,
+                    self.session_id,
+                    ["emotions_checkup_trigger", "emotions_checkup_response"],
+                )
+                triggered = any(e["event_type"] == "emotions_checkup_trigger" for e in events)
+                answered = any(e["event_type"] == "emotions_checkup_response" for e in events)
+                if triggered and not answered:
+                    await self.websocket_send({
+                        "event_type": "emotions_checkup_trigger",
+                        "session_id": self.session_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                    })
+            except Exception as exc:
+                self.logger.log_error("check_emotions_checkup_on_attach", str(exc))
 
     def detach_websocket(self) -> None:
         """Detach WebSocket — session continues running; messages continue to DB."""

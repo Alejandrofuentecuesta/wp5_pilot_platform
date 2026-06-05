@@ -38,7 +38,6 @@ interface ChatRoomProps {
   dismissNewsArticle: () => void
   openNewsArticle: () => void
   participantStance: ParticipantStance | null
-  onConfirmParticipantStance: (stance: ParticipantStance) => Promise<void>
 }
 
 export default function ChatRoom({
@@ -64,7 +63,6 @@ export default function ChatRoom({
   dismissNewsArticle,
   openNewsArticle,
   participantStance,
-  onConfirmParticipantStance,
 }: ChatRoomProps) {
   return (
     <div className="flex flex-col h-dvh max-w-3xl mx-auto bg-bg-surface shadow-lg relative">
@@ -115,7 +113,6 @@ export default function ChatRoom({
           open={newsArticleModalOpen}
           onClose={dismissNewsArticle}
           participantStance={participantStance}
-          onConfirmParticipantStance={onConfirmParticipantStance}
         />
       )}
     </div>

@@ -1,5 +1,17 @@
 import { API_BASE } from "./constants"
-import type { ParticipantStance, SessionStartResponse } from "./types"
+import type { ParticipantStance, SessionIntakeResponse, SessionStartResponse } from "./types"
+
+export async function previewSessionIntake(
+  token: string,
+): Promise<SessionIntakeResponse> {
+  const res = await fetch(`${API_BASE}/session/intake`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token }),
+  })
+  if (!res.ok) throw new Error("Invalid token")
+  return res.json()
+}
 
 export async function startSession(
   token: string,

@@ -32,28 +32,26 @@ def _non_uncivil_order(target: int) -> List[str]:
 
 
 def _participant_alignment_cell(participant_stance: Optional[str]) -> Optional[str]:
-    """Map participant self-report to the experiment's valid alignment cells."""
+    """Map participant self-report to the experiment's topic-only alignment."""
     stance = (participant_stance or "").strip().lower()
-    if stance in {"favor", "qualified_favor"}:
-        return "pro_policy_pro_topic"
-    if stance == "qualified_against":
-        return "anti_policy_pro_topic"
-    if stance == "against":
-        return "anti_policy_anti_topic"
+    if stance in {"pro_topic", "favor", "qualified_favor", "qualified_against"}:
+        return "pro_topic"
+    if stance == "against" or stance == "anti_topic":
+        return "anti_topic"
     if stance == "skeptical":
         return None
-    return "pro_policy_pro_topic"
+    return "pro_topic"
 
 
 def _agent_alignment_cell(agent: dict) -> Optional[str]:
-    """Return the agent's valid topic+policy alignment cell."""
+    """Return the agent's topic-only alignment side."""
     explicit = str(agent.get("alignment_cell", "")).strip().lower()
-    if explicit in {
-        "pro_policy_pro_topic",
-        "anti_policy_pro_topic",
-        "anti_policy_anti_topic",
-    }:
+    if explicit in {"pro_topic", "anti_topic"}:
         return explicit
+    if explicit in {"pro_policy_pro_topic", "anti_policy_pro_topic"}:
+        return "pro_topic"
+    if explicit == "anti_policy_anti_topic":
+        return "anti_topic"
 
     policy_stance = str(agent.get("policy_stance", "")).strip().lower()
     topic_stance = str(agent.get("topic_stance", "")).strip().lower()
@@ -70,41 +68,24 @@ def _agent_alignment_cell(agent: dict) -> Optional[str]:
         elif ideology == "right":
             policy_stance = "anti_policy"
 
-    if not topic_stance:
-        if policy_stance == "pro_policy":
-            topic_stance = "pro_topic"
-        elif policy_stance == "anti_policy":
-            topic_stance = "anti_topic"
-
-    if policy_stance == "pro_policy" and topic_stance == "pro_topic":
-        return "pro_policy_pro_topic"
-    if policy_stance == "anti_policy" and topic_stance == "pro_topic":
-        return "anti_policy_pro_topic"
-    if policy_stance == "anti_policy" and topic_stance == "anti_topic":
-        return "anti_policy_anti_topic"
+    if topic_stance in {"pro_topic", "anti_topic"}:
+        return topic_stance
+    if policy_stance == "pro_policy":
+        return "pro_topic"
+    if policy_stance == "anti_policy":
+        return "anti_topic"
     return None
 
 
 def _participant_cell_preferences(participant_stance: Optional[str]) -> tuple[List[str], List[str]]:
     """Return (like_cells, opposite_cells) for the participant stance."""
     participant_cell = _participant_alignment_cell(participant_stance)
-    if participant_cell == "pro_policy_pro_topic":
-        return (
-            ["pro_policy_pro_topic"],
-            ["anti_policy_pro_topic", "anti_policy_anti_topic"],
-        )
-    if participant_cell == "anti_policy_pro_topic":
-        return (
-            ["anti_policy_pro_topic"],
-            ["pro_policy_pro_topic", "anti_policy_anti_topic"],
-        )
-    if participant_cell == "anti_policy_anti_topic":
-        return (
-            ["anti_policy_anti_topic"],
-            ["pro_policy_pro_topic", "anti_policy_pro_topic"],
-        )
+    if participant_cell == "pro_topic":
+        return (["pro_topic"], ["anti_topic"])
+    if participant_cell == "anti_topic":
+        return (["anti_topic"], ["pro_topic"])
     return (
-        ["pro_policy_pro_topic", "anti_policy_pro_topic", "anti_policy_anti_topic"],
+        ["pro_topic", "anti_topic"],
         [],
     )
 
@@ -120,7 +101,7 @@ def _participant_stance_preferences(participant_stance: Optional[str]) -> tuple[
     Like-minded agents are those whose ideology aligns with the participant's stance.
     """
     stance = (participant_stance or "").strip().lower()
-    if stance == "against":
+    if stance in {"against", "anti_topic"}:
         # Participant opposes the measure → right-leaning agents are like-minded
         return (["right", "center"], ["left", "center"], ["right", "center", "left"], ["left", "center", "right"])
     if stance == "skeptical":
@@ -445,9 +426,9 @@ class SimulationSession:
     ) -> tuple[List[str], List[str], Dict[str, Dict[str, str]]]:
         """Pick a stable pool roster for the current treatment.
 
-        The participant self-report acts as a soft prior: it biases which
-        agents enter the room, but the treatment targets still control the
-        overall stance/incivility mix.
+        The participant's pre-chat topic survey acts as a fixed side assignment
+        for like-minded vs not-like-minded selection, while treatment targets
+        still control the overall stance/incivility mix.
         """
         full_pool = experimental_full.get("agent_pool", [])
         selected_ids = [str(agent_id) for agent_id in self.experimental_config.get("pool_agent_ids", []) if str(agent_id).strip()]

@@ -1,26 +1,11 @@
-/**
- * Topic-specific agent pools for the 3x3 incivility x like-mindedness experiment.
- *
- * Each agent keeps two independent layers:
- * - ideology: political color and framing style for realism
- * - alignment_cell: experimental role used for like-minded vs not-like-minded
- *
- * Valid alignment cells:
- * - pro_policy_pro_topic
- * - anti_policy_pro_topic
- * - anti_policy_anti_topic
- *
- * There is intentionally no clean pro_policy_anti_topic cell.
- */
-
-import type { PoolAgent, AgentAlignmentCell, AgentIncivility } from "./admin-types"
+import type { AgentAlignmentCell, AgentIncivility, PoolAgent } from "./admin-types"
 import type { NewsTemplateId } from "./news-story-options"
 
 function clonePool(pool: PoolAgent[]): PoolAgent[] {
   return pool.map((agent) => ({ ...agent }))
 }
 
-function buildCell(
+function buildAgent(
   id: string,
   name: string,
   incivility: AgentIncivility,
@@ -28,219 +13,212 @@ function buildCell(
   alignmentCell: AgentAlignmentCell,
   persona: string,
 ): PoolAgent {
-  const policyStance = alignmentCell === "pro_policy_pro_topic" ? "pro_policy" : "anti_policy"
-  const topicStance = alignmentCell === "anti_policy_anti_topic" ? "anti_topic" : "pro_topic"
   return {
     id,
     name,
     incivility,
     ideology,
-    policy_stance: policyStance,
-    topic_stance: topicStance,
+    topic_stance: alignmentCell,
     alignment_cell: alignmentCell,
     persona,
   }
 }
 
 export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
-  buildCell(
-    "cl_pppt_c1",
+  buildAgent(
+    "cl_pt_c1",
     "Lucia",
     "civil",
     "left",
-    "pro_policy_pro_topic",
-    "Lucia, 33, cree que el acuerdo climatico es un paso util aunque llegue tarde. Defiende recortes de emisiones, renovables y cooperacion internacional. Habla con calma y suele responder con datos.",
+    "pro_topic",
+    "Lucia, 33, parte de que hay evidencia solida de calentamiento global causado por la actividad humana. Confia en las agencias meteorologicas y defiende que las olas de calor recientes encajan en una tendencia climatica real. Habla con calma y suele apoyarse en hechos.",
   ),
-  buildCell(
-    "cl_pppt_c2",
+  buildAgent(
+    "cl_pt_c2",
     "Diego",
     "civil",
-    "left",
-    "pro_policy_pro_topic",
-    "Diego, 46, ve el acuerdo como una necesidad practica aunque sea imperfecto. Cree que es mejor avanzar paso a paso que quedarse bloqueados esperando el plan ideal. Argumenta con tono sereno y busca persuadir sin atacar.",
+    "center",
+    "pro_topic",
+    "Diego, 46, cree que el calentamiento global existe y que los ultimos extremos de temperatura no son casualidad. Le sale un tono sereno, algo pragmatico, y trata de rebajar exageraciones sin negar el problema.",
   ),
-  buildCell(
-    "cl_pppt_u1",
+  buildAgent(
+    "cl_pt_c3",
     "Rafa",
-    "uncivil",
-    "left",
-    "pro_policy_pro_topic",
-    "Rafa, 29, apoya medidas climaticas duras y salta rapido cuando alguien desacredita la evidencia cientifica. Responde con brusquedad, poca paciencia y un tono frontal.",
+    "civil",
+    "right",
+    "pro_topic",
+    "Rafa, 29, acepta que el calentamiento global es real aunque enfoque el tema desde responsabilidad y gestion. Considera que los medios a veces dramatizan, pero no compra el negacionismo. Es directo pero no bronco.",
   ),
-  buildCell(
-    "cl_pppt_u2",
+  buildAgent(
+    "cl_pt_u1",
     "Nuria",
     "uncivil",
     "left",
-    "pro_policy_pro_topic",
-    "Nuria, 38, cree que los gobiernos van tarde y trata a los escepticos como irresponsables. Tiende a responder de forma dura, impaciente y descalificadora.",
+    "pro_topic",
+    "Nuria, 38, da por hecho que hay evidencia clara de calentamiento global humano y pierde la paciencia con quien lo niega. Usa un tono hostil y descalificador cuando siente que le estan tomando el pelo.",
   ),
-
-  buildCell(
-    "cl_appt_c1",
-    "Carlos",
-    "civil",
-    "right",
-    "anti_policy_pro_topic",
-    "Carlos, 46, acepta que el clima es un problema, pero cree que este acuerdo concreto esta mal diseniado y daniara industria y competitividad sin garantizar resultados. Cuestiona plazos, costes y soberania energetica con tono respetuoso.",
-  ),
-  buildCell(
-    "cl_appt_c2",
+  buildAgent(
+    "cl_pt_u2",
     "Paula",
-    "civil",
-    "left",
-    "anti_policy_pro_topic",
-    "Paula, 33, es claramente favorable a la accion climatica, pero cree que este acuerdo se queda corto y reparte mal los costes. Le preocupa que se venda como transformador cuando no protege lo suficiente a la gente comun ni acelera la transicion como deberia. Habla con calma, desde una sensibilidad progresista, y pide un plan mas ambicioso y mejor diseniado.",
+    "uncivil",
+    "center",
+    "pro_topic",
+    "Paula, 33, cree que las agencias y los datos son bastante claros sobre la gravedad de la situacion y que las altas temperaturas recientes no son una coincidencia. Cuando discute se vuelve seca, mordaz y cortante.",
   ),
-  buildCell(
-    "cl_appt_u1",
+  buildAgent(
+    "cl_pt_u3",
     "Sergio",
     "uncivil",
-    "left",
-    "anti_policy_pro_topic",
-    "Sergio, 29, cree que la accion climatica es imprescindible pero que este acuerdo se queda cortisimo. Se desespera cuando otros venden cualquier avance como suficiente y responde con sequedad, irritacion y poco filtro.",
-  ),
-  buildCell(
-    "cl_appt_u2",
-    "Irene",
-    "uncivil",
     "right",
-    "anti_policy_pro_topic",
-    "Irene, 38, cree que el pacto mezcla gestos simbolicos con costes reales demasiado altos. Aun asi no niega el problema climatico; ataca este acuerdo por ingenuo y mal atado con tono mordaz y condescendiente.",
+    "pro_topic",
+    "Sergio, 29, no se considera ecologista de pancarta, pero ve absurdo negar el calentamiento global. Cuando le provocan salta rapido, con tono bronco y poca paciencia.",
   ),
-
-  buildCell(
-    "cl_apat_c1",
+  buildAgent(
+    "cl_at_c1",
     "Alberto",
     "civil",
     "right",
-    "anti_policy_anti_topic",
-    "Alberto, 46, rechaza el acuerdo y tambien desconfia del marco general de alarma climatica. Habla de exageracion, costes inutiles y politicas impulsadas por elites, pero mantiene un tono controlado.",
+    "anti_topic",
+    "Alberto, 46, sostiene que no hay evidencia solida de un calentamiento global causado por la actividad humana. Cree que medios y agencias exageran y que muchos episodios de calor se presentan fuera de contexto. Argumenta con tono frio y controlado.",
   ),
-  buildCell(
-    "cl_apat_c2",
+  buildAgent(
+    "cl_at_c2",
     "Cristina",
     "civil",
-    "right",
-    "anti_policy_anti_topic",
-    "Cristina, 33, ve estas politicas climaticas como una imposicion ideologica que castiga a familias y negocios. Rechaza el acuerdo y el marco de fondo con lenguaje pulcro pero claramente contrario.",
+    "center",
+    "anti_topic",
+    "Cristina, 33, cree que el debate climatico se infla mas de la cuenta y que no toda temperatura alta demuestra una tendencia global. Habla de forma pulcra y escéptica.",
   ),
-  buildCell(
-    "cl_apat_u1",
+  buildAgent(
+    "cl_at_c3",
     "Oscar",
-    "uncivil",
-    "right",
-    "anti_policy_anti_topic",
-    "Oscar, 29, ve el pacto como un disparate globalista y el discurso climatico como una excusa para controlar a la gente. Va al choque, simplifica el debate y carga contra impuestos, ruina y elites hipocritas.",
+    "civil",
+    "left",
+    "anti_topic",
+    "Oscar, 29, desconfia del consenso mediatico sobre el clima y sospecha de alarmismo institucional. Su estilo es incisivo pero todavia bastante contenido.",
   ),
-  buildCell(
-    "cl_apat_u2",
+  buildAgent(
+    "cl_at_u1",
     "Pilar",
     "uncivil",
     "right",
-    "anti_policy_anti_topic",
-    "Pilar, 38, rechaza el acuerdo porque cree que castiga a la gente corriente y porque no compra el marco climatico general. Tiene un tono agrio, hostil y muy dado a desacreditar al contrario.",
+    "anti_topic",
+    "Pilar, 38, cree que la narrativa del calentamiento global esta exagerada y que se usan los veranos calurosos para meter miedo. Responde con tono agrio y muy dado a desacreditar al contrario.",
+  ),
+  buildAgent(
+    "cl_at_u2",
+    "Carlos",
+    "uncivil",
+    "center",
+    "anti_topic",
+    "Carlos, 46, no compra que haya evidencia clara de calentamiento global humano y se burla de como medios y agencias venden catastrofes. Tiene un tono bronco y condescendiente.",
+  ),
+  buildAgent(
+    "cl_at_u3",
+    "Irene",
+    "uncivil",
+    "left",
+    "anti_topic",
+    "Irene, 38, piensa que el relato climatico esta hinchado y que las altas temperaturas de los ultimos anios se fuerzan para encajar en una historia prefabricada. Discute con sarcasmo, impaciencia y ganas de pinchar al otro.",
   ),
 ]
 
 export const IMMIGRATION_AGENT_POOL: PoolAgent[] = [
-  buildCell(
-    "im_pppt_c1",
+  buildAgent(
+    "im_pt_c1",
     "Lucia",
     "civil",
     "left",
-    "pro_policy_pro_topic",
-    "Lucia, 33, apoya el plan de regularizacion porque ve necesario integrar a personas ya presentes y cubrir vacantes laborales. Defiende el enfoque con calma, empatia y argumentos de convivencia.",
+    "pro_topic",
+    "Lucia, 33, parte de que el Estado no da un trato de favor a los inmigrantes, que no son mas violentos que los espanoles y que en general intentan integrarse. Habla con calma y tono integrador.",
   ),
-  buildCell(
-    "im_pppt_c2",
+  buildAgent(
+    "im_pt_c2",
     "Diego",
     "civil",
-    "left",
-    "pro_policy_pro_topic",
-    "Diego, 46, cree que el plan puede ordenar mejor una realidad ya existente si se hace con controles, recursos y seguimiento serio. Lo apoya y argumenta con datos y tono sereno.",
+    "center",
+    "pro_topic",
+    "Diego, 46, cree que hay mucho mito sobre ayudas, delincuencia e integracion. Defiende que la mayoria de inmigrantes viene a trabajar y adaptarse. Suele discutir con tono sereno y pragmatico.",
   ),
-  buildCell(
-    "im_pppt_u1",
+  buildAgent(
+    "im_pt_c3",
     "Rafa",
-    "uncivil",
-    "left",
-    "pro_policy_pro_topic",
-    "Rafa, 29, apoya abiertamente la regularizacion y reacciona a la hostilidad con ataques frontales. Su estilo es agresivo, visceral y poco paciente.",
+    "civil",
+    "right",
+    "pro_topic",
+    "Rafa, 29, no se considera especialmente progresista, pero no compra que los inmigrantes vivan mejor por sistema ni que sean mas violentos. Habla de convivencia, trabajo y realismo.",
   ),
-  buildCell(
-    "im_pppt_u2",
+  buildAgent(
+    "im_pt_u1",
     "Nuria",
     "uncivil",
     "left",
-    "pro_policy_pro_topic",
-    "Nuria, 38, considera hipocrita o racista gran parte de la oposicion al plan. Responde con descalificaciones duras y muy poca contencion verbal.",
+    "pro_topic",
+    "Nuria, 38, salta rapido cuando oye que los inmigrantes tienen privilegios o desprecian la cultura local. Responde con dureza, impaciencia y un tono muy frontal.",
   ),
-
-  buildCell(
-    "im_appt_c1",
-    "Carlos",
-    "civil",
-    "right",
-    "anti_policy_pro_topic",
-    "Carlos, 46, no parte de una hostilidad abierta a la inmigracion, pero rechaza este plan porque cree que tensionara vivienda, servicios y gestion administrativa. Discute desde un enfoque practico y economico.",
-  ),
-  buildCell(
-    "im_appt_c2",
+  buildAgent(
+    "im_pt_u2",
     "Paula",
-    "civil",
-    "left",
-    "anti_policy_pro_topic",
-    "Paula, 33, esta a favor de una politica migratoria abierta y de regularizar con derechos, pero cree que este plan esta mal armado y se queda corto en garantias, recursos y seguimiento. No cuestiona la inmigracion; cuestiona que se venda un parche administrativo como si resolviera la integracion de verdad. Habla con prudencia, desde una sensibilidad progresista, y pide detalles concretos.",
+    "uncivil",
+    "center",
+    "pro_topic",
+    "Paula, 33, cree que la idea de que los inmigrantes reciben trato de favor o son mas violentos es un bulo interesado. Cuando entra al choque suena seca, mordaz y poco paciente.",
   ),
-  buildCell(
-    "im_appt_u1",
+  buildAgent(
+    "im_pt_u3",
     "Sergio",
     "uncivil",
-    "left",
-    "anti_policy_pro_topic",
-    "Sergio, 29, esta a favor de una politica migratoria abierta pero cree que este plan es un parche mal vendido. Se irrita cuando lo presentan como solucion perfecta y responde con sequedad, enfado y poca paciencia.",
-  ),
-  buildCell(
-    "im_appt_u2",
-    "Irene",
-    "uncivil",
     "right",
-    "anti_policy_pro_topic",
-    "Irene, 38, no rechaza por principio a los inmigrantes, pero cree que este plan es ingenuo y esta mal atado. Subraya problemas de control, fraude y gestion con tono mordaz y condescendiente.",
+    "pro_topic",
+    "Sergio, 29, no soporta los discursos que pintan a los inmigrantes como amenaza cultural o criminal. Suele entrar con tono bronco y algo despectivo.",
   ),
-
-  buildCell(
-    "im_apat_c1",
+  buildAgent(
+    "im_at_c1",
     "Alberto",
     "civil",
     "right",
-    "anti_policy_anti_topic",
-    "Alberto, 46, rechaza el plan y tambien la idea de ampliar la inmigracion. Habla de capacidad, identidad y presion sobre servicios con un tono frio y aparentemente razonable.",
+    "anti_topic",
+    "Alberto, 46, cree que el Estado da demasiado trato de favor economico y social a los inmigrantes. Tambien piensa que tienen mas probabilidad de participar en vandalismo y que muchos no se esfuerzan por integrarse. Lo dice con tono frio y aparentemente razonable.",
   ),
-  buildCell(
-    "im_apat_c2",
+  buildAgent(
+    "im_at_c2",
     "Cristina",
     "civil",
-    "right",
-    "anti_policy_anti_topic",
-    "Cristina, 33, se opone al plan porque cree que facilita una direccion de pais que no quiere. Rechaza tanto la medida como el marco pro inmigracion, pero sin gritar.",
+    "center",
+    "anti_topic",
+    "Cristina, 33, sostiene que la inmigracion recibe ventajas que la gente local no tiene y que hay un problema real de integracion cultural. Habla con cuidado, pero muy claramente en esa linea.",
   ),
-  buildCell(
-    "im_apat_u1",
+  buildAgent(
+    "im_at_c3",
     "Oscar",
-    "uncivil",
-    "right",
-    "anti_policy_anti_topic",
-    "Oscar, 29, se opone al plan de forma agresiva y mezcla seguridad, identidad y saturacion de servicios en un tono hostil. Va al choque y desacredita con facilidad.",
+    "civil",
+    "left",
+    "anti_topic",
+    "Oscar, 29, cree que se minimiza demasiado el problema de integracion y violencia y que el sistema incentiva agravios comparativos. Su tono es incisivo, pero no explosivo.",
   ),
-  buildCell(
-    "im_apat_u2",
+  buildAgent(
+    "im_at_u1",
     "Pilar",
     "uncivil",
     "right",
-    "anti_policy_anti_topic",
-    "Pilar, 38, rechaza frontalmente la medida y trata a sus defensores como irresponsables o vendidos. Tiene un tono duro, bronco y muy dado a desacreditar al contrario.",
+    "anti_topic",
+    "Pilar, 38, cree que el Estado privilegia a los inmigrantes, que traen mas problemas de vandalismo y que no respetan la cultura local. Va al choque con tono agrio y hostil.",
+  ),
+  buildAgent(
+    "im_at_u2",
+    "Carlos",
+    "uncivil",
+    "center",
+    "anti_topic",
+    "Carlos, 46, esta harto de que se nieguen los problemas de violencia, ayudas e integracion. Responde con dureza, sarcasmo y bastante desprecio por el contrario.",
+  ),
+  buildAgent(
+    "im_at_u3",
+    "Irene",
+    "uncivil",
+    "left",
+    "anti_topic",
+    "Irene, 38, cree que la inmigracion se idealiza y que mucha gente no quiere admitir el trato de favor ni el choque cultural. Tiene un estilo bronco, condescendiente y muy poco paciente.",
   ),
 ]
 
@@ -259,20 +237,9 @@ export function getAgentPoolPreset(templateId?: string): PoolAgent[] {
 }
 
 function preferredIncivilityOrder(incivilityPct: number): AgentIncivility[] {
-  if (incivilityPct >= 67) return ["uncivil", "civil"]
-  return ["civil", "uncivil"]
+  return incivilityPct >= 67 ? ["uncivil", "civil"] : ["civil", "uncivil"]
 }
 
-/**
- * Auto-select a candidate subset for a treatment.
- *
- * This is only a UI helper for `pool_agent_ids`. It does not know the future
- * participant stance, so it aims for broad coverage across the three valid
- * alignment cells while roughly matching the desired incivility level.
- *
- * The backend still makes the final live selection using the participant
- * self-report and hard quotas.
- */
 export function autoSelectAgents(
   pool: PoolAgent[],
   _likeMindedPct: number,
@@ -280,17 +247,11 @@ export function autoSelectAgents(
   count: number = 5,
 ): string[] {
   const result: PoolAgent[] = []
-  const targetUncivil = Math.round(count * incivilityPct / 100)
-  const cellOrder: AgentAlignmentCell[] = [
-    "pro_policy_pro_topic",
-    "anti_policy_pro_topic",
-    "anti_policy_anti_topic",
-  ]
+  const cellOrder: AgentAlignmentCell[] = ["pro_topic", "anti_topic"]
   const incivilityOrder = preferredIncivilityOrder(incivilityPct)
 
   const pushIfNew = (agent: PoolAgent | undefined) => {
-    if (!agent) return
-    if (result.length >= count) return
+    if (!agent || result.length >= count) return
     if (!result.some((existing) => existing.id === agent.id)) {
       result.push(agent)
     }
@@ -299,43 +260,23 @@ export function autoSelectAgents(
   const pickFromCell = (cell: AgentAlignmentCell, level: AgentIncivility) =>
     pool.find((agent) => agent.alignment_cell === cell && agent.incivility === level && !result.some((existing) => existing.id === agent.id))
 
-  if (count >= 3) {
-    for (const cell of cellOrder) {
-      pushIfNew(pickFromCell(cell, incivilityOrder[0]))
-    }
+  for (const cell of cellOrder) {
+    pushIfNew(pickFromCell(cell, incivilityOrder[0]))
+  }
+  for (const cell of cellOrder) {
+    pushIfNew(pickFromCell(cell, incivilityOrder[1]))
   }
 
-  if (result.length < count) {
-    for (const cell of cellOrder) {
-      for (const level of incivilityOrder.slice(1)) {
-        pushIfNew(pickFromCell(cell, level))
-      }
-    }
-  }
-
-  if (result.length < count) {
-    const currentUncivil = result.filter((agent) => agent.incivility === "uncivil").length
-    const wantMoreUncivil = currentUncivil < targetUncivil
-    const remaining = pool
-      .filter((agent) => !result.some((existing) => existing.id === agent.id))
-      .sort((a, b) => {
-        const aBias = wantMoreUncivil ? Number(a.incivility !== "uncivil") : Number(a.incivility === "uncivil")
-        const bBias = wantMoreUncivil ? Number(b.incivility !== "uncivil") : Number(b.incivility === "uncivil")
-        if (aBias !== bBias) return aBias - bBias
-        return a.name.localeCompare(b.name)
-      })
-    for (const agent of remaining) {
-      pushIfNew(agent)
-    }
+  const remaining = pool
+    .filter((agent) => !result.some((existing) => existing.id === agent.id))
+    .sort((a, b) => a.name.localeCompare(b.name))
+  for (const agent of remaining) {
+    pushIfNew(agent)
   }
 
   return result.slice(0, count).map((agent) => agent.id)
 }
 
-/**
- * Extract LIKEMINDED_TARGET and INCIVILITY_TARGET from a treatment's
- * internal_validity_criteria text.
- */
 export function parseTargetsFromCriteria(criteria: string): {
   likeMinded: number
   incivility: number

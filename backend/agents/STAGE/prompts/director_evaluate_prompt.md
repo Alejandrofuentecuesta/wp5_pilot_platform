@@ -11,7 +11,7 @@ Here is the chatroom context, as described by the researcher for this experiment
 
 ## Participant Self-Report
 
-If available, treat this as a soft prior only. The Director still evaluates the experiment against the researcher-defined criteria.
+If available, treat this as the participant's fixed pre-chat classification for the session.
 
 `{PARTICIPANT_STANCE_HINT}`
 

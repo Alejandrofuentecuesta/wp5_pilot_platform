@@ -472,14 +472,16 @@ class Orchestrator:
             return None
 
         stance = str(raw_stance).strip().lower()
-        if stance == "qualified_favor":
-            return "favor"
-        if stance == "qualified_against":
-            return "against"
+        if stance in {"pro_topic", "column_i", "column_1", "column 1", "column i"}:
+            return "pro_topic"
+        if stance in {"anti_topic", "column_ii", "column_2", "column 2", "column ii"}:
+            return "anti_topic"
+        if stance in {"qualified_favor", "qualified_against"}:
+            return "pro_topic"
         if stance in {"favor", "favour", "in favor", "in favour", "support", "pro", "agree"}:
-            return "favor"
+            return "pro_topic"
         if stance in {"against", "oppose", "anti", "disagree"}:
-            return "against"
+            return "anti_topic"
         if stance in {"skeptical", "skeptic", "unsure", "neutral", "mixed"}:
             return "skeptical"
 
@@ -514,23 +516,21 @@ class Orchestrator:
         if favor_match and against_match:
             return "skeptical"
         if favor_match:
-            return "favor"
+            return "pro_topic"
         if against_match:
-            return "against"
+            return "anti_topic"
         if skeptical_match:
             return "skeptical"
         return None
 
     @classmethod
     def _participant_alignment_cell_from_hint(cls, raw_stance: Optional[str]) -> Optional[str]:
-        """Map participant self-report to the experiment's valid alignment cells."""
+        """Map participant self-report to the experiment's topic-only sides."""
         stance = cls._normalize_participant_stance_hint(raw_stance)
-        if stance == "favor":
-            return "pro_policy_pro_topic"
-        if raw_stance and str(raw_stance).strip().lower() == "qualified_against":
-            return "anti_policy_pro_topic"
-        if stance == "against":
-            return "anti_policy_anti_topic"
+        if stance == "pro_topic":
+            return "pro_topic"
+        if stance == "anti_topic":
+            return "anti_topic"
         return None
 
     @staticmethod
@@ -565,7 +565,7 @@ class Orchestrator:
             "la inmigracion es un derecho" in text
             and ("esta mal planteado" in text or "es una mala medida" in text)
         ):
-            return "anti_policy_pro_topic"
+            return "pro_topic"
 
         pro_policy_patterns = [
             r"\bestoy a favor\b",
@@ -617,16 +617,18 @@ class Orchestrator:
         anti_topic = _matches(anti_topic_patterns)
 
         if pro_policy and not anti_policy:
-            return "pro_policy_pro_topic"
+            return "pro_topic"
         if anti_policy and pro_topic and not anti_topic:
-            return "anti_policy_pro_topic"
+            return "pro_topic"
         if anti_policy and anti_topic and not pro_topic:
-            return "anti_policy_anti_topic"
+            return "anti_topic"
         return None
 
     def _participant_alignment_cell_live(self) -> Optional[str]:
-        """Resolve participant cell from self-report, overridden by a clear first message."""
+        """Resolve participant cell, treating the pre-chat survey as authoritative when present."""
         hint_cell = self._participant_alignment_cell_from_hint(self.participant_stance_hint)
+        if hint_cell is not None:
+            return hint_cell
 
         participant_messages = [
             message
@@ -644,14 +646,14 @@ class Orchestrator:
 
     @staticmethod
     def _agent_alignment_cell_from_traits(traits: Dict[str, str]) -> Optional[str]:
-        """Return the agent's valid topic+policy alignment cell from fixed traits."""
+        """Return the agent's topic-only alignment side from fixed traits."""
         explicit = str(traits.get("alignment_cell", "")).strip().lower()
-        if explicit in {
-            "pro_policy_pro_topic",
-            "anti_policy_pro_topic",
-            "anti_policy_anti_topic",
-        }:
+        if explicit in {"pro_topic", "anti_topic"}:
             return explicit
+        if explicit in {"pro_policy_pro_topic", "anti_policy_pro_topic"}:
+            return "pro_topic"
+        if explicit == "anti_policy_anti_topic":
+            return "anti_topic"
 
         policy_stance = str(traits.get("policy_stance", "")).strip().lower()
         topic_stance = str(traits.get("topic_stance", "")).strip().lower()
@@ -668,18 +670,12 @@ class Orchestrator:
             elif ideology == "right":
                 policy_stance = "anti_policy"
 
-        if not topic_stance:
-            if policy_stance == "pro_policy":
-                topic_stance = "pro_topic"
-            elif policy_stance == "anti_policy":
-                topic_stance = "anti_topic"
-
-        if policy_stance == "pro_policy" and topic_stance == "pro_topic":
-            return "pro_policy_pro_topic"
-        if policy_stance == "anti_policy" and topic_stance == "pro_topic":
-            return "anti_policy_pro_topic"
-        if policy_stance == "anti_policy" and topic_stance == "anti_topic":
-            return "anti_policy_anti_topic"
+        if topic_stance in {"pro_topic", "anti_topic"}:
+            return topic_stance
+        if policy_stance == "pro_policy":
+            return "pro_topic"
+        if policy_stance == "anti_policy":
+            return "anti_topic"
         return None
 
     def _expected_like_minded_for_agent(self, agent_name: str) -> Optional[bool]:
@@ -1239,7 +1235,7 @@ class Orchestrator:
         return speaker, count
 
     def set_participant_stance_hint(self, participant_stance_hint: Optional[str]) -> None:
-        """Refresh the soft prior used in prompts and report summaries."""
+        """Refresh the participant's fixed survey-based side in prompts and summaries."""
         self.participant_stance_hint = participant_stance_hint
         self._participant_hint_text = format_participant_hint(participant_stance_hint)
         self._participant_alignment_cell_text = format_participant_alignment_cell(
@@ -1267,11 +1263,7 @@ class Orchestrator:
         classified_incivility = [message for message in agent_messages if message.is_incivil is not None]
         incivil_count = sum(1 for message in classified_incivility if message.is_incivil)
         civil_count = sum(1 for message in classified_incivility if message.is_incivil is False)
-        cell_order = [
-            "pro_policy_pro_topic",
-            "anti_policy_pro_topic",
-            "anti_policy_anti_topic",
-        ]
+        cell_order = ["pro_topic", "anti_topic"]
         cell_counts: Dict[str, int] = {cell: 0 for cell in cell_order}
         unknown_cell_count = 0
         for message in agent_messages:

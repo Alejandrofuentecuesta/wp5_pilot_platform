@@ -16,6 +16,7 @@ export default function ChatApp() {
     return (
       <LoginScreen
         initialUsername={chat.username}
+        onPreview={chat.previewSessionIntake}
         onStart={chat.startSession}
       />
     )
@@ -45,7 +46,6 @@ export default function ChatApp() {
       dismissNewsArticle={chat.dismissNewsArticle}
       openNewsArticle={chat.openNewsArticle}
       participantStance={chat.participantStance}
-      onConfirmParticipantStance={chat.submitParticipantStance}
     />
   )
 }

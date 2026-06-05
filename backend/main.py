@@ -40,27 +40,29 @@ def _parse_iso_datetime(raw: str) -> datetime:
 
 def _normalize_participant_stance_hint(raw_stance: Optional[str]) -> Optional[str]:
     value = (raw_stance or "").strip().lower()
+    if value in {"pro_topic", "column_i", "column_1", "column 1", "column i"}:
+        return "pro_topic"
+    if value in {"anti_topic", "column_ii", "column_2", "column 2", "column ii"}:
+        return "anti_topic"
     if value in {"favor", "supports", "support", "pro", "agree"}:
-        return "favor"
+        return "pro_topic"
     if value in {"against", "oppose", "opposes", "anti", "disagree"}:
-        return "against"
+        return "anti_topic"
     if value in {
         "qualified_against",
         "pro_topic_but_against_measure",
         "broadly against the measure as framed, but not necessarily aligned with the opposite ideological camp",
     }:
-        return "qualified_against"
+        return "pro_topic"
     return value or None
 
 
 def _participant_alignment_cell_from_hint(raw_stance: Optional[str]) -> Optional[str]:
     stance = _normalize_participant_stance_hint(raw_stance)
-    if stance == "favor":
-        return "pro_policy_pro_topic"
-    if stance == "qualified_against":
-        return "anti_policy_pro_topic"
-    if stance == "against":
-        return "anti_policy_anti_topic"
+    if stance == "pro_topic":
+        return "pro_topic"
+    if stance == "anti_topic":
+        return "anti_topic"
     return None
 
 
@@ -112,35 +114,38 @@ def _participant_alignment_cell_from_message(message_text: Optional[str]) -> Opt
     has_pro_policy = any(marker in text for marker in pro_policy_markers)
 
     if has_pro_topic and has_anti_policy and not has_anti_topic:
-        return "anti_policy_pro_topic"
+        return "pro_topic"
     if has_anti_topic and has_anti_policy:
-        return "anti_policy_anti_topic"
+        return "anti_topic"
     if has_pro_topic and has_pro_policy:
-        return "pro_policy_pro_topic"
+        return "pro_topic"
     return None
 
 
 def _resolve_participant_alignment_cell(raw_stance: Optional[str], first_message_text: Optional[str]) -> Optional[str]:
-    return _participant_alignment_cell_from_message(first_message_text) or _participant_alignment_cell_from_hint(raw_stance)
+    return _participant_alignment_cell_from_hint(raw_stance) or _participant_alignment_cell_from_message(first_message_text)
 
 
 def _agent_alignment_cell_from_pool_agent(agent: Dict[str, Any]) -> Optional[str]:
     explicit = str(agent.get("alignment_cell", "")).strip().lower()
     if explicit in {
-        "pro_policy_pro_topic",
-        "anti_policy_pro_topic",
-        "anti_policy_anti_topic",
+        "pro_topic",
+        "anti_topic",
     }:
         return explicit
+    if explicit in {"pro_policy_pro_topic", "anti_policy_pro_topic"}:
+        return "pro_topic"
+    if explicit == "anti_policy_anti_topic":
+        return "anti_topic"
 
     policy_stance = str(agent.get("policy_stance", "")).strip().lower()
     topic_stance = str(agent.get("topic_stance", "")).strip().lower()
-    if policy_stance == "pro_policy" and topic_stance == "pro_topic":
-        return "pro_policy_pro_topic"
-    if policy_stance == "anti_policy" and topic_stance == "pro_topic":
-        return "anti_policy_pro_topic"
-    if policy_stance == "anti_policy" and topic_stance == "anti_topic":
-        return "anti_policy_anti_topic"
+    if topic_stance in {"pro_topic", "anti_topic"}:
+        return topic_stance
+    if policy_stance == "pro_policy":
+        return "pro_topic"
+    if policy_stance == "anti_policy":
+        return "anti_topic"
     return None
 
 
@@ -260,7 +265,15 @@ class SessionStartRequest(BaseModel):
     token: str
     participant_name: Optional[str] = None
     participant_stance: Optional[
-        Literal["favor", "against", "qualified_favor", "qualified_against", "skeptical"]
+        Literal[
+            "pro_topic",
+            "anti_topic",
+            "favor",
+            "against",
+            "qualified_favor",
+            "qualified_against",
+            "skeptical",
+        ]
     ] = None
 
 
@@ -269,9 +282,23 @@ class SessionStartResponse(BaseModel):
     message: str
 
 
+class SessionIntakeRequest(BaseModel):
+    token: str
+
+
+class SessionIntakeResponse(BaseModel):
+    topic_template_id: Literal["climate_change", "immigration"]
+
+
 class ParticipantStanceUpdateRequest(BaseModel):
     participant_stance: Literal[
-        "favor", "against", "qualified_favor", "qualified_against", "skeptical"
+        "pro_topic",
+        "anti_topic",
+        "favor",
+        "against",
+        "qualified_favor",
+        "qualified_against",
+        "skeptical",
     ]
 
 
@@ -310,7 +337,63 @@ def _get_pool():
         raise HTTPException(status_code=503, detail="Database unavailable")
 
 
+def _resolve_group_topic_template_id(experiment_config: Dict[str, Any], treatment_group: str) -> Optional[str]:
+    experimental = experiment_config.get("experimental") if isinstance(experiment_config, dict) else None
+    if not isinstance(experimental, dict):
+        return None
+    groups = experimental.get("groups")
+    if not isinstance(groups, dict):
+        return None
+    group = groups.get(treatment_group)
+    if not isinstance(group, dict):
+        return None
+    seed = group.get("seed")
+    if not isinstance(seed, dict):
+        seed = {}
+    template_id = str(seed.get("template_id", "")).strip()
+    if template_id:
+        return template_id
+    for candidate in groups.values():
+        if not isinstance(candidate, dict):
+            continue
+        candidate_seed = candidate.get("seed")
+        if not isinstance(candidate_seed, dict):
+            continue
+        candidate_template_id = str(candidate_seed.get("template_id", "")).strip()
+        if candidate_template_id:
+            return candidate_template_id
+    return None
+
+
 # ── HTTP endpoints ────────────────────────────────────────────────────────────
+
+@app.post("/session/intake", response_model=SessionIntakeResponse)
+async def preview_session_intake(request: SessionIntakeRequest):
+    """Validate an unused token and return the topic survey shown before joining."""
+    pool = _get_pool()
+    token_row = await token_repo.get_token_status(pool, request.token)
+    if not token_row or token_row.get("used"):
+        raise HTTPException(status_code=401, detail="Invalid or already-used token")
+
+    experiment_id = token_row.get("experiment_id")
+    treatment_group = token_row.get("treatment_group")
+    if not experiment_id or not treatment_group:
+        raise HTTPException(status_code=400, detail="Token is missing experiment metadata")
+
+    unavailable = await config_repo.check_experiment_availability(pool, experiment_id)
+    if unavailable:
+        raise HTTPException(status_code=403, detail=unavailable)
+
+    config = await config_repo.get_experiment_config(pool, experiment_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Experiment config not found")
+
+    template_id = _resolve_group_topic_template_id(config, treatment_group)
+    if template_id not in {"climate_change", "immigration"}:
+        raise HTTPException(status_code=400, detail="This experiment does not define a supported topic survey")
+
+    return SessionIntakeResponse(topic_template_id=template_id)
+
 
 @app.post("/session/start", response_model=SessionStartResponse)
 async def start_session(request: SessionStartRequest):
@@ -359,7 +442,7 @@ async def start_session(request: SessionStartRequest):
 
 @app.post("/session/{session_id}/participant-stance")
 async def update_participant_stance(session_id: str, request: ParticipantStanceUpdateRequest):
-    """Update the participant self-report after they read the seed article."""
+    """Update the participant self-report for compatibility with existing sessions."""
     updated = await session_manager.update_participant_stance(session_id, request.participant_stance)
     if not updated:
         raise HTTPException(status_code=404, detail="Session not found")

@@ -1,22 +1,34 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useCallback, useMemo, useState } from "react"
+
+import { getPreChatSurvey } from "@/lib/pre-chat-surveys"
+import type { ParticipantStance, SessionIntakeResponse } from "@/lib/types"
 
 interface LoginScreenProps {
   initialUsername: string
-  onStart: (token: string, username: string) => Promise<void>
+  onPreview: (token: string) => Promise<SessionIntakeResponse>
+  onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
 }
 
 export default function LoginScreen({
   initialUsername,
+  onPreview,
   onStart,
 }: LoginScreenProps) {
   const [token, setToken] = useState("")
   const [username, setUsername] = useState(initialUsername)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [intake, setIntake] = useState<SessionIntakeResponse | null>(null)
+  const [selectedStance, setSelectedStance] = useState<ParticipantStance | null>(null)
 
-  const handleSubmit = useCallback(async () => {
+  const survey = useMemo(
+    () => (intake ? getPreChatSurvey(intake.topic_template_id) : null),
+    [intake],
+  )
+
+  const handlePreview = useCallback(async () => {
     if (!token.trim()) {
       setError("Please enter a token")
       return
@@ -24,25 +36,42 @@ export default function LoginScreen({
     setLoading(true)
     setError("")
     try {
-      await onStart(token.trim(), username.trim())
+      const response = await onPreview(token.trim())
+      setIntake(response)
+      setSelectedStance(null)
     } catch {
       setError("Invalid token. Please try again.")
+    } finally {
       setLoading(false)
     }
-  }, [token, username, onStart])
+  }, [token, onPreview])
+
+  const handleStart = useCallback(async () => {
+    if (!selectedStance) {
+      setError("Please choose the column closer to your view.")
+      return
+    }
+    setLoading(true)
+    setError("")
+    try {
+      await onStart(token.trim(), username.trim(), selectedStance)
+    } catch {
+      setError("Could not start the session. Please try again.")
+      setLoading(false)
+    }
+  }, [selectedStance, token, username, onStart])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" && !intake) {
       e.preventDefault()
-      handleSubmit()
+      handlePreview()
     }
   }
 
   return (
-    <div className="flex items-center justify-center h-dvh bg-bg-page">
-      <div className="bg-bg-surface rounded-xl shadow-lg w-full max-w-sm mx-4 overflow-hidden border border-border">
-        {/* Card header */}
-        <div className="px-6 pt-6 pb-4 text-center">
+    <div className="flex items-center justify-center min-h-dvh bg-bg-page px-4 py-8">
+      <div className="bg-bg-surface rounded-xl shadow-lg w-full max-w-4xl overflow-hidden border border-border">
+        <div className="px-6 pt-6 pb-4 text-center border-b border-border">
           <div className="w-12 h-12 rounded-xl bg-accent-soft mx-auto mb-3 flex items-center justify-center">
             <svg
               width="24"
@@ -61,69 +90,112 @@ export default function LoginScreen({
               />
             </svg>
           </div>
-          <h1 className="text-xl font-semibold text-primary m-0">
-            Discussion Room
-          </h1>
+          <h1 className="text-xl font-semibold text-primary m-0">Discussion Room</h1>
           <p className="text-sm text-secondary mt-1">
-            Enter your token to join the discussion
-          </p>
-          <p className="text-xs text-secondary mt-2 leading-5 max-w-xs mx-auto">
-            After you enter, you will read the article in a pop-up and choose whether you are in favor of the measure,
-            against the measure, or in favor of the topic but against the measure. That self-report is used as a hint for
-            agent selection in <span className="font-medium">agent-based</span> mode.
+            Enter your token and choose the column closer to your view before reading the article.
           </p>
         </div>
 
-        {/* Form */}
-        <div className="px-6 pb-6 space-y-3">
-          <div>
-            <label
-              htmlFor="username"
-              className="block text-xs font-medium text-secondary mb-1"
-            >
-              Display name (optional)
-            </label>
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="e.g. Alice"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors placeholder:text-tertiary bg-bg-surface"
-            />
-          </div>
-          <div>
-            <label
-              htmlFor="token"
-              className="block text-xs font-medium text-secondary mb-1"
-            >
-              Participant token
-            </label>
-            <input
-              id="token"
-              type="text"
-              value={token}
-              onChange={(e) => {
-                setToken(e.target.value)
-                if (error) setError("")
-              }}
-              onKeyDown={handleKeyDown}
-              placeholder="e.g. user0002"
-              className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors placeholder:text-tertiary bg-bg-surface"
-              autoFocus
-            />
+        <div className="px-6 py-6 space-y-5">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label htmlFor="username" className="block text-xs font-medium text-secondary mb-1">
+                Display name (optional)
+              </label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder="e.g. Alice"
+                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors placeholder:text-tertiary bg-bg-surface"
+              />
+            </div>
+            <div>
+              <label htmlFor="token" className="block text-xs font-medium text-secondary mb-1">
+                Participant token
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="token"
+                  type="text"
+                  value={token}
+                  onChange={(e) => {
+                    setToken(e.target.value)
+                    setIntake(null)
+                    setSelectedStance(null)
+                    if (error) setError("")
+                  }}
+                  onKeyDown={handleKeyDown}
+                  placeholder="e.g. user0002"
+                  className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors placeholder:text-tertiary bg-bg-surface"
+                  autoFocus
+                />
+                <button
+                  onClick={handlePreview}
+                  disabled={loading}
+                  className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {loading && !intake ? "Checking..." : "Continue"}
+                </button>
+              </div>
+            </div>
           </div>
 
-          {error && <p className="text-sm text-danger mt-1">{error}</p>}
+          {survey && (
+            <div className="space-y-4 rounded-xl border border-border bg-bg-feed/50 p-4">
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-secondary font-semibold">
+                  {survey.title}
+                </p>
+                <h2 className="text-lg font-semibold text-primary mt-1">{survey.prompt}</h2>
+                <p className="text-sm text-secondary mt-1">{survey.subtitle}</p>
+              </div>
 
-          <button
-            onClick={handleSubmit}
-            disabled={loading}
-            className="w-full py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 mt-2"
-          >
-            {loading ? "Joining..." : "Join Discussion"}
-          </button>
+              <div className="grid gap-4 md:grid-cols-2">
+                {survey.columns.map((column) => {
+                  const selected = selectedStance === column.id
+                  return (
+                    <button
+                      key={column.id}
+                      type="button"
+                      onClick={() => setSelectedStance(column.id)}
+                      className={`text-left rounded-xl border p-4 transition-colors ${
+                        selected
+                          ? "border-accent bg-accent/5 ring-1 ring-accent/20"
+                          : "border-border bg-bg-surface hover:border-accent/40"
+                      }`}
+                    >
+                      <p className="text-sm font-semibold text-primary mb-3">{column.label}</p>
+                      <ul className="space-y-3 text-sm text-primary">
+                        {column.statements.map((statement) => (
+                          <li key={statement} className="leading-6">
+                            {statement}
+                          </li>
+                        ))}
+                      </ul>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-secondary">
+                  Choose the column that is overall closer to your view. You do not need to fully agree with every line.
+                </p>
+                <button
+                  onClick={handleStart}
+                  disabled={loading || !selectedStance}
+                  className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                >
+                  {loading ? "Joining..." : "Join discussion"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-danger">{error}</p>}
         </div>
       </div>
     </div>

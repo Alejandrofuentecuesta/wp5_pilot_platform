@@ -11,7 +11,7 @@ Here is the chatroom context, as described by the researcher for this experiment
 
 ## Participant Self-Report
 
-If available, use this as a soft prior when selecting which performer should act next and which agents best fit the current treatment. It is not ground truth and should never override the treatment criteria.
+If available, treat this as the participant's fixed pre-chat classification for the session. Use it as the grounding for like-minded vs not-like-minded decisions.
 
 `{PARTICIPANT_STANCE_HINT}`
 
@@ -57,23 +57,20 @@ Read the performer profiles and participation counts below. Which performer is b
 **Primary alignment rule:** Use `alignment_cell` as the treatment rule.
 
 Valid cells are:
-- `pro_policy_pro_topic`
-- `anti_policy_pro_topic`
-- `anti_policy_anti_topic`
-
-There is no clean `pro_policy_anti_topic` cell in this experiment.
+- `pro_topic`
+- `anti_topic`
 
 Then apply this rule:
 - `like-minded` performers are agents whose `alignment_cell` exactly matches the participant's current cell.
 - `not-like-minded` performers are agents whose `alignment_cell` is one of the other valid cells.
 
-**Important consequence:** Agreement on policy alone is **not** enough for `like-minded`. To count as like-minded, a performer must match both the participant's topic side and policy side.
+**Important consequence:** `like-minded` now means sharing the same broad topic-side as the participant. Do not reintroduce hidden policy-side distinctions.
 
 **How to use ideology under this rule:** Once you know which cell the performer must come from, use `ideology` only to choose the most natural flavor of that support or opposition. `alignment_cell` decides treatment role; `ideology` decides political color and realism.
 
 **Cell structure is strict, not fuzzy:**
 - A performer's only true allies are agents who share their exact `alignment_cell`.
-- Agents from different cells are never allies, even if they both oppose the same message, policy, or person.
+- Agents from different cells are never allies, even if they both oppose the same person or article.
 - Do not build "coalitions" across cells. Different cells may attack the same target, but they should do so from their own frame rather than sounding coordinated or mutually validating.
 
 **Use real agent names as stable labels:**

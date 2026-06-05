@@ -49,11 +49,12 @@ export interface SessionStartResponse {
   message: string
 }
 
+export interface SessionIntakeResponse {
+  topic_template_id: "climate_change" | "immigration"
+}
+
 export type BlockedSenders = Record<string, string>
 
 export type ParticipantStance =
-  | "favor"
-  | "against"
-  | "qualified_favor"
-  | "qualified_against"
-  | "skeptical"
+  | "pro_topic"
+  | "anti_topic"

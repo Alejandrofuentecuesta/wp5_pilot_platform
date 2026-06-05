@@ -3,10 +3,10 @@ import { useWebSocket } from "./useWebSocket"
 import { useLocalStorage } from "./useLocalStorage"
 import { PARTICIPANT_SENDER, LS_SESSION_ID, LS_USERNAME, LS_BLOCKED, LS_PARTICIPANT_STANCE } from "@/lib/constants"
 import {
+  previewSessionIntake as apiPreviewSessionIntake,
   startSession as apiStartSession,
   likeMessage as apiLikeMessage,
   reportMessage as apiReportMessage,
-  updateParticipantStance as apiUpdateParticipantStance,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
 import type {
@@ -17,6 +17,7 @@ import type {
   ReportEvent,
   BlockEvent,
   ParticipantStance,
+  SessionIntakeResponse,
 } from "@/lib/types"
 
 export function useChat() {
@@ -136,21 +137,16 @@ export function useChat() {
   }, [sessionId, newsArticle])
 
   // Start session — sends participant name to backend so agents can infer gender.
-  const startSession = async (token: string, name: string) => {
-    const data = await apiStartSession(token, name || undefined)
-    setSessionId(data.session_id)
-    if (name) setUsername(name)
-    setParticipantStance(null)
+  const previewSessionIntake = async (token: string): Promise<SessionIntakeResponse> => {
+    return apiPreviewSessionIntake(token)
   }
 
-  const submitParticipantStance = useCallback(
-    async (stance: ParticipantStance) => {
-      if (!sessionId) return
-      await apiUpdateParticipantStance(sessionId, stance)
-      setParticipantStance(stance)
-    },
-    [sessionId, setParticipantStance],
-  )
+  const startSession = async (token: string, name: string, stance: ParticipantStance) => {
+    const data = await apiStartSession(token, name || undefined, stance)
+    setSessionId(data.session_id)
+    if (name) setUsername(name)
+    setParticipantStance(stance)
+  }
 
   const dismissNewsArticle = useCallback(() => {
     if (sessionId && typeof window !== "undefined") {
@@ -329,6 +325,7 @@ export function useChat() {
     username,
     setUsername,
     participantStance,
+    previewSessionIntake,
     startSession,
     // Connection
     isConnected,
@@ -357,7 +354,6 @@ export function useChat() {
     newsArticleModalOpen,
     dismissNewsArticle,
     openNewsArticle,
-    submitParticipantStance,
     // Blocked
     blockedSenders,
     // Typing indicator

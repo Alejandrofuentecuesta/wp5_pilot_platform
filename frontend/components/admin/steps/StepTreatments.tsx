@@ -154,16 +154,12 @@ const IDEOLOGY_BADGE: Record<string, { label: string; cls: string }> = {
 }
 
 const ALIGNMENT_CELL_BADGE: Record<string, { label: string; cls: string }> = {
-  pro_policy_pro_topic: {
-    label: "Pro policy + pro topic",
+  pro_topic: {
+    label: "Pro topic / Column I",
     cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300",
   },
-  anti_policy_pro_topic: {
-    label: "Anti policy + pro topic",
-    cls: "bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300",
-  },
-  anti_policy_anti_topic: {
-    label: "Anti policy + anti topic",
+  anti_topic: {
+    label: "Anti topic / Column II",
     cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300",
   },
 }
@@ -230,14 +226,8 @@ function HumanizeRulesEditor({ rules, onChange }: { rules: HumanizeRules; onChan
 
 const DEFAULT_POOL_INCIVILITY: PoolAgent["incivility"] = "civil"
 
-function alignmentFields(cell: AgentAlignmentCell): Pick<PoolAgent, "alignment_cell" | "policy_stance" | "topic_stance"> {
-  if (cell === "pro_policy_pro_topic") {
-    return { alignment_cell: cell, policy_stance: "pro_policy", topic_stance: "pro_topic" }
-  }
-  if (cell === "anti_policy_pro_topic") {
-    return { alignment_cell: cell, policy_stance: "anti_policy", topic_stance: "pro_topic" }
-  }
-  return { alignment_cell: cell, policy_stance: "anti_policy", topic_stance: "anti_topic" }
+function alignmentFields(cell: AgentAlignmentCell): Pick<PoolAgent, "alignment_cell" | "topic_stance"> {
+  return { alignment_cell: cell, topic_stance: cell }
 }
 
 function makeNextPoolAgentId(pool: PoolAgent[]): string {
@@ -268,7 +258,7 @@ function AgentPoolEditor({
       name: `Agente ${pool.length + 1}`,
       incivility: DEFAULT_POOL_INCIVILITY,
       ideology: "center",
-      ...alignmentFields("pro_policy_pro_topic"),
+      ...alignmentFields("pro_topic"),
       persona: "",
     }
     onChange([...pool, next])
@@ -363,9 +353,8 @@ function AgentPoolEditor({
                     onChange={(e) => updateAgent(index, alignmentFields(e.target.value as AgentAlignmentCell))}
                     className={inputClass}
                   >
-                    <option value="pro_policy_pro_topic">Pro policy + pro topic</option>
-                    <option value="anti_policy_pro_topic">Anti policy + pro topic</option>
-                    <option value="anti_policy_anti_topic">Anti policy + anti topic</option>
+                    <option value="pro_topic">Pro topic / Column I</option>
+                    <option value="anti_topic">Anti topic / Column II</option>
                   </select>
                 </div>
                 <div>
@@ -531,7 +520,7 @@ function PoolAgentSelector({
               const selected = selectedIds.includes(agent.id)
               const incivilBadge = INCIVILITY_BADGE[agent.incivility] ?? INCIVILITY_BADGE.civil
               const ideologyBadge = IDEOLOGY_BADGE[agent.ideology] ?? IDEOLOGY_BADGE.center
-              const alignmentBadge = ALIGNMENT_CELL_BADGE[agent.alignment_cell] ?? ALIGNMENT_CELL_BADGE.pro_policy_pro_topic
+              const alignmentBadge = ALIGNMENT_CELL_BADGE[agent.alignment_cell] ?? ALIGNMENT_CELL_BADGE.pro_topic
               return (
                 <button
                   key={agent.id}

@@ -100,7 +100,7 @@ class TestBuildPerformerSystemPrompt:
     def test_system_prompt_explicitly_requires_staying_in_same_cell(self):
         result = build_performer_system_prompt()
         assert "Your alignment cell is fixed" in result
-        assert "Do not drift into another cell" in result
+        assert "Do not drift into the opposite side" in result
 
 
 # ── build_performer_user_prompt ────────────────────────────────────────────

@@ -26,7 +26,7 @@ export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is define
 
 - Impoliteness:
   Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
-  Examples: "friki", "chiflado", "estupido", "farsa", "infame", "maldito", "mierda", "DEVOLVEDLOS A SU PAIS!!!!".
+  Examples: "mierda", "puta", "puta mierda", "joder", "cojones", "friki", "chiflado", "estupido", "farsa", "infame", "maldito", "mierda", "DEVOLVEDLOS A SU PAIS!!!!".
 
 - Threats to Democratic Freedoms:
   Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism.

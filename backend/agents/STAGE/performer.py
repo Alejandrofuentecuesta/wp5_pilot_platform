@@ -182,7 +182,7 @@ INCIVILITY_DIMENSIONS = {
     "impoliteness": {
         "title": "Impoliteness",
         "definition": "Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.",
-        "examples": "'friki', 'chiflado', 'estupido', 'farsa', 'infame', 'maldito', 'mierda', 'DEVOLVEDLOS A SU PAIS!!!!'."
+        "examples": "'mierda', 'puta', 'puta mierda', 'joder', 'cojones', 'friki', 'chiflado', 'estupido', 'farsa', 'infame', 'maldito', 'mierda', 'DEVOLVEDLOS A SU PAIS!!!!'."
     },
     "hate_speech": {
         "title": "Hate Speech and Stereotyping",

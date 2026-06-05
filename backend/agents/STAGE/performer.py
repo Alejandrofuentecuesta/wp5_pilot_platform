@@ -182,17 +182,17 @@ INCIVILITY_DIMENSIONS = {
     "impoliteness": {
         "title": "Impoliteness",
         "definition": "Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.",
-        "examples": "'mierda', 'puta', 'puta mierda', 'joder', 'cojones', 'friki', 'chiflado', 'estupido', 'farsa', 'infame', 'maldito', 'mierda', 'DEVOLVEDLOS A SU PAIS!!!!'."
+        "examples": "'mierda', 'puta', 'puta mierda', 'joder', 'cojones', 'hijos de puta', 'desgraciados', 'friki', 'chiflado', 'estupido', 'farsa', 'infame', 'maldito', 'DEVOLVEDLOS A SU PAIS!!!!'."
     },
     "hate_speech": {
         "title": "Hate Speech and Stereotyping",
         "definition": "Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or racist insults is included. Groups may be defined by gender, race, religion, nationality, sexuality, ideology, disability, or similar social identity markers. This also includes fake claims used to dehumanize or discriminate against identity-based groups.",
-        "examples": "'Conducia una mujer?', 'Los zurdos son la verguenza de nuestra nacion', 'Los moros simpatizan con los terroristas', 'Todos los hombres son violadores'."
+        "examples": "'Conducia una mujer?', 'Los zurdos son la verguenza de nuestra nacion', 'Los moros simpatizan con los terroristas', 'Todos los hombres son violadores', 'todos los conservadores son unos fachas', 'los fachas son patriotas de pacotilla', 'los fachas sois paranoicos', 'los inmigrantes dependen de ayudas sociales', 'los inmigrantes traen la delincuencia', 'Votar a la derecha te convierte en una basura miserable sin empatía', 'Todos los empresarios son unos explotadores y unos parásitos sociales', 'Habría que colgar a los ricos en las plazas públicas', 'Los blancos occidentales solo saben colonizar, expoliar y destruir', 'La policía solo recluta a psicópatas y maltratadores'."
     },
     "democratic_threats": {
         "title": "Threats to Democratic Freedoms",
         "definition": "Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism. This includes restricting freedoms, delegitimizing elections or institutions, promoting autocratic rule, or using authoritarian patriotic slogans in an endorsing way.",
-        "examples": "'Todo el proceso electoral es una farsa. Nuestros votos no importan', 'No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene', 'Con Franco se vivia mejor', '¡Arriba España!'."
+        "examples": "'Todo el proceso electoral es una farsa. Nuestros votos no importan', 'No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene', 'Con Franco se vivia mejor', '¡Arriba España!', 'El sistema del 78 es una farsa monárquica y el Parlamento un circo. Los votos no cambian nada', 'La judicatura y los partidos de derechas son golpistas. Habría que ilegalizarlos y gobernar por decreto', 'En la República faltó mano dura contra la Iglesia y la burguesía', 'las revoluciones no se hacen pidiendo perdón', 'ni un paso atrás'."
     }
 }
 

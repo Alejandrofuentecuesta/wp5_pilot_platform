@@ -26,19 +26,19 @@ export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is define
 
 - Impoliteness:
   Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
-  Examples: "mierda", "puta", "puta mierda", "joder", "cojones", "friki", "chiflado", "estupido", "farsa", "infame", "maldito", "mierda", "DEVOLVEDLOS A SU PAIS!!!!".
+  Examples: "mierda", "puta", "puta mierda", "joder", "cojones", "hijos de puta", "desgraciados", "friki", "chiflado", "estupido", "farsa", "infame", "maldito", "DEVOLVEDLOS A SU PAIS!!!!".
 
 - Threats to Democratic Freedoms:
   Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism.
   This includes restricting freedoms, delegitimizing elections or institutions, promoting autocratic rule, or using authoritarian patriotic slogans in an endorsing way.
   Do not code this dimension if the message only describes, reports on, or analyses threats to democracy without endorsing them.
-  Examples: "Todo el proceso electoral es una farsa. Nuestros votos no importan", "No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene", "Con Franco se vivia mejor", "¡Arriba España!".
+  Examples: "Todo el proceso electoral es una farsa. Nuestros votos no importan", "No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene", "Con Franco se vivia mejor", "¡Arriba España!", "El sistema del 78 es una farsa monárquica y el Parlamento un circo. Los votos no cambian nada", "La judicatura y los partidos de derechas son golpistas. Habría que ilegalizarlos y gobernar por decreto", "En la República faltó mano dura contra la Iglesia y la burguesía", "las revoluciones no se hacen pidiendo perdón", "ni un paso atrás".
 
 - Hate Speech and Stereotyping:
   Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or racist insults is included.
   Groups may be defined by gender, race, religion, nationality, sexuality, ideology, disability, or similar social identity markers.
   This also includes fake claims used to dehumanize or discriminate against identity-based groups.
-  Examples that count: "Conducia una mujer?", "Los zurdos son la verguenza de nuestra nacion", "Los moros simpatizan con los terroristas", "Todos los hombres son violadores".
+  Examples that count: "Conducia una mujer?", "Los zurdos son la verguenza de nuestra nacion", "Los moros simpatizan con los terroristas", "Todos los hombres son violadores", "todos los conservadores son unos fachas", "los fachas son patriotas de pacotilla", "los fachas sois paranoicos", "los inmigrantes dependen de ayudas sociales", "los inmigrantes traen la delincuencia", "Votar a la derecha te convierte en una basura miserable sin empatía", "Todos los empresarios son unos explotadores y unos parásitos sociales", "Habría que colgar a los ricos en las plazas públicas", "Los blancos occidentales solo saben colonizar, expoliar y destruir", "La policía solo recluta a psicópatas y maltratadores".
  
 
 Treatment interpretation rules:

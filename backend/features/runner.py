@@ -21,9 +21,14 @@ class FeatureRunner:
     def __init__(self, features: Sequence[BaseFeature]):
         self._features = list(features)
 
-    async def seed(self, state: SessionState, websocket_send: Callable) -> None:
+    async def seed(self, state: SessionState, websocket_send: Callable, experiment_id: str = "default") -> None:
+        import inspect
         for feature in self._features:
-            await feature.seed(state, websocket_send)
+            sig = inspect.signature(feature.seed)
+            if "experiment_id" in sig.parameters or any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+                await feature.seed(state, websocket_send, experiment_id=experiment_id)
+            else:
+                await feature.seed(state, websocket_send)
 
     def agents_active(self, state: SessionState) -> bool:
         return all(f.agents_active(state) for f in self._features)

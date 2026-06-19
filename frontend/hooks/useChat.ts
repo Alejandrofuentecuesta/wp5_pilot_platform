@@ -116,7 +116,12 @@ export function useChat() {
       setEmotionsCheckupOpen(true)
     } else {
       const message = obj as unknown as Message
-      setMessages((prev) => [...prev, message])
+      setMessages((prev) => {
+        if (prev.some((m) => m.message_id === message.message_id)) {
+          return prev
+        }
+        return [...prev, message]
+      })
     }
   }, [setBlockedSenders, setSessionId])
 

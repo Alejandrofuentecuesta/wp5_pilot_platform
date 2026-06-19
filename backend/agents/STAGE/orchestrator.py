@@ -237,8 +237,10 @@ class Orchestrator:
         boost_replies_mentions: bool = False,
         ten_messages_mode: bool = False,
         rng: Optional[random.Random] = None,
+        narrative_pool: Optional[List[Dict[str, str]]] = None,
     ):
         self.director_llm = director_llm
+        self.narrative_pool = narrative_pool or []
         self.performer_llm = performer_llm
         self.moderator_llm = moderator_llm
         self.classifier_llm = classifier_llm
@@ -2176,6 +2178,28 @@ class Orchestrator:
             except (ValueError, TypeError):
                 pass
 
+        # Extract narratives for this agent's cell
+        narratives_str = None
+        if self.narrative_pool and self._agent_traits:
+            traits = self._agent_traits.get(agent_name) or {}
+            alignment_cell = traits.get("alignment_cell")
+            ideology = traits.get("ideology")
+            if alignment_cell and ideology:
+                # Find matching cell in the list of narrative cells
+                matching_cell = next(
+                    (
+                        cell for cell in self.narrative_pool
+                        if cell.get("alignment_cell") == alignment_cell and cell.get("ideology") == ideology
+                    ),
+                    None
+                )
+                if matching_cell and matching_cell.get("narratives"):
+                    # Split by newline and format as bullet points
+                    raw_narratives = matching_cell["narratives"]
+                    lines = [line.strip() for line in raw_narratives.split("\n") if line.strip()]
+                    if lines:
+                        narratives_str = "\n".join(f"- {line}" for line in lines)
+
         base_performer_user_prompt = build_performer_user_prompt(
             instruction=performer_instruction,
             agent_profile=agent_profile,
@@ -2191,6 +2215,7 @@ class Orchestrator:
             ),
             target_word_count=target_word_count,
             template=self.performer_prompt_template,
+            narratives=narratives_str,
         )
         performer_user_prompt = base_performer_user_prompt
 

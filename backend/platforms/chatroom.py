@@ -219,6 +219,7 @@ class SimulationSession:
         self.incivility_framework = experimental_full.get("incivility_framework", "")
         self.ecological_criteria = experimental_full.get("ecological_validity_criteria", "")
         self.redirect_url = experimental_full.get("redirect_url", "")
+        self.narrative_pool = experimental_full.get("narrative_pool", [])
         self.participant_stance_hint = participant_stance_hint
 
         # Optionally inject the seed article summary into chatroom_context so agents know the article content.
@@ -405,6 +406,7 @@ class SimulationSession:
             boost_replies_mentions=bool(self.simulation_config.get("boost_replies_mentions", False)),
             ten_messages_mode=bool(self.simulation_config.get("ten_messages_mode", False)),
             rng=self._rng,
+            narrative_pool=self.narrative_pool,
         )
         orc.set_participant_stance_hint(self.participant_stance_hint)
         return orc
@@ -628,7 +630,7 @@ class SimulationSession:
             experimental_config=self.experimental_config,
         )
 
-        await self.features.seed(self.state, self.websocket_send)
+        await self.features.seed(self.state, self.websocket_send, experiment_id=self.experiment_id)
         self._seeded = True
         self.clock_task = asyncio.create_task(self._clock_loop())
         print(f"Session {self.session_id} started")

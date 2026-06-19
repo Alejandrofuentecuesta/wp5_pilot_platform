@@ -274,3 +274,28 @@ class TestIncivilityInjection:
         assert "Threats to Democratic Freedoms" in block
         assert "Hate Speech" not in block
 
+
+class TestNarrativeInjection:
+    def _instruction(self):
+        return {"objective": "greet everyone", "motivation": "warmth", "directive": "be casual"}
+
+    def test_empty_narratives_omits_section(self):
+        result = build_performer_user_prompt(
+            instruction=self._instruction(),
+            agent_profile="Active user.",
+            action_type="message",
+            narratives=None,
+        )
+        assert "AVAILABLE NARRATIVES" not in result
+
+    def test_with_narratives_includes_section(self):
+        result = build_performer_user_prompt(
+            instruction=self._instruction(),
+            agent_profile="Active user.",
+            action_type="message",
+            narratives="- Narrative 1\n- Narrative 2",
+        )
+        assert "## AVAILABLE NARRATIVES:" in result
+        assert "- Narrative 1" in result
+        assert "- Narrative 2" in result
+

@@ -211,6 +211,20 @@ def validate_experimental_config(
                     f"Available: {', '.join(available_features)}"
                 )
 
+    narrative_pool = out.get("narrative_pool")
+    if narrative_pool is None:
+        narrative_pool = []
+    elif not isinstance(narrative_pool, list):
+        raise ValueError("'narrative_pool' must be a list of cell configurations")
+    for cell in narrative_pool:
+        if not isinstance(cell, dict):
+            raise ValueError("Each element in 'narrative_pool' must be a dictionary")
+        if "alignment_cell" not in cell or "ideology" not in cell or "narratives" not in cell:
+            raise ValueError("Each narrative cell must contain 'alignment_cell', 'ideology', and 'narratives'")
+        if not isinstance(cell["alignment_cell"], str) or not isinstance(cell["ideology"], str) or not isinstance(cell["narratives"], str):
+            raise ValueError("All fields in narrative cells must be strings")
+    out["narrative_pool"] = narrative_pool
+
     return out
 
 

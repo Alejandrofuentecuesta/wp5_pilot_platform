@@ -1,5 +1,6 @@
-import type { ExperimentalConfig, TreatmentGroup } from "./admin-types"
+import type { ExperimentalConfig, TreatmentGroup, NarrativePoolCell } from "./admin-types"
 import { getAgentPoolPreset } from "./agent-pool-presets"
+import { getDafaultNarrativesByTemplate } from "./narrative-presets"
 
 export const CHATROOM_CONTEXT_3X3 = `This is a Spanish-language chatroom on Telegram, based in Spain. Messages must be written in Spanish.
 The participant has posted an opinion about a news article. The news article defines the topic of the discussion.
@@ -190,6 +191,18 @@ export function createExperimental3x3Preset(templateId?: string): ExperimentalCo
     }
   }
 
+  const defaultNarratives = templateId ? getDafaultNarrativesByTemplate(templateId) : undefined
+  const narrativePool: NarrativePoolCell[] = defaultNarratives
+    ? defaultNarratives.map((cell) => ({ ...cell }))
+    : [
+        { alignment_cell: "pro_topic" as const, ideology: "left" as const, narratives: "" },
+        { alignment_cell: "pro_topic" as const, ideology: "center" as const, narratives: "" },
+        { alignment_cell: "pro_topic" as const, ideology: "right" as const, narratives: "" },
+        { alignment_cell: "anti_topic" as const, ideology: "left" as const, narratives: "" },
+        { alignment_cell: "anti_topic" as const, ideology: "center" as const, narratives: "" },
+        { alignment_cell: "anti_topic" as const, ideology: "right" as const, narratives: "" },
+      ]
+
   return {
     chatroom_context: CHATROOM_CONTEXT_3X3,
     incivility_framework: INCIVILITY_FRAMEWORK_3X3,
@@ -197,5 +210,6 @@ export function createExperimental3x3Preset(templateId?: string): ExperimentalCo
     redirect_url: "",
     groups,
     agent_pool: pool,
+    narrative_pool: narrativePool,
   }
 }

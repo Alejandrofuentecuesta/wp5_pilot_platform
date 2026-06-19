@@ -19,7 +19,7 @@ _redis: Optional[aioredis.Redis] = None
 
 async def init_redis(url: str) -> aioredis.Redis:
     global _redis
-    _redis = aioredis.from_url(url, decode_responses=True)
+    _redis = aioredis.from_url(url, decode_responses=True, socket_timeout=None, socket_keepalive=True)
     return _redis
 
 

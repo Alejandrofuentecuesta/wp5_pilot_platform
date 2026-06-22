@@ -151,6 +151,7 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     out["bsc_model_version"] = bsc_model_version
 
     out["boost_replies_mentions"] = bool(out.get("boost_replies_mentions", False))
+    out["ten_messages_mode"] = bool(out.get("ten_messages_mode", False))
 
     out["emotions_checkup_enabled"] = bool(out.get("emotions_checkup_enabled", False))
     out["emotions_checkup_time_minutes"] = int(out.get("emotions_checkup_time_minutes", 1))
@@ -209,6 +210,20 @@ def validate_experimental_config(
                     f"Group '{name}' has unknown feature '{feat}'. "
                     f"Available: {', '.join(available_features)}"
                 )
+
+    narrative_pool = out.get("narrative_pool")
+    if narrative_pool is None:
+        narrative_pool = []
+    elif not isinstance(narrative_pool, list):
+        raise ValueError("'narrative_pool' must be a list of cell configurations")
+    for cell in narrative_pool:
+        if not isinstance(cell, dict):
+            raise ValueError("Each element in 'narrative_pool' must be a dictionary")
+        if "alignment_cell" not in cell or "ideology" not in cell or "narratives" not in cell:
+            raise ValueError("Each narrative cell must contain 'alignment_cell', 'ideology', and 'narratives'")
+        if not isinstance(cell["alignment_cell"], str) or not isinstance(cell["ideology"], str) or not isinstance(cell["narratives"], str):
+            raise ValueError("All fields in narrative cells must be strings")
+    out["narrative_pool"] = narrative_pool
 
     return out
 

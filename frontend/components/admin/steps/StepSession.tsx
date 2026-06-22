@@ -503,6 +503,26 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
             </button>
           </div>
         </div>
+
+        {/* 10 messages mode */}
+        <div className="border-t border-admin-border pt-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="block text-sm font-medium text-admin-text">
+                10 messages mode
+              </label>
+              <p className="text-xs text-admin-faint mt-0.5">
+                Enforce exact targets and allow repeating agents within exactly 10 agent messages (useful for middle ground validation).
+              </p>
+            </div>
+            <button
+              onClick={() => onChange({ ten_messages_mode: !config.ten_messages_mode })}
+              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${config.ten_messages_mode ? "bg-admin-accent" : "bg-admin-border"}`}
+            >
+              <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${config.ten_messages_mode ? "translate-x-4" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo, useEffect, useRef } from "react"
+import { useState, useCallback, useMemo, useEffect } from "react"
 import { useWebSocket } from "./useWebSocket"
 import { useLocalStorage } from "./useLocalStorage"
 import { PARTICIPANT_SENDER, LS_SESSION_ID, LS_USERNAME, LS_BLOCKED, LS_PARTICIPANT_STANCE } from "@/lib/constants"
@@ -56,10 +56,6 @@ export function useChat() {
   const [newsArticleModalOpen, setNewsArticleModalOpen] = useState(false)
   const [emotionsCheckupOpen, setEmotionsCheckupOpen] = useState(false)
   const [exitModalOpen, setExitModalOpen] = useState(false)
-
-  // R11 Seeking more information tracking
-  const pendingSearchTrackingRef = useRef<boolean>(false)
-  const inactiveStartRef = useRef<number | null>(null)
 
   // Derived: participants list from observed senders
   const participants = useMemo(() => {
@@ -120,7 +116,12 @@ export function useChat() {
       setEmotionsCheckupOpen(true)
     } else {
       const message = obj as unknown as Message
-      setMessages((prev) => [...prev, message])
+      setMessages((prev) => {
+        if (prev.some((m) => m.message_id === message.message_id)) {
+          return prev
+        }
+        return [...prev, message]
+      })
     }
   }, [setBlockedSenders, setSessionId])
 
@@ -168,11 +169,12 @@ export function useChat() {
     setNewsArticleModalOpen(true)
   }, [])
 
-  const submitEmotionsCheckup = useCallback((emotion: string, temptedToReport: boolean) => {
+  const submitEmotionsCheckup = useCallback((emotion: string, temptedToReport: boolean, reportedUsers?: string[]) => {
     send({
       type: "emotions_checkup_response",
       emotion,
       tempted_to_report: temptedToReport,
+      reported_users: reportedUsers,
     } as any)
     setEmotionsCheckupOpen(false)
   }, [send])
@@ -182,68 +184,6 @@ export function useChat() {
       type: "user_exit",
     } as any)
     setExitModalOpen(false)
-  }, [send])
-
-  const startSeekingInformation = useCallback(() => {
-    pendingSearchTrackingRef.current = true
-    inactiveStartRef.current = Date.now()
-    if (typeof window !== "undefined") {
-      window.open("https://www.google.com", "_blank", "noopener,noreferrer")
-    }
-  }, [])
-
-  useEffect(() => {
-    if (typeof window === "undefined") return
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "hidden") {
-        if (pendingSearchTrackingRef.current && inactiveStartRef.current === null) {
-          inactiveStartRef.current = Date.now()
-        }
-      } else if (document.visibilityState === "visible") {
-        if (pendingSearchTrackingRef.current && inactiveStartRef.current !== null) {
-          const duration = (Date.now() - inactiveStartRef.current) / 1000
-          if (duration > 0.1) {
-            send({
-              type: "seeking_information_event",
-              duration_seconds: duration,
-            } as any)
-          }
-          pendingSearchTrackingRef.current = false
-          inactiveStartRef.current = null
-        }
-      }
-    }
-
-    const handleFocus = () => {
-      if (pendingSearchTrackingRef.current && inactiveStartRef.current !== null) {
-        const duration = (Date.now() - inactiveStartRef.current) / 1000
-        if (duration > 0.1) {
-          send({
-            type: "seeking_information_event",
-            duration_seconds: duration,
-          } as any)
-        }
-        pendingSearchTrackingRef.current = false
-        inactiveStartRef.current = null
-      }
-    }
-
-    const handleBlur = () => {
-      if (pendingSearchTrackingRef.current && inactiveStartRef.current === null) {
-        inactiveStartRef.current = Date.now()
-      }
-    }
-
-    document.addEventListener("visibilitychange", handleVisibilityChange)
-    window.addEventListener("focus", handleFocus)
-    window.addEventListener("blur", handleBlur)
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange)
-      window.removeEventListener("focus", handleFocus)
-      window.removeEventListener("blur", handleBlur)
-    }
   }, [send])
 
   // Send message
@@ -455,7 +395,5 @@ export function useChat() {
     exitModalOpen,
     setExitModalOpen,
     exitSession,
-    // Seeking Information
-    startSeekingInformation,
   }
 }

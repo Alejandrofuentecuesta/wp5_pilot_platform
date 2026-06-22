@@ -1,50 +1,31 @@
-headline: Más de un centenar de países pactan en Ginebra recortar
-un 45% las emisiones pese a las reticencias de las grandes
-potencias
+headline: España cierra 2025 como el tercer año más cálido de su historia y aviva un debate sobre el clima que divide a la sociedad
 source: Reuters
-body: Un total de 112 Estados suscriben un acuerdo “histórico, aunque insuficiente”, que prevé el fin
-de la nueva infraestructura de carbón en 2035 y la creación de un fondo de 120.000 millones
-para apoyar a los países en desarrollo.
-Tras dos semanas de negociaciones al límite en la Cumbre del Clima de la ONU celebrada en
-Ginebra, la comunidad internacional ha logrado cerrar un acuerdo de amplio alcance. Un
-bloque de 112 países firmó este viernes un pacto pionero que eleva de forma sustancial las
-ambiciones de descarbonización global.
-El texto establece compromisos vinculantes para reducir las emisiones de gases de efecto
-invernadero en un 45% de aquí a 2040, una meta diseñada para hacer compatibles los
-objetivos climáticos con los compromisos industriales ya asumidos por los Estados firmantes.
-Para los expertos, el acuerdo marca un punto de inflexión, aunque deja abiertos interrogantes
-clave sobre su aplicación.
-El documento se apoya en dos pilares centrales. Por un lado, la creación de un fondo de
-transición de 120.000 millones de dólares destinado a financiar el salto de las economías en
-desarrollo hacia las energías renovables. Por otro, el compromiso de poner fin a la construcción
-de nuevas centrales de carbón en 2035.
-Este calendario ha sido decisivo para sumar al consenso a potencias como Alemania o China,
-al permitirles completar su planificación energética actual antes de cerrar definitivamente la
-expansión del carbón. El acuerdo refuerza además los mecanismos de control, con informes
-trimestrales de emisiones para los países del G20 y protocolos comunes de respuesta ante
-desastres climáticos.
-India, Rusia y Estados Unidos marcan distancias
-El consenso no ha sido total. India y Rusia se abstuvieron en la votación final, apelando a la
-defensa de su soberanía nacional y al impacto económico que estas medidas tendrían sobre
-sus industrias pesadas. Estados Unidos sí firmó el texto, aunque introdujo matices que
-siembran dudas sobre su ejecución real, especialmente en lo relativo al carácter vinculante de
-las inspecciones internacionales en su territorio.
-Optimismo contenido entre los expertos
-El anuncio ha sido recibido con una mezcla de esperanza y escepticismo por parte de
-organizaciones ecologistas y analistas consultados por este diario. Greenpeace califica el pacto
-de “histórico, aunque imperfecto”, mientras que plataformas como Climate Action Network
-(CAN) alertan del riesgo de que el acuerdo quede en papel mojado si no se refuerzan los
-mecanismos sancionadores.
-A falta de herramientas que garanticen el cumplimiento, advierten, el compromiso podría
-quedar reducido a una declaración política sin efectos reales sobre la trayectoria global de
-emisiones.
-Oportunidades y retos para España
+body: La AEMET confirma que la temperatura media de 2025 fue 1,1 grados por encima de la referencia histórica, con tres olas de calor y máximos de casi 46 grados. El diagnóstico científico es unánime, pero el debate político sobre sus causas, su alcance y las respuestas necesarias está lejos de serlo.
 
-Para España, que se ha consolidado como uno de los referentes europeos en transición
-energética —con más del 50% de su mix eléctrico procedente ya de fuentes limpias—, el fondo
-de 120.000 millones abre una oportunidad para sus empresas líderes en los sectores eólico y
-fotovoltaico.
-No obstante, el horizonte de descarbonización fijado por el acuerdo obliga a una reconversión
-acelerada que podría tensionar la competitividad de la industria pesada nacional frente a
-mercados con menores exigencias climáticas, si no se acompaña de medidas de protección y
-apoyo a escala europea.
+España ha cerrado 2025 como el tercer año más cálido desde que existen registros instrumentales, según el informe anual publicado por la Agencia Estatal de Meteorología (AEMET). La temperatura media fue de 15 grados centígrados, 1,1 grados por encima del período de referencia 1991-2020, lo que sitúa 2025 al nivel de 2024 y por detrás únicamente de 2022 y 2023. Los once años más cálidos de toda la serie histórica española se han registrado en el siglo XXI. El año 2025 estuvo marcado por tres grandes olas de calor entre junio y agosto, con temperaturas que alcanzaron los 45,8 grados en Jerez de la Frontera el 17 de agosto.
+
+Las consecuencias de esta tendencia son perceptibles en el territorio desde hace décadas. Los glaciares del Pirineo han perdido más del 88% de su superficie desde mediados del siglo XIX, pasando de 52 masas glaciares a apenas 19 en la actualidad, según datos publicados en la revista científica Pirineos del CSIC. Los incendios forestales alcanzaron en 2025 dimensiones históricas: se quemaron más de 354.000 hectáreas, el triple de la media de la última década, convirtiendo ese año en el más devastador para los bosques españoles en tres décadas. Las precipitaciones, aunque en 2025 se situaron en el 109% de la media histórica, presentan una distribución cada vez más irregular: sequías prolongadas en el interior y episodios torrenciales en el litoral, como los 174,8 litros por metro cuadrado registrados en Tortosa en un solo día en octubre.
+
+LA CIENCIA, CON UN DIAGNÓSTICO CONSOLIDADO
+
+Para la comunidad científica, la tendencia no admite dudas. El Panel Intergubernamental sobre Cambio Climático (IPCC) sostiene que la responsabilidad humana en el calentamiento global es "inequívoca" y que sus consecuencias sobre los ecosistemas, la salud pública y la economía serán crecientes si no se producen cambios estructurales en los sistemas energético, alimentario y de transporte. Investigadores del CSIC subrayan que España es uno de los países europeos más vulnerables al cambio climático por su posición geográfica, su dependencia hídrica y la extensión de su litoral.
+
+UN DEBATE POLÍTICO QUE NO SOLO VERSA SOBRE SOLUCIONES
+
+En el terreno político, el debate va más allá de cómo responder al fenómeno: también alcanza a su propia interpretación. El Gobierno defiende el consenso científico y lo sitúa como base de su política energética, destacando que más del 50% del mix eléctrico español procede ya de fuentes renovables. Para el Ejecutivo, el reto es acelerar la descarbonización sin sacrificar la competitividad industrial ni el empleo.
+
+Desde otras formaciones políticas se cuestiona el alcance o la urgencia del problema. Se denuncia lo que califican de "alarmismo climático" y se advierte de las consecuencias que las políticas verdes tienen sobre el empleo industrial y el sector agrario. Estas voces no niegan necesariamente que el clima cambie, pero rechazan que el origen sea exclusivamente humano o que las respuestas propuestas sean las adecuadas.
+
+EL CAMPO, ENTRE LA VULNERABILIDAD Y EL RECHAZO A LAS NORMAS
+
+El sector agrario ocupa un lugar especialmente tenso en este debate. Las tres grandes organizaciones agrarias españolas —ASAJA, COAG y UPA— reconocen que la sequía y los fenómenos meteorológicos extremos son cada vez más frecuentes e intensos, y han reclamado fondos extraordinarios para compensar las pérdidas provocadas por el cambio climático. Al mismo tiempo, se oponen frontalmente a buena parte de las normativas medioambientales que la Unión Europea exige como condición para recibir las ayudas de la Política Agraria Común (PAC).
+
+Su argumento central es el de la competencia desleal: los productores españoles deben cumplir requisitos ambientales y laborales que encarecen sus costes, mientras compiten en el mismo mercado con importaciones procedentes de países con normativas mucho menos exigentes. En el caso del tomate, las ventas españolas en la UE cayeron un 33% entre 2015 y 2025, mientras que las importaciones de Marruecos crecieron un 71% hasta alcanzar 1,4 millones de toneladas, procedentes de un país donde, según las organizaciones agrarias, el salario mínimo agrícola es de 0,98 euros por hora frente a los 9,74 euros que rige en España. Para el sector, esto convierte las exigencias medioambientales europeas en un lastre competitivo que penaliza al agricultor local sin reducir las emissions globales.
+
+A ello se suma la crítica a la burocracia. Las organizaciones agrarias denuncian que los trámites asociados a los ecorregímenes y a la condicionalidad reforzada de la PAC generan costes administrativos que muchas explotaciones pequeñas y medianas no pueden asumir, y que alejan a los agricultores de unas ayudas que en teoría deberían facilitarles la transición.
+
+LA SOCIEDAD CIVIL, ENTRE LA ALARMA Y EL ESCEPTICISMO
+
+Las organizaciones ecologistas alertan de que el ritmo de cambio institucional es insuficiente frente a la velocidad del deterioro climático, e insisten en que los compromisos adquiridos por los gobiernos no bastan si no se acompañan de medidas de protección y apoyo a escala europea. Greenpeace y WWF subrayan que cada año de retraso estrecha el margen de actuación.
+
+Pero junto a esa movilización coexiste una percepción de saturación en amplias capas de la población. Encuestas del Centro de Investigaciones Sociológicas (CIS) apuntan a que el cambio climático figura entre las principales preocupaciones de los españoles, pero también que crece la desconfianza hacia la capacidad real de los gobiernos para gestionarlo y una sensación de impotencia individual frente a la magnitud del problema.

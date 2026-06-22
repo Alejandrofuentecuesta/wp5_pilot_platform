@@ -511,23 +511,6 @@ class TestHandleUserMessage:
             # The wrapped websocket_send should have been called as fallback
 
 
-# ── Seeking Information ───────────────────────────────────────────────────────
-
-class TestHandleSeekingInformation:
-
-    @pytest.mark.asyncio
-    async def test_seeking_information_logs_event(self):
-        with _patch_externals():
-            session, _ = _create_session()
-            session.running = True
-            with patch.object(session.logger, "log_event") as mock_log:
-                await session.handle_seeking_information({"duration_seconds": 12.5})
-                mock_log.assert_called_once_with(
-                    "seeking_information",
-                    {"duration_seconds": 12.5}
-                )
-
-
 # ── Blocked agent filtering ─────────────────────────────────────────────────
 
 class TestBlockedAgentFiltering:
@@ -652,3 +635,28 @@ class TestDetachWebSocket:
             session.detach_websocket()
             # After detach, websocket_send should be noop
             assert session._ws_send_fn is None
+
+
+# ── Emotions Checkup Response ────────────────────────────────────────────────
+
+class TestHandleEmotionsCheckupResponse:
+
+    @pytest.mark.asyncio
+    async def test_emotions_checkup_logs_event_with_reported_users(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            with patch.object(session.logger, "log_event") as mock_log:
+                await session.handle_emotions_checkup_response({
+                    "emotion": "Otra: frustrado/a",
+                    "tempted_to_report": True,
+                    "reported_users": ["Carlos", "Lucia"],
+                })
+                mock_log.assert_called_once_with(
+                    "emotions_checkup_response",
+                    {
+                        "emotion": "Otra: frustrado/a",
+                        "tempted_to_report": True,
+                        "reported_users": ["Carlos", "Lucia"],
+                    }
+                )

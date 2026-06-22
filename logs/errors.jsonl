@@ -1,2 +1,6 @@
 {"timestamp": "2026-06-04T16:56:20.267417+00:00", "session_id": "test-session", "error_type": "persist_user_message", "error_message": "DB down", "context": {}}
 {"timestamp": "2026-06-04T16:56:20.269201+00:00", "session_id": "test-session", "error_type": "publish_user_message", "error_message": "Redis down", "context": {}}
+{"timestamp": "2026-06-08T08:09:48.683302+00:00", "session_id": "test-session", "error_type": "persist_user_message", "error_message": "DB down", "context": {}}
+{"timestamp": "2026-06-08T08:09:48.685249+00:00", "session_id": "test-session", "error_type": "publish_user_message", "error_message": "Redis down", "context": {}}
+{"timestamp": "2026-06-08T13:11:51.909376+00:00", "session_id": "test-session", "error_type": "persist_user_message", "error_message": "DB down", "context": {}}
+{"timestamp": "2026-06-08T13:11:51.911268+00:00", "session_id": "test-session", "error_type": "publish_user_message", "error_message": "Redis down", "context": {}}

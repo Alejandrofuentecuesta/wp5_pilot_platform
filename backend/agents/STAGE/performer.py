@@ -144,6 +144,7 @@ def build_performer_user_prompt(
     chatroom_context: str = "",
     target_word_count: Optional[int] = None,
     template: Optional[str] = None,
+    narratives: Optional[str] = None,
 ) -> str:
     """Build the Performer user prompt from the Director's output."""
     objective = instruction.get("objective", "")
@@ -174,6 +175,11 @@ def build_performer_user_prompt(
     prompt = prompt.replace("{TARGET_USER}", target_user_str)
     prompt = prompt.replace("{TARGET_MESSAGE}", target_str)
     prompt = prompt.replace("{MESSAGE_LENGTH_INSTRUCTION}", _build_length_instruction(target_word_count))
+
+    narrative_section = ""
+    if narratives and narratives.strip():
+        narrative_section = f"## AVAILABLE NARRATIVES:\n\n{narratives.strip()}\n\n"
+    prompt = prompt.replace("{NARRATIVE_SECTION}", narrative_section)
 
     return prompt
 

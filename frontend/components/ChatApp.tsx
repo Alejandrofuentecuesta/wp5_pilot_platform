@@ -51,7 +51,6 @@ export default function ChatApp() {
       exitModalOpen={chat.exitModalOpen}
       setExitModalOpen={chat.setExitModalOpen}
       exitSession={chat.exitSession}
-      onSearchInfoClick={chat.startSeekingInformation}
     />
   )
 }

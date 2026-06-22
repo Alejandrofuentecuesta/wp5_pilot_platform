@@ -235,9 +235,12 @@ class Orchestrator:
         humanize_mode: str = "general",
         humanize_per_agent: Optional[Dict[str, Dict]] = None,
         boost_replies_mentions: bool = False,
+        ten_messages_mode: bool = False,
         rng: Optional[random.Random] = None,
+        narrative_pool: Optional[List[Dict[str, str]]] = None,
     ):
         self.director_llm = director_llm
+        self.narrative_pool = narrative_pool or []
         self.performer_llm = performer_llm
         self.moderator_llm = moderator_llm
         self.classifier_llm = classifier_llm
@@ -282,6 +285,7 @@ class Orchestrator:
         self.humanize_mode = humanize_mode
         self.humanize_per_agent = humanize_per_agent or {}
         self.boost_replies_mentions = boost_replies_mentions
+        self.ten_messages_mode = ten_messages_mode
 
         # Build the shuffled name mapping (stable for the session lifetime).
         _rng = rng or random.Random()
@@ -711,6 +715,31 @@ class Orchestrator:
             return value
         return None
 
+    def _was_interpellated_last_turn(self, agent_real_name: str) -> bool:
+        """Return True if the very last message in the chat interpellated this agent."""
+        if not self.state.messages:
+            return False
+        last_message = self.state.messages[-1]
+
+        # 1. Check if it's a quote-reply targeting a message sent by this agent
+        if last_message.reply_to:
+            for m in self.state.messages:
+                if m.message_id == last_message.reply_to and m.sender == agent_real_name:
+                    return True
+
+        # 2. Check if the agent is mentioned in the last message
+        anon_name = self._name_map.get(agent_real_name)
+        if anon_name and last_message.mentions and anon_name in last_message.mentions:
+            return True
+
+        # 3. Check if the last message was sent immediately after a message from this agent (adjacency)
+        if len(self.state.messages) >= 2:
+            second_last = self.state.messages[-2]
+            if second_last.sender == agent_real_name:
+                return True
+
+        return False
+
     def _filter_candidate_agents_for_targets(
         self,
         internal_validity_criteria: str,
@@ -746,56 +775,146 @@ class Orchestrator:
 
         preferred_like_value: Optional[bool] = None
         preferred_civility: Optional[str] = None
-
-        if total_messages > 0 and like_target is not None and not_like_target is not None:
-            like_count = sum(
-                1 for message in agent_messages
-                if self._expected_like_minded_for_agent(message.sender) is True
-            )
-            not_like_count = sum(
-                1 for message in agent_messages
-                if self._expected_like_minded_for_agent(message.sender) is False
-            )
-            current_like_pct = (100.0 * like_count / total_messages)
-            current_not_like_pct = (100.0 * not_like_count / total_messages)
-            like_gap = like_target - current_like_pct
-            not_like_gap = not_like_target - current_not_like_pct
-
-            if like_gap > 0 or not_like_gap > 0:
-                preferred_like_value = True if like_gap >= not_like_gap else False
-
-        classified_incivility = [message for message in agent_messages if message.is_incivil is not None]
         preferred_uncivil_ideology: Optional[str] = None
-        if classified_incivility and incivil_target is not None:
-            incivil_count = sum(1 for message in classified_incivility if message.is_incivil)
-            civil_count = sum(1 for message in classified_incivility if message.is_incivil is False)
-            current_incivil_pct = 100.0 * incivil_count / len(classified_incivility)
-            current_civil_pct = 100.0 * civil_count / len(classified_incivility)
-            civil_target = max(0, 100 - incivil_target)
-            incivil_gap = incivil_target - current_incivil_pct
-            civil_gap = civil_target - current_civil_pct
 
-            if incivil_gap > 0 or civil_gap > 0:
-                preferred_civility = "uncivil" if incivil_gap >= civil_gap else "civil"
+        if self.ten_messages_mode:
+            # 10 Messages Mode Solver
+            target_uncivil = round(10 * (incivil_target or 50) / 100)
+            target_civil = 10 - target_uncivil
 
-        if preferred_civility == "uncivil":
-            uncivil_left_count = 0
-            uncivil_right_count = 0
-            for message in classified_incivility:
-                if message.is_incivil is True:
-                    traits = self._agent_traits.get(message.sender) or {}
+            target_like_minded = round(10 * (like_target or 50) / 100)
+            target_not_like_minded = 10 - target_like_minded
+
+            if target_uncivil == 2:
+                target_uncivil_left = 1
+                target_uncivil_right = 1
+            elif target_uncivil == 8:
+                target_uncivil_left = 4
+                target_uncivil_right = 4
+            elif target_uncivil == 5:
+                target_uncivil_left = 3
+                target_uncivil_right = 3
+            else:
+                target_uncivil_left = target_uncivil // 2
+                target_uncivil_right = target_uncivil - target_uncivil_left
+
+            # Current counts
+            uncivil_sent = sum(1 for m in agent_messages if m.is_incivil is True)
+            civil_sent = sum(1 for m in agent_messages if m.is_incivil is False)
+
+            like_minded_sent = sum(1 for m in agent_messages if self._expected_like_minded_for_agent(m.sender) is True)
+            not_like_minded_sent = sum(1 for m in agent_messages if self._expected_like_minded_for_agent(m.sender) is False)
+
+            uncivil_left_sent = 0
+            uncivil_right_sent = 0
+            for m in agent_messages:
+                if m.is_incivil is True:
+                    traits = self._agent_traits.get(m.sender) or {}
                     sender_ideology = self._normalize_agent_ideology(traits.get("ideology"))
                     if sender_ideology == "left":
-                        uncivil_left_count += 1
+                        uncivil_left_sent += 1
                     elif sender_ideology == "right":
-                        uncivil_right_count += 1
+                        uncivil_right_sent += 1
 
-            if uncivil_left_count < uncivil_right_count:
-                preferred_uncivil_ideology = "left"
-            elif uncivil_right_count < uncivil_left_count:
-                preferred_uncivil_ideology = "right"
-            else:
-                preferred_uncivil_ideology = self._rng.choice(["left", "right"])
+            needed_uncivil = max(0, target_uncivil - uncivil_sent)
+            needed_civil = max(0, target_civil - civil_sent)
+            needed_like_minded = max(0, target_like_minded - like_minded_sent)
+            needed_not_like_minded = max(0, target_not_like_minded - not_like_minded_sent)
+            needed_uncivil_left = max(0, target_uncivil_left - uncivil_left_sent)
+            needed_uncivil_right = max(0, target_uncivil_right - uncivil_right_sent)
+
+            # Apply hard filtering
+            filtered_candidates = set()
+            for name in candidates:
+                # Civility target filter
+                agent_civility = self._agent_civility_bucket(name)
+                if agent_civility == "uncivil" and needed_uncivil == 0:
+                    continue
+                if agent_civility == "civil" and needed_civil == 0:
+                    continue
+
+                # Stance target filter
+                agent_like = self._expected_like_minded_for_agent(name)
+                if agent_like is True and needed_like_minded == 0:
+                    continue
+                if agent_like is False and needed_not_like_minded == 0:
+                    continue
+
+                # Ideology filter for uncivil turns (exclude center, enforce left/right targets)
+                if agent_civility == "uncivil":
+                    traits = self._agent_traits.get(name) or {}
+                    agent_ideology = self._normalize_agent_ideology(traits.get("ideology"))
+                    if agent_ideology not in {"left", "right"}:
+                        continue
+                    if agent_ideology == "left" and needed_uncivil_left == 0:
+                        continue
+                    if agent_ideology == "right" and needed_uncivil_right == 0:
+                        continue
+
+                filtered_candidates.add(name)
+
+            if filtered_candidates:
+                candidates = filtered_candidates
+
+            # Set preferred target values based on remaining gaps
+            if needed_like_minded > 0 or needed_not_like_minded > 0:
+                preferred_like_value = True if needed_like_minded >= needed_not_like_minded else False
+            if needed_uncivil > 0 or needed_civil > 0:
+                preferred_civility = "uncivil" if needed_uncivil >= needed_civil else "civil"
+            if preferred_civility == "uncivil":
+                if needed_uncivil_left > 0 or needed_uncivil_right > 0:
+                    preferred_uncivil_ideology = "left" if needed_uncivil_left >= needed_uncivil_right else "right"
+
+        else:
+            # Normal Session Targets logic
+            if total_messages > 0 and like_target is not None and not_like_target is not None:
+                like_count = sum(
+                    1 for message in agent_messages
+                    if self._expected_like_minded_for_agent(message.sender) is True
+                )
+                not_like_count = sum(
+                    1 for message in agent_messages
+                    if self._expected_like_minded_for_agent(message.sender) is False
+                )
+                current_like_pct = (100.0 * like_count / total_messages)
+                current_not_like_pct = (100.0 * not_like_count / total_messages)
+                like_gap = like_target - current_like_pct
+                not_like_gap = not_like_target - current_not_like_pct
+
+                if like_gap > 0 or not_like_gap > 0:
+                    preferred_like_value = True if like_gap >= not_like_gap else False
+
+            classified_incivility = [message for message in agent_messages if message.is_incivil is not None]
+            if classified_incivility and incivil_target is not None:
+                incivil_count = sum(1 for message in classified_incivility if message.is_incivil)
+                civil_count = sum(1 for message in classified_incivility if message.is_incivil is False)
+                current_incivil_pct = 100.0 * incivil_count / len(classified_incivility)
+                current_civil_pct = 100.0 * civil_count / len(classified_incivility)
+                civil_target = max(0, 100 - incivil_target)
+                incivil_gap = incivil_target - current_incivil_pct
+                civil_gap = civil_target - current_civil_pct
+
+                if incivil_gap > 0 or civil_gap > 0:
+                    preferred_civility = "uncivil" if incivil_gap >= civil_gap else "civil"
+
+            if preferred_civility == "uncivil":
+                uncivil_left_count = 0
+                uncivil_right_count = 0
+                for message in classified_incivility:
+                    if message.is_incivil is True:
+                        traits = self._agent_traits.get(message.sender) or {}
+                        sender_ideology = self._normalize_agent_ideology(traits.get("ideology"))
+                        if sender_ideology == "left":
+                            uncivil_left_count += 1
+                        elif sender_ideology == "right":
+                            uncivil_right_count += 1
+
+                if uncivil_left_count < uncivil_right_count:
+                    preferred_uncivil_ideology = "left"
+                elif uncivil_right_count < uncivil_left_count:
+                    preferred_uncivil_ideology = "right"
+                else:
+                    preferred_uncivil_ideology = self._rng.choice(["left", "right"])
 
         last_index_by_real: Dict[str, int] = {}
         count_by_real: Dict[str, int] = {}
@@ -819,19 +938,27 @@ class Orchestrator:
                 else:
                     score += 3
 
-            message_count = count_by_real.get(name, 0)
-            if message_count == 0:
-                score += 2
-            else:
-                last_index = last_index_by_real.get(name)
-                turns_ago = len(agent_messages) - 1 - last_index if last_index is not None else 0
-                if turns_ago >= 3:
-                    score += 1
+            if self.ten_messages_mode and self._was_interpellated_last_turn(name):
+                score += 20
 
-            last_index = last_index_by_real.get(name)
-            turns_ago = len(agent_messages) - 1 - last_index if last_index is not None else 10_000
-            never_spoken = 1 if message_count == 0 else 0
-            return (score, never_spoken, turns_ago, -message_count, name)
+            message_count = count_by_real.get(name, 0)
+            if self.ten_messages_mode:
+                turns_ago = len(agent_messages) - 1 - last_index_by_real.get(name, -1)
+                never_spoken = 1 if message_count == 0 else 0
+                return (score, never_spoken, turns_ago, -message_count, name)
+            else:
+                if message_count == 0:
+                    score += 2
+                else:
+                    last_index = last_index_by_real.get(name)
+                    turns_ago = len(agent_messages) - 1 - last_index if last_index is not None else 0
+                    if turns_ago >= 3:
+                        score += 1
+
+                last_index = last_index_by_real.get(name)
+                turns_ago = len(agent_messages) - 1 - last_index if last_index is not None else 10_000
+                never_spoken = 1 if message_count == 0 else 0
+                return (score, never_spoken, turns_ago, -message_count, name)
 
         ranked = sorted(candidates, key=_rank_key, reverse=True)
         return set(ranked[:TARGET_ELIGIBLE_SPEAKER_COUNT]) or candidates
@@ -2051,6 +2178,28 @@ class Orchestrator:
             except (ValueError, TypeError):
                 pass
 
+        # Extract narratives for this agent's cell
+        narratives_str = None
+        if self.narrative_pool and self._agent_traits:
+            traits = self._agent_traits.get(agent_name) or {}
+            alignment_cell = traits.get("alignment_cell")
+            ideology = traits.get("ideology")
+            if alignment_cell and ideology:
+                # Find matching cell in the list of narrative cells
+                matching_cell = next(
+                    (
+                        cell for cell in self.narrative_pool
+                        if cell.get("alignment_cell") == alignment_cell and cell.get("ideology") == ideology
+                    ),
+                    None
+                )
+                if matching_cell and matching_cell.get("narratives"):
+                    # Split by newline and format as bullet points
+                    raw_narratives = matching_cell["narratives"]
+                    lines = [line.strip() for line in raw_narratives.split("\n") if line.strip()]
+                    if lines:
+                        narratives_str = "\n".join(f"- {line}" for line in lines)
+
         base_performer_user_prompt = build_performer_user_prompt(
             instruction=performer_instruction,
             agent_profile=agent_profile,
@@ -2066,6 +2215,7 @@ class Orchestrator:
             ),
             target_word_count=target_word_count,
             template=self.performer_prompt_template,
+            narratives=narratives_str,
         )
         performer_user_prompt = base_performer_user_prompt
 

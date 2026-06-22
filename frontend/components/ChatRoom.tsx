@@ -41,11 +41,10 @@ interface ChatRoomProps {
   openNewsArticle: () => void
   participantStance: ParticipantStance | null
   emotionsCheckupOpen: boolean
-  onSubmitEmotionsCheckup: (emotion: string, tempted: boolean) => void
+  onSubmitEmotionsCheckup: (emotion: string, tempted: boolean, reportedUsers?: string[]) => void
   exitModalOpen: boolean
   setExitModalOpen: (open: boolean) => void
   exitSession: () => void
-  onSearchInfoClick?: () => void
 }
 
 export default function ChatRoom({
@@ -76,7 +75,6 @@ export default function ChatRoom({
   exitModalOpen,
   setExitModalOpen,
   exitSession,
-  onSearchInfoClick,
 }: ChatRoomProps) {
   return (
     <div className="flex flex-col h-dvh max-w-3xl mx-auto bg-bg-surface shadow-lg relative">
@@ -84,7 +82,6 @@ export default function ChatRoom({
         participantCount={participants.length}
         isConnected={isConnected}
         onExitClick={() => setExitModalOpen(true)}
-        onSearchInfoClick={onSearchInfoClick}
       />
 
       <MessageFeed
@@ -136,6 +133,7 @@ export default function ChatRoom({
       {emotionsCheckupOpen && (
         <EmotionsCheckupModal
           onSubmit={onSubmitEmotionsCheckup}
+          participants={participants.filter((p) => p !== displayName)}
         />
       )}
 

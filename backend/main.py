@@ -558,8 +558,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                     )
             elif data.get("type") == "emotions_checkup_response":
                 await session.handle_emotions_checkup_response(data)
-            elif data.get("type") == "seeking_information_event":
-                await session.handle_seeking_information(data)
             elif data.get("type") == "user_exit":
                 await session._publish_session_end("user_exit")
                 await asyncio.sleep(0.5)

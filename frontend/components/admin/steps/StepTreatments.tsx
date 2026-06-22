@@ -1,10 +1,11 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { ExperimentalConfig, TreatmentGroup, SeedArticle, FeatureMeta, PoolAgent, HumanizeRules, AgentAlignmentCell } from "../../../lib/admin-types"
+import type { ExperimentalConfig, TreatmentGroup, SeedArticle, FeatureMeta, PoolAgent, HumanizeRules, AgentAlignmentCell, NarrativePoolCell, AgentIdeology } from "../../../lib/admin-types"
 import { createExperimental3x3Preset } from "../../../lib/treatment-presets"
 import { createSeedFromTemplate, getNewsTemplateById, NEWS_TEMPLATE_OPTIONS, type NewsTemplateId } from "../../../lib/news-story-options"
 import { DEFAULT_AGENT_POOL, autoSelectAgents, getAgentPoolPreset, parseTargetsFromCriteria } from "../../../lib/agent-pool-presets"
+import { getDafaultNarrativesByTemplate } from "../../../lib/narrative-presets"
 
 interface StepTreatmentsProps {
   config: ExperimentalConfig
@@ -649,6 +650,115 @@ function GroupCard({
   )
 }
 
+function NarrativePoolEditor({
+  pool,
+  onChange,
+  selectedTemplateId,
+}: {
+  pool?: NarrativePoolCell[]
+  onChange: (pool: NarrativePoolCell[]) => void
+  selectedTemplateId: string
+}) {
+  const cells = pool || [
+    { alignment_cell: "pro_topic", ideology: "left", narratives: "" },
+    { alignment_cell: "pro_topic", ideology: "center", narratives: "" },
+    { alignment_cell: "pro_topic", ideology: "right", narratives: "" },
+    { alignment_cell: "anti_topic", ideology: "left", narratives: "" },
+    { alignment_cell: "anti_topic", ideology: "center", narratives: "" },
+    { alignment_cell: "anti_topic", ideology: "right", narratives: "" },
+  ]
+
+  const updateCell = (index: number, updates: Partial<NarrativePoolCell>) => {
+    const next = cells.map((cell, i) => (i === index ? { ...cell, ...updates } : cell))
+    onChange(next)
+  }
+
+  const loadDefaultNarratives = () => {
+    const defaultNarratives = selectedTemplateId
+      ? getDafaultNarrativesByTemplate(selectedTemplateId)
+      : undefined
+
+    if (defaultNarratives) {
+      onChange(defaultNarratives.map((cell) => ({ ...cell })))
+    } else {
+      onChange([
+        { alignment_cell: "pro_topic", ideology: "left", narratives: "" },
+        { alignment_cell: "pro_topic", ideology: "center", narratives: "" },
+        { alignment_cell: "pro_topic", ideology: "right", narratives: "" },
+        { alignment_cell: "anti_topic", ideology: "left", narratives: "" },
+        { alignment_cell: "anti_topic", ideology: "center", narratives: "" },
+        { alignment_cell: "anti_topic", ideology: "right", narratives: "" },
+      ])
+    }
+  }
+
+  return (
+    <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-sm font-semibold text-admin-muted uppercase tracking-wider">Narrative Pool</h3>
+          <p className="text-xs text-admin-faint mt-1">
+            Define micro-narratives for each combination of stance and ideology. 
+            Write or paste narratives line by line (one narrative per line).
+          </p>
+        </div>
+        <div>
+          <button
+            type="button"
+            onClick={loadDefaultNarratives}
+            className="px-3 py-1.5 text-xs font-medium border border-admin-border rounded-lg text-admin-muted hover:border-admin-accent/50 hover:text-admin-text transition-colors"
+          >
+            {selectedTemplateId ? "Load story narratives" : "Load default narratives"}
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {cells.map((cell, idx) => (
+          <div key={idx} className="border border-admin-border rounded-lg p-4 bg-admin-bg space-y-3">
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-admin-text mb-1">Alignment</label>
+                <select
+                  value={cell.alignment_cell}
+                  onChange={(e) => updateCell(idx, { alignment_cell: e.target.value as AgentAlignmentCell })}
+                  className={`${inputClass} !py-1 !px-2 !text-xs`}
+                >
+                  <option value="pro_topic">Pro topic / Column I</option>
+                  <option value="anti_topic">Anti topic / Column II</option>
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-admin-text mb-1">Ideology</label>
+                <select
+                  value={cell.ideology}
+                  onChange={(e) => updateCell(idx, { ideology: e.target.value as AgentIdeology })}
+                  className={`${inputClass} !py-1 !px-2 !text-xs`}
+                >
+                  <option value="left">Left</option>
+                  <option value="center">Center</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-medium text-admin-text mb-1">Narratives (one per line)</label>
+              <textarea
+                value={cell.narratives}
+                onChange={(e) => updateCell(idx, { narratives: e.target.value })}
+                rows={5}
+                className={`${inputClass} !py-1 !px-2 !text-xs font-mono resize-vertical`}
+                placeholder="Paste narratives here, one per line..."
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function StepTreatments({ config, onChange, availableFeatures, agentMode, humanizeEnabled, humanizePerAgent, onHumanizePerAgentChange }: StepTreatmentsProps) {
   const [showBuilder, setShowBuilder] = useState(false)
   const [dimA, setDimA] = useState({ name: "", levels: ["", ""] })
@@ -953,6 +1063,14 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
           humanizeEnabled={humanizeEnabled}
           humanizePerAgent={humanizePerAgent}
           onHumanizePerAgentChange={onHumanizePerAgentChange}
+        />
+      )}
+
+      {agentMode === "pool" && (
+        <NarrativePoolEditor
+          pool={config.narrative_pool}
+          onChange={(newPool) => onChange({ ...config, narrative_pool: newPool })}
+          selectedTemplateId={selectedNewsTemplate}
         />
       )}
 

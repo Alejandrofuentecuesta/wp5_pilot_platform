@@ -65,6 +65,7 @@ export interface SimulationConfig {
   boost_replies_mentions?: boolean
   emotions_checkup_enabled?: boolean
   emotions_checkup_time_minutes?: number
+  ten_messages_mode?: boolean
 }
 
 export type AgentIncivility = "civil" | "uncivil"
@@ -103,6 +104,12 @@ export interface TreatmentGroup {
   pool_agent_ids?: string[]
 }
 
+export interface NarrativePoolCell {
+  alignment_cell: AgentAlignmentCell
+  ideology: AgentIdeology
+  narratives: string
+}
+
 export interface ExperimentalConfig {
   chatroom_context: string
   incivility_framework: string
@@ -110,6 +117,7 @@ export interface ExperimentalConfig {
   redirect_url: string
   groups: Record<string, TreatmentGroup>
   agent_pool?: PoolAgent[]
+  narrative_pool?: NarrativePoolCell[]
 }
 
 export interface TokenConfig {

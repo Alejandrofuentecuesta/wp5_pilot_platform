@@ -3,12 +3,15 @@
 import { useState, useEffect, useRef } from "react"
 
 interface EmotionsCheckupModalProps {
-  onSubmit: (emotion: string, temptedToReport: boolean) => void
+  onSubmit: (emotion: string, temptedToReport: boolean, reportedUsers?: string[]) => void
+  participants: string[]
 }
 
-export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalProps) {
+export default function EmotionsCheckupModal({ onSubmit, participants }: EmotionsCheckupModalProps) {
   const [selectedEmotion, setSelectedEmotion] = useState<string | null>(null)
   const [selectedTempted, setSelectedTempted] = useState<boolean | null>(null)
+  const [customEmotion, setCustomEmotion] = useState<string>("")
+  const [selectedReportedUsers, setSelectedReportedUsers] = useState<string[]>([])
   const modalRef = useRef<HTMLDivElement>(null)
 
   // Focus management
@@ -22,15 +25,25 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
     { value: "Enfadado/a", label: "Enfadado/a", emoji: "😡" },
     { value: "contento/a", label: "Contento/a", emoji: "😊" },
     { value: "asustado/a", label: "Asustado/a", emoji: "😨" },
+    { value: "Otra", label: "Otra", emoji: "💭" },
   ]
 
   const handleSubmit = () => {
-    if (selectedEmotion !== null && selectedTempted !== null) {
-      onSubmit(selectedEmotion, selectedTempted)
+    if (isFormValid) {
+      const finalEmotion = selectedEmotion === "Otra" ? `Otra: ${customEmotion.trim()}` : selectedEmotion!
+      onSubmit(
+        finalEmotion,
+        selectedTempted!,
+        selectedTempted ? selectedReportedUsers : undefined
+      )
     }
   }
 
-  const isFormValid = selectedEmotion !== null && selectedTempted !== null
+  const isFormValid =
+    selectedEmotion !== null &&
+    (selectedEmotion !== "Otra" || customEmotion.trim().length > 0) &&
+    selectedTempted !== null &&
+    (selectedTempted === false || selectedReportedUsers.length > 0 || participants.length === 0)
 
   return (
     <div
@@ -61,7 +74,7 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
             <label className="block text-sm font-semibold text-primary">
               1. ¿Cómo te sientes en este momento?
             </label>
-            <div className="grid grid-cols-3 gap-2.5">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {emotions.map((emotion) => {
                 const isSelected = selectedEmotion === emotion.value
                 return (
@@ -83,6 +96,22 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
                 )
               })}
             </div>
+
+            {selectedEmotion === "Otra" && (
+              <div className="mt-3 space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
+                <label className="block text-xs font-semibold text-secondary">
+                  Especifica otra emoción:
+                </label>
+                <input
+                  type="text"
+                  value={customEmotion}
+                  onChange={(e) => setCustomEmotion(e.target.value)}
+                  placeholder="¿Cómo te sientes?"
+                  className="w-full px-3 py-2 text-sm rounded-xl border border-border focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none"
+                  maxLength={50}
+                />
+              </div>
+            )}
           </div>
 
           {/* Question 2: Tempted to report? */}
@@ -114,6 +143,43 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
                 No, en absoluto
               </button>
             </div>
+
+            {selectedTempted === true && (
+              <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
+                <label className="block text-xs font-semibold text-secondary">
+                  ¿A quién? (Puedes seleccionar varios)
+                </label>
+                {participants.length === 0 ? (
+                  <p className="text-xs text-secondary italic">No hay otros participantes en la sesión todavía.</p>
+                ) : (
+                  <div className="max-h-40 overflow-y-auto border border-border rounded-xl p-3 space-y-2 bg-bg-surface">
+                    {participants.map((name) => {
+                      const isChecked = selectedReportedUsers.includes(name)
+                      return (
+                        <label
+                          key={name}
+                          className="flex items-center gap-2 text-sm font-medium text-primary cursor-pointer select-none"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              setSelectedReportedUsers((prev) =>
+                                isChecked
+                                  ? prev.filter((n) => n !== name)
+                                  : [...prev, name]
+                              )
+                            }}
+                            className="rounded border-border text-accent focus:ring-accent w-4 h-4"
+                          />
+                          <span>{name}</span>
+                        </label>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Reminder box */}

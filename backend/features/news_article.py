@@ -24,7 +24,7 @@ if TYPE_CHECKING:
 class NewsArticleSeed(BaseFeature):
     """Inject a news article message at the top of the chat log."""
 
-    async def seed(self, state: SessionState, websocket_send: Callable) -> None:
+    async def seed(self, state: SessionState, websocket_send: Callable, experiment_id: str = "default") -> None:
         seed_cfg = self.config.get("seed", {})
         headline = seed_cfg.get("headline", "")
         source = seed_cfg.get("source", "")
@@ -46,4 +46,23 @@ class NewsArticleSeed(BaseFeature):
             "body": body,
         }
         state.add_message(message)
+
+        # Save to database
+        try:
+            from db import connection as db_conn
+            from db.repositories import message_repo
+            pool = db_conn.get_pool()
+            await message_repo.insert_message(
+                pool,
+                message_id=message.message_id,
+                session_id=state.session_id,
+                experiment_id=experiment_id,
+                sender=message.sender,
+                content=message.content,
+                sent_at=message.timestamp,
+                metadata=message.metadata,
+            )
+        except Exception as exc:
+            print(f"Failed to persist seed news article: {exc}")
+
         await websocket_send(message.to_dict())

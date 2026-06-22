@@ -20,7 +20,7 @@ class BaseFeature:
         """Receive the experimental_config dict for this treatment group."""
         self.config = config
 
-    async def seed(self, state: SessionState, websocket_send: Callable) -> None:
+    async def seed(self, state: SessionState, websocket_send: Callable, experiment_id: str = "default") -> None:
         """Inject content at session start, before the clock loop launches.
 
         Called once per session.  Default: no-op.

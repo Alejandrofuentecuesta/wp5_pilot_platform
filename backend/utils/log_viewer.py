@@ -131,7 +131,6 @@ HTML_HEAD = """\
   .event.ev-websocket_detach::before {{ border-color: var(--gray); background: var(--gray-light); }}
   .event.ev-session_end::before {{ border-color: var(--red); background: var(--red-light); }}
   .event.ev-emotions_checkup_response::before {{ border-color: var(--orange); background: var(--orange-light); }}
-  .event.ev-seeking_information::before {{ border-color: var(--blue); background: var(--blue-light); }}
 
   .event-card {{
     background: var(--card);
@@ -166,7 +165,6 @@ HTML_HEAD = """\
   .badge-session_end {{ background: var(--red-light); color: var(--red); }}
   .badge-like {{ background: var(--orange-light); color: var(--orange); }}
   .badge-emotions_checkup_response {{ background: var(--orange-light); color: var(--orange); }}
-  .badge-seeking_information {{ background: var(--blue-light); color: var(--blue); }}
 
   .event-time {{
     font-size: 0.75rem;
@@ -819,6 +817,16 @@ def render_emotions_checkup_response(ev: dict) -> str:
     ts = _format_time(ev["timestamp"])
     emotion = _esc(data.get("emotion", "?"))
     tempted = "Sí" if data.get("tempted_to_report") else "No"
+    reported_users = data.get("reported_users")
+    
+    tempted_str = tempted
+    if data.get("tempted_to_report") and reported_users:
+        if isinstance(reported_users, list):
+            escaped_users = ", ".join(_esc(u) for u in reported_users)
+        else:
+            escaped_users = _esc(str(reported_users))
+        if escaped_users:
+            tempted_str += f" (a {escaped_users})"
     
     return f"""\
 <div class="event ev-emotions_checkup_response">
@@ -829,27 +837,7 @@ def render_emotions_checkup_response(ev: dict) -> str:
     </div>
     <div style="font-size: 0.9rem; line-height: 1.5; margin-top: 0.5rem; color: var(--text);">
       <div><strong>¿Cómo te sientes en este momento?</strong> {emotion}</div>
-      <div style="margin-top: 0.25rem;"><strong>¿Has tenido la tentación de reportar a algún usuario de la plataforma?</strong> {tempted}</div>
-    </div>
-  </div>
-</div>"""
-
-
-def render_seeking_information(ev: dict) -> str:
-    data = ev["data"]
-    ts = _format_time(ev["timestamp"])
-    duration = data.get("duration_seconds", 0.0)
-    
-    return f"""\
-<div class="event ev-seeking_information">
-  <div class="event-card" style="border-left: 4px solid var(--blue);">
-    <div class="event-header">
-      <span class="event-badge badge-seeking_information">Seeking Information</span>
-      <span class="event-time">{ts}</span>
-    </div>
-    <div style="font-size: 0.9rem; line-height: 1.5; margin-top: 0.5rem; color: var(--text);">
-      <div>El participante abrió una nueva pestaña para buscar información adicional (Google).</div>
-      <div style="margin-top: 0.25rem;"><strong>Tiempo transcurrido en la búsqueda:</strong> {duration:.1f} segundos</div>
+      <div style="margin-top: 0.25rem;"><strong>¿Has tenido la tentación de reportar a algún usuario de la plataforma?</strong> {tempted_str}</div>
     </div>
   </div>
 </div>"""
@@ -908,11 +896,6 @@ def _render_events(events: list, session_id: str) -> str:
                 parts.append('<div class="timeline">')
                 timeline_opened = True
             parts.append(render_emotions_checkup_response(ev))
-        elif etype == "seeking_information":
-            if not timeline_opened:
-                parts.append('<div class="timeline">')
-                timeline_opened = True
-            parts.append(render_seeking_information(ev))
         else:
             if not timeline_opened:
                 parts.append('<div class="timeline">')

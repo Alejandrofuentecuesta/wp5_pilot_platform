@@ -18,6 +18,7 @@ import type {
   ExperimentalConfig,
   TokenConfig,
   AdminMeta,
+  NarrativePoolCell,
 } from "../../lib/admin-types"
 
 type View = "dashboard" | "wizard"
@@ -62,7 +63,17 @@ const DEFAULT_SIMULATION: SimulationConfig = {
   boost_replies_mentions: false,
   emotions_checkup_enabled: false,
   emotions_checkup_time_minutes: 1,
+  ten_messages_mode: false,
 }
+
+const emptyNarrativePool = (): NarrativePoolCell[] => [
+  { alignment_cell: "pro_topic", ideology: "left", narratives: "" },
+  { alignment_cell: "pro_topic", ideology: "center", narratives: "" },
+  { alignment_cell: "pro_topic", ideology: "right", narratives: "" },
+  { alignment_cell: "anti_topic", ideology: "left", narratives: "" },
+  { alignment_cell: "anti_topic", ideology: "center", narratives: "" },
+  { alignment_cell: "anti_topic", ideology: "right", narratives: "" },
+]
 
 const DEFAULT_EXPERIMENTAL: ExperimentalConfig = createExperimental3x3Preset()
 
@@ -74,6 +85,9 @@ function getDefaultExperimentalConfig(): ExperimentalConfig {
     agent_pool: DEFAULT_EXPERIMENTAL.agent_pool
       ? DEFAULT_EXPERIMENTAL.agent_pool.map((agent) => ({ ...agent }))
       : undefined,
+    narrative_pool: DEFAULT_EXPERIMENTAL.narrative_pool
+      ? DEFAULT_EXPERIMENTAL.narrative_pool.map((cell) => ({ ...cell }))
+      : emptyNarrativePool(),
     groups: Object.fromEntries(
       Object.entries(DEFAULT_EXPERIMENTAL.groups).map(([name, group]) => [
         name,
@@ -111,6 +125,9 @@ function normalizeExperimentalConfig(config: ExperimentalConfig): ExperimentalCo
     agent_pool: config.agent_pool
       ? config.agent_pool.map((agent) => ({ ...agent }))
       : undefined,
+    narrative_pool: config.narrative_pool
+      ? config.narrative_pool.map((cell) => ({ ...cell }))
+      : emptyNarrativePool(),
     groups: Object.fromEntries(
       Object.entries(config.groups ?? {}).map(([name, group]) => [
         name,

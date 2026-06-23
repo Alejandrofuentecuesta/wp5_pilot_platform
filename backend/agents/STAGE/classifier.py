@@ -64,7 +64,7 @@ def build_classifier_user_prompt(
 
     # Agent ideology hint
     if agent_ideology:
-        ideology_line = f"Agent ideology: {agent_ideology} (left=pro-measure, right=anti-measure, center=neutral)"
+        ideology_line = f"Agent ideology: {agent_ideology} (left=pro-topic, right=anti-topic)"
     else:
         ideology_line = ""
     prompt = prompt.replace("{AGENT_IDEOLOGY}", ideology_line)

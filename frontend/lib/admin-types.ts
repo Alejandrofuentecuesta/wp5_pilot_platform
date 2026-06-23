@@ -69,7 +69,7 @@ export interface SimulationConfig {
 }
 
 export type AgentIncivility = "civil" | "uncivil"
-export type AgentIdeology = "left" | "center" | "right"
+export type AgentIdeology = "left" | "right"
 export type AgentPolicyStance = "pro_policy" | "anti_policy"
 export type AgentTopicStance = "pro_topic" | "anti_topic"
 export type AgentAlignmentCell = "pro_topic" | "anti_topic"

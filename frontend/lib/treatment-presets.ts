@@ -196,10 +196,6 @@ export function createExperimental3x3Preset(templateId?: string): ExperimentalCo
     ? defaultNarratives.map((cell) => ({ ...cell }))
     : [
         { alignment_cell: "pro_topic" as const, ideology: "left" as const, narratives: "" },
-        { alignment_cell: "pro_topic" as const, ideology: "center" as const, narratives: "" },
-        { alignment_cell: "pro_topic" as const, ideology: "right" as const, narratives: "" },
-        { alignment_cell: "anti_topic" as const, ideology: "left" as const, narratives: "" },
-        { alignment_cell: "anti_topic" as const, ideology: "center" as const, narratives: "" },
         { alignment_cell: "anti_topic" as const, ideology: "right" as const, narratives: "" },
       ]
 

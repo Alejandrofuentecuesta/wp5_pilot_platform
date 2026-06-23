@@ -150,7 +150,6 @@ const INCIVILITY_BADGE: Record<string, { label: string; cls: string }> = {
 
 const IDEOLOGY_BADGE: Record<string, { label: string; cls: string }> = {
   left:   { label: "Left",   cls: "bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300" },
-  center: { label: "Center", cls: "bg-stone-100 text-stone-700 dark:bg-stone-700/40 dark:text-stone-200" },
   right:  { label: "Right",  cls: "bg-rose-100 text-rose-700 dark:bg-rose-900/40 dark:text-rose-300" },
 }
 
@@ -231,6 +230,10 @@ function alignmentFields(cell: AgentAlignmentCell): Pick<PoolAgent, "alignment_c
   return { alignment_cell: cell, topic_stance: cell }
 }
 
+function ideologyForAlignment(cell: AgentAlignmentCell): AgentIdeology {
+  return cell === "anti_topic" ? "right" : "left"
+}
+
 function makeNextPoolAgentId(pool: PoolAgent[]): string {
   let idx = pool.length + 1
   const existing = new Set(pool.map((agent) => agent.id))
@@ -258,7 +261,7 @@ function AgentPoolEditor({
       id: makeNextPoolAgentId(pool),
       name: `Agente ${pool.length + 1}`,
       incivility: DEFAULT_POOL_INCIVILITY,
-      ideology: "center",
+      ideology: "left",
       ...alignmentFields("pro_topic"),
       persona: "",
     }
@@ -351,7 +354,10 @@ function AgentPoolEditor({
                   <label className="block text-xs font-medium text-admin-muted mb-1">Alignment cell</label>
                   <select
                     value={agent.alignment_cell}
-                    onChange={(e) => updateAgent(index, alignmentFields(e.target.value as AgentAlignmentCell))}
+                    onChange={(e) => {
+                      const cell = e.target.value as AgentAlignmentCell
+                      updateAgent(index, { ...alignmentFields(cell), ideology: ideologyForAlignment(cell) })
+                    }}
                     className={inputClass}
                   >
                     <option value="pro_topic">Pro topic / Column I</option>
@@ -361,13 +367,13 @@ function AgentPoolEditor({
                 <div>
                   <label className="block text-xs font-medium text-admin-muted mb-1">Ideology</label>
                   <select
-                    value={agent.ideology}
-                    onChange={(e) => updateAgent(index, { ideology: e.target.value as PoolAgent["ideology"] })}
+                    value={ideologyForAlignment(agent.alignment_cell)}
+                    disabled
                     className={inputClass}
                   >
-                    <option value="left">Left</option>
-                    <option value="center">Center</option>
-                    <option value="right">Right</option>
+                    <option value={ideologyForAlignment(agent.alignment_cell)}>
+                      {ideologyForAlignment(agent.alignment_cell) === "left" ? "Left" : "Right"}
+                    </option>
                   </select>
                 </div>
               </div>
@@ -421,7 +427,8 @@ function AgentPoolEditor({
               const hasOverride = agent.name in perAgent
               const toggleOverride = () => {
                 if (hasOverride) {
-                  const { [agent.name]: _, ...rest } = perAgent
+                  const rest = { ...perAgent }
+                  delete rest[agent.name]
                   onHumanizePerAgentChange(rest)
                 } else {
                   onHumanizePerAgentChange({ ...perAgent, [agent.name]: { ...DEFAULT_HUMANIZE_RULES } })
@@ -520,7 +527,7 @@ function PoolAgentSelector({
             {agents.map((agent) => {
               const selected = selectedIds.includes(agent.id)
               const incivilBadge = INCIVILITY_BADGE[agent.incivility] ?? INCIVILITY_BADGE.civil
-              const ideologyBadge = IDEOLOGY_BADGE[agent.ideology] ?? IDEOLOGY_BADGE.center
+              const ideologyBadge = IDEOLOGY_BADGE[agent.ideology] ?? IDEOLOGY_BADGE.left
               const alignmentBadge = ALIGNMENT_CELL_BADGE[agent.alignment_cell] ?? ALIGNMENT_CELL_BADGE.pro_topic
               return (
                 <button
@@ -661,10 +668,6 @@ function NarrativePoolEditor({
 }) {
   const cells = pool || [
     { alignment_cell: "pro_topic", ideology: "left", narratives: "" },
-    { alignment_cell: "pro_topic", ideology: "center", narratives: "" },
-    { alignment_cell: "pro_topic", ideology: "right", narratives: "" },
-    { alignment_cell: "anti_topic", ideology: "left", narratives: "" },
-    { alignment_cell: "anti_topic", ideology: "center", narratives: "" },
     { alignment_cell: "anti_topic", ideology: "right", narratives: "" },
   ]
 
@@ -683,10 +686,6 @@ function NarrativePoolEditor({
     } else {
       onChange([
         { alignment_cell: "pro_topic", ideology: "left", narratives: "" },
-        { alignment_cell: "pro_topic", ideology: "center", narratives: "" },
-        { alignment_cell: "pro_topic", ideology: "right", narratives: "" },
-        { alignment_cell: "anti_topic", ideology: "left", narratives: "" },
-        { alignment_cell: "anti_topic", ideology: "center", narratives: "" },
         { alignment_cell: "anti_topic", ideology: "right", narratives: "" },
       ])
     }
@@ -721,7 +720,13 @@ function NarrativePoolEditor({
                 <label className="block text-xs font-medium text-admin-text mb-1">Alignment</label>
                 <select
                   value={cell.alignment_cell}
-                  onChange={(e) => updateCell(idx, { alignment_cell: e.target.value as AgentAlignmentCell })}
+                  onChange={(e) => {
+                    const alignment = e.target.value as AgentAlignmentCell
+                    updateCell(idx, {
+                      alignment_cell: alignment,
+                      ideology: ideologyForAlignment(alignment),
+                    })
+                  }}
                   className={`${inputClass} !py-1 !px-2 !text-xs`}
                 >
                   <option value="pro_topic">Pro topic / Column I</option>
@@ -731,13 +736,13 @@ function NarrativePoolEditor({
               <div className="flex-1">
                 <label className="block text-xs font-medium text-admin-text mb-1">Ideology</label>
                 <select
-                  value={cell.ideology}
-                  onChange={(e) => updateCell(idx, { ideology: e.target.value as AgentIdeology })}
+                  value={ideologyForAlignment(cell.alignment_cell)}
+                  disabled
                   className={`${inputClass} !py-1 !px-2 !text-xs`}
                 >
-                  <option value="left">Left</option>
-                  <option value="center">Center</option>
-                  <option value="right">Right</option>
+                  <option value={ideologyForAlignment(cell.alignment_cell)}>
+                    {ideologyForAlignment(cell.alignment_cell) === "left" ? "Left" : "Right"}
+                  </option>
                 </select>
               </div>
             </div>

@@ -96,19 +96,17 @@ def _participant_stance_preferences(participant_stance: Optional[str]) -> tuple[
     Ideology encodes political position and stance on the article:
       left   = pro-measure (immigration regularisation / climate action)
       right  = anti-measure
-      center = sceptical / mixed
-
     Like-minded agents are those whose ideology aligns with the participant's stance.
     """
     stance = (participant_stance or "").strip().lower()
     if stance in {"against", "anti_topic"}:
         # Participant opposes the measure → right-leaning agents are like-minded
-        return (["right", "center"], ["left", "center"], ["right", "center", "left"], ["left", "center", "right"])
+        return (["right"], ["left"], ["right", "left"], ["left", "right"])
     if stance == "skeptical":
-        # Participant is undecided → center agents are like-minded
-        return (["center"], ["left", "right"], ["center", "left", "right"], ["center", "right", "left"])
+        # Participant is undecided: keep both sides eligible.
+        return (["left", "right"], [], ["left", "right"], ["right", "left"])
     # Default to "favor" and any unknown value → left-leaning agents are like-minded
-    return (["left", "center"], ["right", "center"], ["left", "center", "right"], ["right", "center", "left"])
+    return (["left"], ["right"], ["left", "right"], ["right", "left"])
 
 
 def _rank_pool_agents(
@@ -553,7 +551,7 @@ class SimulationSession:
             traits[a["name"]] = {
                 "stance": a.get("stance", ""),
                 "incivility": a.get("incivility", "civil"),
-                "ideology": a.get("ideology", "center"),
+                "ideology": a.get("ideology") or ("right" if _agent_alignment_cell(a) == "anti_topic" else "left"),
                 "policy_stance": a.get("policy_stance", ""),
                 "topic_stance": a.get("topic_stance", ""),
                 "alignment_cell": a.get("alignment_cell", ""),

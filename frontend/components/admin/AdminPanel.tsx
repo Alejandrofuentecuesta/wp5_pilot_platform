@@ -68,10 +68,6 @@ const DEFAULT_SIMULATION: SimulationConfig = {
 
 const emptyNarrativePool = (): NarrativePoolCell[] => [
   { alignment_cell: "pro_topic", ideology: "left", narratives: "" },
-  { alignment_cell: "pro_topic", ideology: "center", narratives: "" },
-  { alignment_cell: "pro_topic", ideology: "right", narratives: "" },
-  { alignment_cell: "anti_topic", ideology: "left", narratives: "" },
-  { alignment_cell: "anti_topic", ideology: "center", narratives: "" },
   { alignment_cell: "anti_topic", ideology: "right", narratives: "" },
 ]
 

@@ -487,7 +487,7 @@ function PoolAgentSelector({
 
   const handleAutoSelect = () => {
     const targets = parseTargetsFromCriteria(criteria)
-    const ids = autoSelectAgents(pool, targets.likeMinded, targets.incivility, 5)
+    const ids = autoSelectAgents(pool, targets.likeMinded, targets.incivility, pool.length)
     onChange(ids)
   }
 

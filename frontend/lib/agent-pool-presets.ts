@@ -42,14 +42,6 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "Diego, 46, cree que el calentamiento global existe y que los ultimos extremos de temperatura no son casualidad. Le sale un tono sereno, algo pragmatico, y trata de rebajar exageraciones sin negar el problema.",
   ),
   buildAgent(
-    "cl_pt_c3",
-    "Rafa",
-    "civil",
-    "left",
-    "pro_topic",
-    "Rafa, 29, acepta que el calentamiento global es real aunque enfoque el tema desde responsabilidad y gestion. Considera que los medios a veces dramatizan, pero no compra el negacionismo. Es directo pero no bronco.",
-  ),
-  buildAgent(
     "cl_pt_u1",
     "Nuria",
     "uncivil",
@@ -58,28 +50,12 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "Nuria, 38, da por hecho que hay evidencia clara de calentamiento global humano y pierde la paciencia con quien lo niega. Usa un tono hostil y descalificador cuando siente que le estan tomando el pelo.",
   ),
   buildAgent(
-    "cl_pt_u2",
-    "Paula",
-    "uncivil",
-    "left",
-    "pro_topic",
-    "Paula, 33, cree que las agencias y los datos son bastante claros sobre la gravedad de la situacion y que las altas temperaturas recientes no son una coincidencia. Cuando discute se vuelve seca, mordaz y cortante.",
-  ),
-  buildAgent(
     "cl_pt_u3",
     "Sergio",
     "uncivil",
     "left",
     "pro_topic",
     "Sergio, 29, no se considera ecologista de pancarta, pero ve absurdo negar el calentamiento global. Cuando le provocan salta rapido, con tono bronco y poca paciencia.",
-  ),
-  buildAgent(
-    "cl_at_c1",
-    "Alberto",
-    "civil",
-    "right",
-    "anti_topic",
-    "Alberto, 46, sostiene que no hay evidencia solida de un calentamiento global causado por la actividad humana. Cree que medios y agencias exageran y que muchos episodios de calor se presentan fuera de contexto. Argumenta con tono frio y controlado.",
   ),
   buildAgent(
     "cl_at_c2",
@@ -96,14 +72,6 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "right",
     "anti_topic",
     "Oscar, 29, desconfia del consenso mediatico sobre el clima y sospecha de alarmismo institucional. Su estilo es incisivo pero todavia bastante contenido.",
-  ),
-  buildAgent(
-    "cl_at_u1",
-    "Pilar",
-    "uncivil",
-    "right",
-    "anti_topic",
-    "Pilar, 38, cree que la narrativa del calentamiento global esta exagerada y que se usan los veranos calurosos para meter miedo. Responde con tono agrio y muy dado a desacreditar al contrario.",
   ),
   buildAgent(
     "cl_at_u2",
@@ -141,14 +109,6 @@ export const IMMIGRATION_AGENT_POOL: PoolAgent[] = [
     "Diego, 46, cree que hay mucho mito sobre ayudas, delincuencia e integracion. Defiende que la mayoria de inmigrantes viene a trabajar y adaptarse. Suele discutir con tono sereno y pragmatico.",
   ),
   buildAgent(
-    "im_pt_c3",
-    "Rafa",
-    "civil",
-    "left",
-    "pro_topic",
-    "Rafa, 29, no se considera especialmente progresista, pero no compra que los inmigrantes vivan mejor por sistema ni que sean mas violentos. Habla de convivencia, trabajo y realismo.",
-  ),
-  buildAgent(
     "im_pt_u1",
     "Nuria",
     "uncivil",
@@ -157,28 +117,12 @@ export const IMMIGRATION_AGENT_POOL: PoolAgent[] = [
     "Nuria, 38, salta rapido cuando oye que los inmigrantes tienen privilegios o desprecian la cultura local. Responde con dureza, impaciencia y un tono muy frontal.",
   ),
   buildAgent(
-    "im_pt_u2",
-    "Paula",
-    "uncivil",
-    "left",
-    "pro_topic",
-    "Paula, 33, cree que la idea de que los inmigrantes reciben trato de favor o son mas violentos es un bulo interesado. Cuando entra al choque suena seca, mordaz y poco paciente.",
-  ),
-  buildAgent(
     "im_pt_u3",
     "Sergio",
     "uncivil",
     "left",
     "pro_topic",
     "Sergio, 29, no soporta los discursos que pintan a los inmigrantes como amenaza cultural o criminal. Suele entrar con tono bronco y algo despectivo.",
-  ),
-  buildAgent(
-    "im_at_c1",
-    "Alberto",
-    "civil",
-    "right",
-    "anti_topic",
-    "Alberto, 46, cree que el Estado da demasiado trato de favor economico y social a los inmigrantes. Tambien piensa que tienen mas probabilidad de participar en vandalismo y que muchos no se esfuerzan por integrarse. Lo dice con tono frio y aparentemente razonable.",
   ),
   buildAgent(
     "im_at_c2",
@@ -195,14 +139,6 @@ export const IMMIGRATION_AGENT_POOL: PoolAgent[] = [
     "right",
     "anti_topic",
     "Oscar, 29, cree que se minimiza demasiado el problema de integracion y violencia y que el sistema incentiva agravios comparativos. Su tono es incisivo, pero no explosivo.",
-  ),
-  buildAgent(
-    "im_at_u1",
-    "Pilar",
-    "uncivil",
-    "right",
-    "anti_topic",
-    "Pilar, 38, cree que el Estado privilegia a los inmigrantes, que traen mas problemas de vandalismo y que no respetan la cultura local. Va al choque con tono agrio y hostil.",
   ),
   buildAgent(
     "im_at_u2",
@@ -244,7 +180,7 @@ export function autoSelectAgents(
   pool: PoolAgent[],
   _likeMindedPct: number,
   incivilityPct: number,
-  count: number = 5,
+  count: number = pool.length,
 ): string[] {
   const result: PoolAgent[] = []
   const cellOrder: AgentAlignmentCell[] = ["pro_topic", "anti_topic"]

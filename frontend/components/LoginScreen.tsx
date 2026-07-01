@@ -92,7 +92,7 @@ export default function LoginScreen({
           </div>
           <h1 className="text-xl font-semibold text-primary m-0">Discussion Room</h1>
           <p className="text-sm text-secondary mt-1">
-            Enter your token and choose the column closer to your view before reading the article.
+            Enter your token, choose the column closer to your view, and then join a live discussion.
           </p>
         </div>
 
@@ -145,6 +145,35 @@ export default function LoginScreen({
 
           {survey && (
             <div className="space-y-4 rounded-xl border border-border bg-bg-feed/50 p-4">
+              <div className="rounded-xl border border-accent/20 bg-bg-surface p-4 space-y-3">
+                <div>
+                  <p className="text-[11px] uppercase tracking-[0.18em] text-secondary font-semibold">
+                    Antes de entrar
+                  </p>
+                  <h2 className="text-lg font-semibold text-primary mt-1">
+                    Participa como lo harías en una conversación online real
+                  </h2>
+                </div>
+                <p className="text-sm text-primary leading-6">
+                  Primero verás una noticia que servirá como punto de partida,
+                  pero la actividad no consiste solo en comentar la noticia.
+                  Entrarás en una sala de discusión y podrás reaccionar a lo que
+                  digan otras personas durante la conversación.
+                </p>
+                <ul className="grid gap-2 text-sm text-primary leading-6 md:grid-cols-2">
+                  <li>Escribe mensajes cuando tengas algo que decir.</li>
+                  <li>Responde directamente a quienes estés de acuerdo o en desacuerdo.</li>
+                  <li>Da Like a los mensajes que apoyes o compartas.</li>
+                  <li>Reporta o bloquea mensajes/usuarios si te parecen inapropiados o molestos.</li>
+                  <li>Busca información fuera de la plataforma si normalmente lo harías.</li>
+                  <li>Sal de la conversación si normalmente dejarías de participar.</li>
+                </ul>
+                <p className="text-xs text-secondary leading-5">
+                  No hay respuestas correctas o incorrectas. Nos interesa tu
+                  reacción natural durante la discusión.
+                </p>
+              </div>
+
               <div>
                 <p className="text-[11px] uppercase tracking-[0.18em] text-secondary font-semibold">
                   {survey.title}

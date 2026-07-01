@@ -31,8 +31,8 @@ export type AdminTheme = "light" | "dark"
 const DEFAULT_SIMULATION: SimulationConfig = {
   random_seed: 42,
   session_duration_minutes: 5,
-  num_agents: 5,
-  agent_names: generateDefaultAgentNames(5),
+  num_agents: 8,
+  agent_names: generateDefaultAgentNames(8),
   agent_personas: [],
   messages_per_minute: 6,
   director_llm_provider: "anthropic",
@@ -68,10 +68,6 @@ const DEFAULT_SIMULATION: SimulationConfig = {
 
 const emptyNarrativePool = (): NarrativePoolCell[] => [
   { alignment_cell: "pro_topic", ideology: "left", narratives: "" },
-  { alignment_cell: "pro_topic", ideology: "center", narratives: "" },
-  { alignment_cell: "pro_topic", ideology: "right", narratives: "" },
-  { alignment_cell: "anti_topic", ideology: "left", narratives: "" },
-  { alignment_cell: "anti_topic", ideology: "center", narratives: "" },
   { alignment_cell: "anti_topic", ideology: "right", narratives: "" },
 ]
 

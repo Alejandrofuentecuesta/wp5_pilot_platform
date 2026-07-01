@@ -11,11 +11,23 @@ interface LoginScreenProps {
   onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
 }
 
+type LoginStep = "token" | "instructions" | "stance"
+
+const ACTIONS = [
+  ["Escribir mensajes", "cuando tengas algo que decir."],
+  ["Responder a otros", "cuando estés de acuerdo, en desacuerdo o quieras reaccionar a un comentario."],
+  ["Dar Like", "a los comentarios que apoyes o con los que estés de acuerdo."],
+  ["Reportar o bloquear", "comentarios o usuarios que te parezcan inapropiados, molestos o incómodos."],
+  ["Consultar otras pestañas", "si quieres buscar información para participar en el debate."],
+  ["Salir de la discusión", "si normalmente dejarías de participar."],
+]
+
 export default function LoginScreen({
   initialUsername,
   onPreview,
   onStart,
 }: LoginScreenProps) {
+  const [step, setStep] = useState<LoginStep>("token")
   const [token, setToken] = useState("")
   const [username, setUsername] = useState(initialUsername)
   const [loading, setLoading] = useState(false)
@@ -28,9 +40,15 @@ export default function LoginScreen({
     [intake],
   )
 
+  const resetIntake = useCallback(() => {
+    setIntake(null)
+    setSelectedStance(null)
+    setStep("token")
+  }, [])
+
   const handlePreview = useCallback(async () => {
     if (!token.trim()) {
-      setError("Please enter a token")
+      setError("Introduce tu token para continuar.")
       return
     }
     setLoading(true)
@@ -39,8 +57,9 @@ export default function LoginScreen({
       const response = await onPreview(token.trim())
       setIntake(response)
       setSelectedStance(null)
+      setStep("instructions")
     } catch {
-      setError("Invalid token. Please try again.")
+      setError("Token no válido. Inténtalo de nuevo.")
     } finally {
       setLoading(false)
     }
@@ -48,7 +67,7 @@ export default function LoginScreen({
 
   const handleStart = useCallback(async () => {
     if (!selectedStance) {
-      setError("Please choose the column closer to your view.")
+      setError("Elige la columna que se acerque más a tu posición.")
       return
     }
     setLoading(true)
@@ -56,130 +75,186 @@ export default function LoginScreen({
     try {
       await onStart(token.trim(), username.trim(), selectedStance)
     } catch {
-      setError("Could not start the session. Please try again.")
+      setError("No se ha podido iniciar la sesión. Inténtalo de nuevo.")
       setLoading(false)
     }
   }, [selectedStance, token, username, onStart])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !intake) {
+    if (e.key === "Enter" && step === "token") {
       e.preventDefault()
       handlePreview()
     }
   }
 
   return (
-    <div className="flex items-center justify-center min-h-dvh bg-bg-page px-4 py-8">
-      <div className="bg-bg-surface rounded-xl shadow-lg w-full max-w-4xl overflow-hidden border border-border">
-        <div className="px-6 pt-6 pb-4 text-center border-b border-border">
-          <div className="w-12 h-12 rounded-xl bg-accent-soft mx-auto mb-3 flex items-center justify-center">
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              className="text-accent"
-              aria-hidden="true"
-            >
-              <path
-                d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </svg>
-          </div>
-          <h1 className="text-xl font-semibold text-primary m-0">Discussion Room</h1>
-          <p className="text-sm text-secondary mt-1">
-            Enter your token, choose the column closer to your view, and then join a live discussion.
-          </p>
-        </div>
-
-        <div className="px-6 py-6 space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <div>
-              <label htmlFor="username" className="block text-xs font-medium text-secondary mb-1">
-                Display name (optional)
-              </label>
-              <input
-                id="username"
-                type="text"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder="e.g. Alice"
-                className="w-full px-3 py-2.5 border border-border rounded-lg text-sm text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors placeholder:text-tertiary bg-bg-surface"
-              />
+    <div className="flex min-h-dvh items-center justify-center bg-bg-page px-4 py-8">
+      <div className="w-full max-w-4xl overflow-hidden rounded-xl border border-border bg-bg-surface shadow-lg">
+        <div className="border-b border-border px-6 pb-4 pt-6">
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-accent-soft">
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className="text-accent"
+                aria-hidden="true"
+              >
+                <path
+                  d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
             </div>
             <div>
-              <label htmlFor="token" className="block text-xs font-medium text-secondary mb-1">
-                Participant token
-              </label>
-              <div className="flex gap-2">
-                <input
-                  id="token"
-                  type="text"
-                  value={token}
-                  onChange={(e) => {
-                    setToken(e.target.value)
-                    setIntake(null)
-                    setSelectedStance(null)
-                    if (error) setError("")
-                  }}
-                  onKeyDown={handleKeyDown}
-                  placeholder="e.g. user0002"
-                  className="flex-1 px-3 py-2.5 border border-border rounded-lg text-sm text-primary focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent/30 transition-colors placeholder:text-tertiary bg-bg-surface"
-                  autoFocus
-                />
+              <h1 className="m-0 text-2xl font-semibold text-primary">Sala de discusión</h1>
+              <p className="mt-1 text-sm text-secondary">Antes de entrar en la conversación</p>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-6">
+          {step === "token" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-3xl font-semibold text-primary">Acceso a la plataforma</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
+                  Introduce tu token de participante. Después verás unas instrucciones breves antes de responder a la
+                  pregunta inicial.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="username" className="mb-1 block text-xs font-medium text-secondary">
+                    Nombre visible (opcional)
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="p. ej. Alicia"
+                    className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="token" className="mb-1 block text-xs font-medium text-secondary">
+                    Token de participante
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      id="token"
+                      type="text"
+                      value={token}
+                      onChange={(e) => {
+                        setToken(e.target.value)
+                        resetIntake()
+                        if (error) setError("")
+                      }}
+                      onKeyDown={handleKeyDown}
+                      placeholder="p. ej. user0002"
+                      className="min-w-0 flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handlePreview}
+                      disabled={loading}
+                      className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                    >
+                      {loading ? "Comprobando..." : "Siguiente"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === "instructions" && survey && (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-4xl font-semibold text-primary">Antes de empezar</h2>
+                <p className="mt-2 max-w-3xl text-base font-semibold leading-7 text-secondary">
+                  Primero verás una pregunta breve, después una noticia y finalmente entrarás al chat.
+                </p>
+              </div>
+
+              <div className="grid gap-3 md:grid-cols-3">
+                {[
+                  ["1", "Responder una pregunta"],
+                  ["2", "Leer una noticia"],
+                  ["3", "Entrar al chat"],
+                ].map(([number, label]) => (
+                  <div key={number} className="flex items-center gap-3 rounded-xl border border-border bg-bg-feed px-4 py-3">
+                    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-base font-semibold text-white">
+                      {number}
+                    </span>
+                    <span className="text-sm font-medium text-primary">{label}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="rounded-xl border border-border bg-bg-surface p-5">
+                <h3 className="text-2xl font-semibold text-primary">Durante la discusión, puedes:</h3>
+                <ul className="mt-4 space-y-3 text-base leading-7 text-primary">
+                  {ACTIONS.map(([title, text]) => (
+                    <li key={title} className="flex gap-3">
+                      <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                      <span>
+                        <strong>{title}</strong> {text}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
+              <p className="max-w-3xl text-base leading-7 text-primary">
+                Participa como lo harías normalmente en una conversación online. Si te sientes cómodo/a, te animamos a
+                participar activamente durante el chat.
+              </p>
+
+              <div className="rounded-xl border-2 border-[#e0a800] bg-[#fff7b8] p-5 text-[#4d3f00]">
+                <h3 className="text-2xl font-semibold">Importante</h3>
+                <div className="mt-3 space-y-2 text-sm leading-6">
+                  <p>El experimento dura aproximadamente 20 minutos y debe hacerse seguido, en una sola sesión.</p>
+                  <p>Si no tienes tiempo para completarlo ahora, por favor entra en otro momento.</p>
+                  <p>
+                    No dejes la plataforma abierta en segundo plano mientras haces otra cosa. Podemos monitorizar el uso
+                    pasivo, como dejar la pestaña inactiva o no seguir la discusión.
+                  </p>
+                  <p>Si sales después de entrar al chat, no podrás volver a la misma sesión.</p>
+                </div>
+              </div>
+
+              <div className="flex justify-end">
                 <button
-                  onClick={handlePreview}
-                  disabled={loading}
-                  className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  type="button"
+                  onClick={() => setStep("stance")}
+                  className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
                 >
-                  {loading && !intake ? "Checking..." : "Continue"}
+                  Siguiente
                 </button>
               </div>
             </div>
-          </div>
+          )}
 
-          {survey && (
-            <div className="space-y-4 rounded-xl border border-border bg-bg-feed/50 p-4">
-              <div className="rounded-xl border border-accent/20 bg-bg-surface p-4 space-y-3">
-                <div>
-                  <p className="text-[11px] uppercase tracking-[0.18em] text-secondary font-semibold">
-                    Antes de entrar
-                  </p>
-                  <h2 className="text-lg font-semibold text-primary mt-1">
-                    Participa como lo harías en una conversación online real
-                  </h2>
-                </div>
-                <p className="text-sm text-primary leading-6">
-                  Primero verás una noticia que servirá como punto de partida,
-                  pero la actividad no consiste solo en comentar la noticia.
-                  Entrarás en una sala de discusión y podrás reaccionar a lo que
-                  digan otras personas durante la conversación.
-                </p>
-                <ul className="grid gap-2 text-sm text-primary leading-6 md:grid-cols-2">
-                  <li>Escribe mensajes cuando tengas algo que decir.</li>
-                  <li>Responde directamente a quienes estés de acuerdo o en desacuerdo.</li>
-                  <li>Da Like a los mensajes que apoyes o compartas.</li>
-                  <li>Reporta o bloquea mensajes/usuarios si te parecen inapropiados o molestos.</li>
-                  <li>Busca información fuera de la plataforma si normalmente lo harías.</li>
-                  <li>Sal de la conversación si normalmente dejarías de participar.</li>
-                </ul>
-                <p className="text-xs text-secondary leading-5">
-                  No hay respuestas correctas o incorrectas. Nos interesa tu
-                  reacción natural durante la discusión.
-                </p>
-              </div>
-
+          {step === "stance" && survey && (
+            <div className="space-y-5">
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-secondary font-semibold">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary">
                   {survey.title}
                 </p>
-                <h2 className="text-lg font-semibold text-primary mt-1">{survey.prompt}</h2>
-                <p className="text-sm text-secondary mt-1">{survey.subtitle}</p>
+                <h2 className="mt-1 text-2xl font-semibold text-primary">{survey.prompt}</h2>
+                <p className="mt-1 text-sm text-secondary">
+                  Lee ambas columnas y elige la que en conjunto se acerque más a tu posición. No hace falta que estés
+                  completamente de acuerdo con todas las frases.
+                </p>
               </div>
 
               <div className="grid gap-4 md:grid-cols-2">
@@ -190,13 +265,13 @@ export default function LoginScreen({
                       key={column.id}
                       type="button"
                       onClick={() => setSelectedStance(column.id)}
-                      className={`text-left rounded-xl border p-4 transition-colors ${
+                      className={`rounded-xl border p-4 text-left transition-colors ${
                         selected
                           ? "border-accent bg-accent/5 ring-1 ring-accent/20"
                           : "border-border bg-bg-surface hover:border-accent/40"
                       }`}
                     >
-                      <p className="text-sm font-semibold text-primary mb-3">{column.label}</p>
+                      <p className="mb-3 text-sm font-semibold text-primary">{column.label}</p>
                       <ul className="space-y-3 text-sm text-primary">
                         {column.statements.map((statement) => (
                           <li key={statement} className="leading-6">
@@ -210,21 +285,26 @@ export default function LoginScreen({
               </div>
 
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-secondary">
-                  Choose the column that is overall closer to your view. You do not need to fully agree with every line.
-                </p>
                 <button
+                  type="button"
+                  onClick={() => setStep("instructions")}
+                  className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-secondary transition-colors hover:border-accent hover:text-primary"
+                >
+                  Volver
+                </button>
+                <button
+                  type="button"
                   onClick={handleStart}
                   disabled={loading || !selectedStance}
-                  className="px-4 py-2.5 bg-accent hover:bg-accent-hover text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50"
+                  className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
-                  {loading ? "Joining..." : "Join discussion"}
+                  {loading ? "Entrando..." : "Continuar a la noticia"}
                 </button>
               </div>
             </div>
           )}
 
-          {error && <p className="text-sm text-danger">{error}</p>}
+          {error && <p className="mt-5 text-sm text-danger">{error}</p>}
         </div>
       </div>
     </div>

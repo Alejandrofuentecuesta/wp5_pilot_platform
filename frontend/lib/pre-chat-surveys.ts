@@ -18,13 +18,13 @@ export interface PreChatSurvey {
 export const PRE_CHAT_SURVEYS: Record<NewsTemplateId, PreChatSurvey> = {
   climate_change: {
     topic: "climate_change",
-    title: "Climate change",
-    subtitle: "Please read both columns and choose the one that is overall closer to your view.",
-    prompt: "Which column is closer to your overall position on climate change?",
+    title: "Cambio climático",
+    subtitle: "Lee ambas columnas y elige la que en conjunto se acerque más a tu posición.",
+    prompt: "¿Qué columna se acerca más a tu posición general sobre el cambio climático?",
     columns: [
       {
         id: "pro_topic",
-        label: "Column I",
+        label: "Columna I",
         statements: [
           "Hay evidencia solida de que existe un calentamiento global causado por la actividad humana.",
           "Las agencias meteorologicas y medios de comunicacion informan con precision sobre las consecuencias del calentamiento global, alertando sobre la gravedad de la situacion actual.",
@@ -33,7 +33,7 @@ export const PRE_CHAT_SURVEYS: Record<NewsTemplateId, PreChatSurvey> = {
       },
       {
         id: "anti_topic",
-        label: "Column II",
+        label: "Columna II",
         statements: [
           "No hay evidencia solida de que exista un calentamiento global causado por la actividad humana.",
           "Las agencias meteorologicas y medios de comunicacion a menudo exageran las consecuencias del calentamiento global, mostrando una situacion mas preocupante de la real.",
@@ -44,13 +44,13 @@ export const PRE_CHAT_SURVEYS: Record<NewsTemplateId, PreChatSurvey> = {
   },
   immigration: {
     topic: "immigration",
-    title: "Immigration",
-    subtitle: "Please read both columns and choose the one that is overall closer to your view.",
-    prompt: "Which column is closer to your overall position on immigration?",
+    title: "Inmigración",
+    subtitle: "Lee ambas columnas y elige la que en conjunto se acerque más a tu posición.",
+    prompt: "¿Qué columna se acerca más a tu posición general sobre la inmigración?",
     columns: [
       {
         id: "pro_topic",
-        label: "Column I",
+        label: "Columna I",
         statements: [
           "El Estado espaniol no da un trato de favor economico y social a los inmigrantes.",
           "Los inmigrantes no tienen mas probabilidad que los espanoles de participar en actos de vandalismo y violencia.",
@@ -59,7 +59,7 @@ export const PRE_CHAT_SURVEYS: Record<NewsTemplateId, PreChatSurvey> = {
       },
       {
         id: "anti_topic",
-        label: "Column II",
+        label: "Columna II",
         statements: [
           "El Estado espaniol da un trato de favor economico y social a los inmigrantes.",
           "Los inmigrantes tienen mas probabilidad que los espanoles de participar en actos de vandalismo y violencia.",

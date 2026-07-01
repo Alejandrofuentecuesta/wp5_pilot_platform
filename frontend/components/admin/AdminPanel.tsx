@@ -335,11 +335,6 @@ export default function AdminPanel() {
           const model = simulation[`${role}_llm_model` as keyof typeof simulation] as string
           if (!model.trim()) return `${role.charAt(0).toUpperCase() + role.slice(1)} model is required.`
         }
-        const untested = (["director", "performer", "moderator"] as const).filter((r) => !llmTestResults[r])
-        if (untested.length > 0) {
-          const names = untested.map((r) => r.charAt(0).toUpperCase() + r.slice(1))
-          return `Run a successful LLM test for: ${names.join(", ")}.`
-        }
         return null
       }
       case 3: {

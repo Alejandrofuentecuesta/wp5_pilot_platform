@@ -6,6 +6,15 @@ export const CHATROOM_CONTEXT_3X3 = `This is a Spanish-language chatroom on Tele
 The participant has posted an opinion about a news article. The news article defines the topic of the discussion.
 The Director must preserve the assigned treatment condition across the whole conversation.
 
+Spanish political context:
+- Spain is a parliamentary monarchy with a national government and autonomous regional governments. Pedro Sanchez (PSOE) has been Prime Minister of Spain since June 2018.
+- Isabel Diaz Ayuso (PP) has been President of the Community of Madrid since 2019 and is a prominent conservative figure.
+- Salvador Illa (PSC) became President of the Generalitat de Catalunya after the 2024 Catalan election.
+- Spanish political debate is often polarized between PSOE and its allies on the left and regional/nationalist parties, and PP and Vox on the right.
+- Common political themes include immigration, housing, climate policy, taxes, territorial tensions, Catalan politics, public services, feminism, law and order, and corruption.
+- Corruption can be mentioned as part of ordinary Spanish political debate, including examples such as the Gurtel case and PP financing controversies, the ERE case in Andalusia, the Koldo/contracting investigations linked to PSOE circles, or public-contract controversies around Madrid politics and Ayuso's environment.
+- Treat these as political references, investigations, accusations, or court cases as appropriate. Do not present unproven accusations as settled facts, and do not overuse corruption references if they are not relevant to the news topic.
+
 Core design rules:
 - Agents must remain ideologically consistent across the whole conversation.
 - A like-minded agent should consistently support the participant.
@@ -21,13 +30,18 @@ Treatment execution rule:
 export const ECOLOGICAL_VALIDITY_3X3 = `Messages should stay short, natural, and chat-like.
 The flow should feel like a real Telegram group conversation in Spanish.
 Use a mix of standalone messages, replies, @mentions, and likes.
-Keep the flow natural; do not force strict alternation.`
+Keep the flow natural; do not force strict alternation.
+When it fits naturally, agents should occasionally ground their arguments in recognizable Spanish political references such as PSOE, PP, Vox, Sanchez, Ayuso, Illa, housing, immigration, climate policy, Catalonia, public services, or corruption cases/investigations. Do not force these references into every message, but avoid making the debate sound generic or detached from Spain.`
 
 export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is defined through these three dimensions:
 
 - Impoliteness:
   Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.
   Examples: "mierda", "puta", "puta mierda", "joder", "cojones", "hijos de puta", "desgraciados", "friki", "chiflado", "estupido", "farsa", "infame", "maldito", "DEVOLVEDLOS A SU PAIS!!!!".
+  These examples are illustrative, not phrases to reuse. Do not copy the same insult words or outrage formulas repeatedly across messages.
+  Impoliteness should remain visible when required, but it can vary across direct insults, vulgar intensifiers, sarcasm, mockery, condescension, impatient dismissal, and contempt.
+  Avoid making most uncivil messages follow the same pattern: [outrage phrase] + [farsa/estafa claim] + [politicians/media want control].
+  Avoid overusing the same bundles, especially "puta farsa", "estafa", "mierda", "controlarnos", "robarnos", "vender la moto", "ignorante total", "que verguenza", or "que escandalo".
 
 - Threats to Democratic Freedoms:
   Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism.
@@ -71,6 +85,7 @@ Execution rule:
 - Use the shared taxonomy above to decide whether each message is civil or uncivil.
 - Let the treatment control only the proportion of uncivil messages through INCIVILITY_TARGET.
 - An uncivil message should be clearly uncivil to a human coder.
+- Do not avoid insults when a message is supposed to be uncivil; the goal is varied, realistic impoliteness, not politeness.
 - A civil message should stay free of the uncivil features above.
 
 Safety rules:

@@ -1863,9 +1863,14 @@ class TestDowngradePrecedingTarget:
         assert result.message.reply_to is None
         assert result.message.quoted_text is None
         assert result.message.content == "My reply response"
-        logger.log_error.assert_any_call(
-            "downgrade_immediate_reply",
-            f"Downgrading reply for 'Alice' to message because it targets the immediately preceding message {m1.message_id}"
+        logger.log_event.assert_any_call(
+            "action_normalization",
+            {
+                "normalization_type": "downgrade_immediate_reply",
+                "agent_name": "Alice",
+                "message": f"Downgrading reply to message because it targets the immediately preceding message {m1.message_id}",
+                "target_message_id": m1.message_id,
+            }
         )
 
     @pytest.mark.asyncio
@@ -1901,9 +1906,14 @@ class TestDowngradePrecedingTarget:
         assert result.target_user is None
         assert result.target_message_id is None
         assert result.message.content == "My mention response"
-        logger.log_error.assert_any_call(
-            "downgrade_immediate_mention",
-            "Downgrading mention for 'Alice' to message because it targets the sender of the immediately preceding message 'Bob'"
+        logger.log_event.assert_any_call(
+            "action_normalization",
+            {
+                "normalization_type": "downgrade_immediate_mention",
+                "agent_name": "Alice",
+                "message": "Downgrading mention to message because it targets the sender of the immediately preceding message 'Bob'",
+                "target_user": "Bob",
+            }
         )
 
     @pytest.mark.asyncio

@@ -177,21 +177,21 @@ def _merge_prompt_context(chatroom_context: str = "", incivility_framework: str 
 def select_incivility_dimensions(rng: random.Random) -> List[str]:
     """Select incivility dimensions based on target probabilities.
 
-    Target rates: 80% Impoliteness, 50% Hate Speech, 20% Democratic Threats.
+    Target rates: 70% Impoliteness, 60% Hate Speech, 40% Democratic Threats.
     Ensures at least one dimension is always selected.
     """
     selected = []
-    if rng.random() < 0.80:
+    if rng.random() < 0.70:
         selected.append("impoliteness")
-    if rng.random() < 0.50:
+    if rng.random() < 0.60:
         selected.append("hate_speech")
-    if rng.random() < 0.20:
+    if rng.random() < 0.40:
         selected.append("democratic_threats")
 
     # Fallback to make sure at least one is selected
     if not selected:
-        r = rng.random() * 1.50
-        if r < 0.80:
+        r = rng.random() * 1.70
+        if r < 0.70:
             selected.append("impoliteness")
         elif r < 1.30:
             selected.append("hate_speech")
@@ -1984,10 +1984,12 @@ class Orchestrator:
         if self.state.messages:
             last_msg = self.state.messages[-1]
             if action_type == "reply" and target_message_id == last_msg.message_id:
-                self.logger.log_error(
-                    "downgrade_immediate_reply",
-                    f"Downgrading reply for '{agent_name}' to message because it targets the immediately preceding message {target_message_id}",
-                )
+                self.logger.log_event("action_normalization", {
+                    "normalization_type": "downgrade_immediate_reply",
+                    "agent_name": agent_name,
+                    "message": f"Downgrading reply to message because it targets the immediately preceding message {target_message_id}",
+                    "target_message_id": target_message_id,
+                })
                 action_type = "message"
                 action_data["action_type"] = "message"
                 target_message_id = None
@@ -1995,16 +1997,20 @@ class Orchestrator:
                 target_user = None
                 action_data["target_user"] = None
                 if action_data.get("performer_instruction"):
+                    original_objective = action_data["performer_instruction"].get("objective", "")
+                    original_directive = action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character.")
                     action_data["performer_instruction"] = {
-                        "objective": "Post a message responding to the conversation.",
+                        "objective": original_objective or "Respond directly to the immediately preceding turn as a plain message.",
                         "motivation": action_data["performer_instruction"].get("motivation", ""),
-                        "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
+                        "directive": f"{original_directive} Treat this as a direct continuation of the immediately preceding message, without using reply metadata or naming the target in the body.",
                     }
             elif action_type == "@mention" and target_user == last_msg.sender:
-                self.logger.log_error(
-                    "downgrade_immediate_mention",
-                    f"Downgrading mention for '{agent_name}' to message because it targets the sender of the immediately preceding message '{target_user}'",
-                )
+                self.logger.log_event("action_normalization", {
+                    "normalization_type": "downgrade_immediate_mention",
+                    "agent_name": agent_name,
+                    "message": f"Downgrading mention to message because it targets the sender of the immediately preceding message '{target_user}'",
+                    "target_user": target_user,
+                })
                 action_type = "message"
                 action_data["action_type"] = "message"
                 target_user = None
@@ -2012,10 +2018,12 @@ class Orchestrator:
                 target_message_id = None
                 action_data["target_message_id"] = None
                 if action_data.get("performer_instruction"):
+                    original_objective = action_data["performer_instruction"].get("objective", "")
+                    original_directive = action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character.")
                     action_data["performer_instruction"] = {
-                        "objective": "Post a message responding to the conversation.",
+                        "objective": original_objective or "Respond directly to the immediately preceding turn as a plain message.",
                         "motivation": action_data["performer_instruction"].get("motivation", ""),
-                        "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
+                        "directive": f"{original_directive} Treat this as a direct continuation of the immediately preceding message, without using @mention metadata or naming the target in the body.",
                     }
             elif action_type == "message" and target_user == last_msg.sender:
                 self.logger.log_error(

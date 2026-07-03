@@ -30,10 +30,10 @@ export default function ChatHeader({
       </div>
       <div className="flex-1 min-w-0">
         <h1 className="text-[15px] font-semibold text-primary leading-tight m-0">
-          Discussion Room
+          Sala de discusión
         </h1>
         <p className="text-xs text-secondary leading-tight mt-0.5">
-          {participantCount} participant{participantCount !== 1 ? "s" : ""}
+          {participantCount} participante{participantCount !== 1 ? "s" : ""}
         </p>
       </div>
       <div className="flex items-center gap-3 shrink-0">
@@ -44,7 +44,7 @@ export default function ChatHeader({
             }`}
           />
           <span className="text-[11px] text-tertiary">
-            {isConnected ? "Connected" : "Reconnecting"}
+            {isConnected ? "Conectado" : "Reconectando"}
           </span>
         </div>
         {onExitClick && (
@@ -52,7 +52,7 @@ export default function ChatHeader({
             onClick={onExitClick}
             className="px-2.5 py-1 text-xs border border-danger/35 hover:border-danger/60 bg-danger/5 hover:bg-danger/10 text-danger font-medium rounded-lg transition-colors cursor-pointer"
           >
-            Exit
+            Salir
           </button>
         )}
       </div>

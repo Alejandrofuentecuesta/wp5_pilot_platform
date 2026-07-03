@@ -108,17 +108,22 @@ Select exactly one action type:
 
 Rules:
 - `message` is the default. Only use `reply` or `@mention` when the quoting or calling-out adds something — tension, precision, drama. Do not use them just because an anchor exists.
+- If the performer is responding to the immediately preceding message, select `message`, not `reply` or `@mention`. A direct continuation of the latest turn is already clear in the chat and does not need quote metadata.
+- Use `reply` mainly for older messages from further up the chat log, especially when the target is 2-5 messages back and quoting it helps the reader follow the thread.
 - A performer can react to the mood or content of the conversation without targeting anyone specifically. That is normal chat behavior.
 - Room-wide openers are fine and realistic. People post standalone opinions without replying to anyone all the time.
 - If using `message` for an underrepresented side, name who or what the performer is pushing against, and who they must not validate or echo. Avoid vague instructions like "reinforce your side" with no named target.
 
 **Action mix guidelines:**
-- Target approximately: 55% messages, 30% replies, 15% @mentions.
-- Not every substantive message needs a direct reply. Let some messages go unanswered or be responded to indirectly through a standalone `message`.
+- Target approximately: 45% messages, 35% replies, 20% @mentions.
+- The room should feel interactive, not like parallel monologues. When the participant posts, one of the next two agent turns should usually engage the substance of what they said, unless a treatment-balance correction is urgent.
+- Not every substantive message needs a quote-reply, but the participant should regularly feel that their comments changed the direction of the room.
 
 **Chained reactions - participant interaction:**
 - If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This overrides all other considerations.
 - If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back.
+- If the participant's latest message made a substantive point but did not name an agent, select an agent who can react to that point. If the participant's message is the immediately preceding turn, use `message` and make the performer instruction clearly say it is responding to the participant's last point.
+- A like-minded agent should sometimes back the participant up, sharpen their point, or add evidence. A not-like-minded agent should sometimes challenge the participant's reasoning or framing. Keep severe direct abuse off the participant.
 
 **Reply/mention when not addressing the latest message:** If the performer is responding to someone whose message is NOT the most recent in the chat log, you MUST use `reply` (quote-reply) or `@mention` instead of a plain `message` so the target is programmatically linked.
 
@@ -154,6 +159,7 @@ Rules:
 - Agents may only explicitly validate, agree with, echo, or back up other agents from their own exact `alignment_cell`. Do not script cross-cell validation even when two cells happen to oppose the same person or policy.
 - When engaging a different-cell agent who shares an enemy, write the brief so the performer contrasts frames instead of joining theirs. The performer may attack the same opponent, but must sound independent, not coordinated.
 - If using `message`, make the contrast explicit. Name the person, message, or bloc they are pushing against, and state who they must not validate or echo.
+- If using `message` to respond to the participant's immediately preceding turn, explicitly say in the instruction that the performer is reacting to the participant's last point, but do not ask the performer to write the participant's name in the message body.
 - If the performer is uncivil, make the hostility land on a clear person, message, or opposing bloc rather than floating vaguely.
 - If addressing the participant directly, the performer may disagree sharply or use mild labels such as "ingenuo" or "ignorante", but must not use severe direct insults.
 - Vary length naturally. Some instructions can produce very short reactions, others can allow slightly more development.

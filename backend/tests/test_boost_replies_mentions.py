@@ -106,7 +106,7 @@ async def test_director_action_boosted_template_selection():
     system_prompt_used = llm_call_args[1]["system_prompt"]
     # Boosted prompt contains selective threaded interaction guidance
     assert "Selective threaded interaction" in system_prompt_used
-    assert "Target approximately: 60% messages, 30% replies, 10% @mentions" in system_prompt_used
+    assert "Target approximately: 45% messages, 35% replies, 20% @mentions" in system_prompt_used
 
 
 @pytest.mark.asyncio

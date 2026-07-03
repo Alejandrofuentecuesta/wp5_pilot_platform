@@ -27,7 +27,7 @@ export default function LoginScreen({
   onPreview,
   onStart,
 }: LoginScreenProps) {
-  const [step, setStep] = useState<LoginStep>("token")
+  const [step, setStep] = useState<LoginStep>("instructions")
   const [token, setToken] = useState("")
   const [username, setUsername] = useState(initialUsername)
   const [loading, setLoading] = useState(false)
@@ -57,7 +57,7 @@ export default function LoginScreen({
       const response = await onPreview(token.trim())
       setIntake(response)
       setSelectedStance(null)
-      setStep("instructions")
+      setStep("stance")
     } catch {
       setError("Token no válido. Inténtalo de nuevo.")
     } finally {
@@ -123,8 +123,7 @@ export default function LoginScreen({
               <div>
                 <h2 className="text-3xl font-semibold text-primary">Acceso a la plataforma</h2>
                 <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
-                  Introduce tu token de participante. Después verás unas instrucciones breves antes de responder a la
-                  pregunta inicial.
+                  Introduce tu token de participante. Después responderás a una pregunta breve antes de ver la noticia.
                 </p>
               </div>
 
@@ -176,20 +175,22 @@ export default function LoginScreen({
             </div>
           )}
 
-          {step === "instructions" && survey && (
+          {step === "instructions" && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-4xl font-semibold text-primary">Antes de empezar</h2>
                 <p className="mt-2 max-w-3xl text-base font-semibold leading-7 text-secondary">
-                  Primero verás una pregunta breve, después una noticia y finalmente entrarás al chat.
+                  Después introducirás tu token, responderás a una pregunta breve, leerás una noticia y finalmente
+                  entrarás al chat.
                 </p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-3">
+              <div className="grid gap-3 md:grid-cols-4">
                 {[
-                  ["1", "Responder una pregunta"],
-                  ["2", "Leer una noticia"],
-                  ["3", "Entrar al chat"],
+                  ["1", "Introducir token"],
+                  ["2", "Responder una pregunta"],
+                  ["3", "Leer una noticia"],
+                  ["4", "Entrar al chat"],
                 ].map(([number, label]) => (
                   <div key={number} className="flex items-center gap-3 rounded-xl border border-border bg-bg-feed px-4 py-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-base font-semibold text-white">
@@ -228,6 +229,11 @@ export default function LoginScreen({
                     No dejes la plataforma abierta en segundo plano mientras haces otra cosa. Podemos monitorizar el uso
                     pasivo, como dejar la pestaña inactiva o no seguir la discusión.
                   </p>
+                  <p>
+                    No escribas nombres reales, datos de contacto ni información personal tuya o de otras personas en tus
+                    comentarios. Para proteger la privacidad de todos, participa sin incluir datos que puedan identificar
+                    a alguien.
+                  </p>
                   <p>Si sales después de entrar al chat, no podrás volver a la misma sesión.</p>
                 </div>
               </div>
@@ -235,7 +241,7 @@ export default function LoginScreen({
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setStep("stance")}
+                  onClick={() => setStep("token")}
                   className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
                 >
                   Siguiente
@@ -287,7 +293,7 @@ export default function LoginScreen({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
-                  onClick={() => setStep("instructions")}
+                  onClick={() => setStep("token")}
                   className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-secondary transition-colors hover:border-accent hover:text-primary"
                 >
                   Volver

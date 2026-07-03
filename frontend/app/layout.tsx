@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next"
 import "./globals.css"
 
 export const metadata: Metadata = {
-  title: "Discussion Room",
+  title: "Sala de discusión",
   description: "Research discussion platform",
 }
 
@@ -18,7 +18,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html lang="es">
       <body className="m-0 p-0 font-sans antialiased bg-bg-page">
         {children}
       </body>

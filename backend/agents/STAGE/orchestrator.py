@@ -361,7 +361,15 @@ class Orchestrator:
         # Performer system prompt is per-agent (each agent has their own name).
         # Cached lazily on first use per agent name.
         self._performer_system_prompts: Dict[str, str] = {}
-        self._performer_prompt_context = prompt_context
+        
+        # Only send the news article to the Performer, stripping all legacy rules and the trailing incivility framework
+        if "The following news article has been shown to the participant:" in prompt_context:
+            article_part = prompt_context.split("The following news article has been shown to the participant:")[1]
+            if "Incivility framework:" in article_part:
+                article_part = article_part.split("Incivility framework:")[0]
+            self._performer_prompt_context = "The following news article has been shown to the participant:\n" + article_part.strip()
+        else:
+            self._performer_prompt_context = ""
         self._moderator_system_prompt = build_moderator_system_prompt(
             chatroom_context=prompt_context,
             template=self.moderator_prompt_template,
@@ -2206,25 +2214,24 @@ class Orchestrator:
                     raw_narratives = matching_cell["narratives"]
                     lines = [line.strip() for line in raw_narratives.split("\n") if line.strip()]
                     if lines:
-                        narratives_str = "\n".join(f"- {line}" for line in lines)
+                        # Limit to a random subset of 5 narratives to avoid overwhelming the Performer LLM
+                        sampled_lines = self._rng.sample(lines, min(5, len(lines)))
+                        narratives_str = "\n".join(f"- {line}" for line in sampled_lines)
 
-        base_performer_user_prompt = build_performer_user_prompt(
-            instruction=performer_instruction,
-            agent_profile=agent_profile,
-            action_type=action_type,
-            persona=agent_persona,
-            target_user=target_user,
-            target_message=target_message,
-            recent_messages=recent_by_agent,
-            recent_room_messages=recent_by_others,
-            chatroom_context=_merge_prompt_context(
-                chatroom_context=self.chatroom_context,
-                incivility_framework=self.incivility_framework,
-            ),
-            target_word_count=target_word_count,
-            template=self.performer_prompt_template,
-            narratives=narratives_str,
-        )
+            base_performer_user_prompt = build_performer_user_prompt(
+                instruction=performer_instruction,
+                agent_profile=agent_profile,
+                action_type=action_type,
+                persona=agent_persona,
+                target_user=target_user,
+                target_message=target_message,
+                recent_messages=recent_by_agent,
+                recent_room_messages=recent_by_others,
+                chatroom_context=self._performer_prompt_context,
+                target_word_count=target_word_count,
+                template=self.performer_prompt_template,
+                narratives=narratives_str,
+            )
         performer_user_prompt = base_performer_user_prompt
 
         if self._agent_civility_bucket(agent_name) == "uncivil":

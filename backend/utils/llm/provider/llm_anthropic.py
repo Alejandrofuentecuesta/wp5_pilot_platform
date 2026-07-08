@@ -26,7 +26,10 @@ def _expanded_max_tokens(current: int) -> int:
 
 
 import json as _json
+import random as _random
 import time as _time
+
+_MOCK_LLM = os.getenv("MOCK_LLM", "").lower() in ("1", "true", "yes")
 
 def _log_usage(provider: str, model: str, message, latency: float) -> None:
     usage = getattr(message, "usage", None)
@@ -74,6 +77,11 @@ class AnthropicClient:
 
     def generate_response(self, prompt: str, max_retries: int = 1, system_prompt: str = None) -> Optional[str]:
         """Synchronous response generation."""
+        if _MOCK_LLM:
+            delay = _random.uniform(2, 8) if "sonnet" in self.model_name else _random.uniform(1, 3)
+            _time.sleep(delay)
+            print(f"[LLM_USAGE] {_json.dumps({'provider': 'anthropic', 'model': self.model_name, 'input_tokens': 0, 'output_tokens': 0, 'mock': True, 'latency_s': round(delay, 3)})}", flush=True)
+            return None
         attempts = 0
         last_error = None
         current_max_tokens = self.max_tokens
@@ -121,6 +129,11 @@ class AnthropicClient:
 
     async def generate_response_async(self, prompt: str, max_retries: int = 1, system_prompt: str = None) -> Optional[str]:
         """Async response generation using the async Anthropic client when available."""
+        if _MOCK_LLM:
+            delay = _random.uniform(2, 8) if "sonnet" in self.model_name else _random.uniform(1, 3)
+            await asyncio.sleep(delay)
+            print(f"[LLM_USAGE] {_json.dumps({'provider': 'anthropic', 'model': self.model_name, 'input_tokens': 0, 'output_tokens': 0, 'mock': True, 'latency_s': round(delay, 3)})}", flush=True)
+            return None
         attempts = 0
         last_error = None
         current_max_tokens = self.max_tokens

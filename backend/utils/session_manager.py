@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import json as _json
+import time
 from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 
@@ -30,6 +31,12 @@ from platforms import SimulationSession
 from db import connection as db_conn
 from db.repositories import session_repo, message_repo, config_repo
 from cache import redis_client
+
+# Ended sessions stay in the registry for this long so a participant who
+# reconnects shortly after expiry still reaches the in-process session and
+# receives the clean "session_ended" close from the heartbeat.
+REAP_GRACE_SECONDS = 600
+REAP_INTERVAL_SECONDS = 60
 
 
 class SessionManager:
@@ -40,6 +47,7 @@ class SessionManager:
     def __init__(self) -> None:
         self._sessions: Dict[str, SimulationSession] = {}
         self._pending: Dict[str, Dict] = {}
+        self._ended_at: Dict[str, float] = {}
         self._lock = asyncio.Lock()
 
     @classmethod
@@ -322,6 +330,53 @@ class SessionManager:
             await redis_client.invalidate_session(r, session_id)
         except Exception as exc:
             print(f"[SessionManager] Redis invalidation failed for {session_id}: {exc}")
+
+    # ── Ended-session eviction ────────────────────────────────────────────────
+
+    async def reap_ended_sessions(self) -> int:
+        """Evict stopped sessions from the in-process registry.
+
+        Sessions end via ``SimulationSession.stop()`` (duration expiry, user
+        exit, admin stop), which persists their end state but leaves the
+        object in ``_sessions``. Without eviction, memory grows with
+        cumulative rather than concurrent sessions. Eviction happens
+        REAP_GRACE_SECONDS after a session is first observed stopped; the DB
+        row (already ``status='ended'``) remains the authoritative record.
+
+        Returns the number of sessions evicted.
+        """
+        now = time.monotonic()
+        evicted = []
+        async with self._lock:
+            for session_id, session in list(self._sessions.items()):
+                if session.running:
+                    self._ended_at.pop(session_id, None)
+                    continue
+                first_seen = self._ended_at.setdefault(session_id, now)
+                if now - first_seen >= REAP_GRACE_SECONDS:
+                    del self._sessions[session_id]
+                    del self._ended_at[session_id]
+                    evicted.append(session_id)
+
+        for session_id in evicted:
+            try:
+                r = redis_client.get_redis()
+                await redis_client.invalidate_session(r, session_id)
+            except Exception as exc:
+                print(f"[SessionManager] Redis invalidation failed for {session_id}: {exc}")
+
+        return len(evicted)
+
+    async def reap_loop(self) -> None:
+        """Periodically evict ended sessions. Started once at app startup."""
+        while True:
+            await asyncio.sleep(REAP_INTERVAL_SECONDS)
+            try:
+                evicted = await self.reap_ended_sessions()
+                if evicted:
+                    print(f"[SessionManager] Evicted {evicted} ended session(s) from registry")
+            except Exception as exc:
+                print(f"[SessionManager] Reaper error: {exc}")
 
     async def list_sessions(self) -> Dict[str, SimulationSession]:
         async with self._lock:

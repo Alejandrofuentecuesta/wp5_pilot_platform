@@ -220,9 +220,19 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
 
     print("Backend ready. Configure experiments via the admin panel at /admin.")
 
+    # Evict ended sessions from the in-process registry so memory tracks
+    # concurrent sessions, not cumulative ones.
+    reaper_task = asyncio.create_task(session_manager.reap_loop())
+
     yield
 
     # ── Shutdown ──
+    reaper_task.cancel()
+    try:
+        await reaper_task
+    except asyncio.CancelledError:
+        pass
+
     sessions = await session_manager.list_sessions()
     for sid, session in sessions.items():
         try:

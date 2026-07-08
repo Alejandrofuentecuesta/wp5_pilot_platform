@@ -3,6 +3,14 @@ from typing import Optional
 
 LLM_TIMEOUT_SECONDS = 60
 
+# Provider clients are configuration-only wrappers around HTTP connection
+# pools, so sessions with identical settings can share one instance. Sharing
+# keeps the client count constant as sessions scale and lets keepalive
+# connections be reused across sessions instead of paying a TLS handshake
+# per turn. Callers that close the client they receive must pass
+# shared=False to _create_client.
+_client_cache: dict = {}
+
 
 def _tune_bsc_generation_params(
     provider: str,
@@ -28,10 +36,13 @@ def _tune_bsc_generation_params(
     return temperature, top_p
 
 
-def _create_client(provider: str, model: str = None, temperature: float = None, top_p: float = None, max_tokens: int = None, bsc_model_version: str = None):
-    """Create an LLM client for the given provider and optional model name.
+def _create_client(provider: str, model: str = None, temperature: float = None, top_p: float = None, max_tokens: int = None, bsc_model_version: str = None, shared: bool = True):
+    """Create (or reuse) an LLM client for the given provider and optional model name.
 
     Imports are done lazily so only the selected provider's package needs to be installed.
+    With shared=True (default), clients with identical settings are cached and
+    reused across sessions; pass shared=False for a private instance the
+    caller may close.
     """
     provider = (provider or "gemini").lower()
     temperature, top_p = _tune_bsc_generation_params(
@@ -40,6 +51,10 @@ def _create_client(provider: str, model: str = None, temperature: float = None, 
         top_p=top_p,
         bsc_model_version=bsc_model_version,
     )
+
+    cache_key = (provider, model, temperature, top_p, max_tokens, bsc_model_version)
+    if shared and cache_key in _client_cache:
+        return _client_cache[cache_key]
 
     kwargs = {}
     if model:
@@ -55,31 +70,35 @@ def _create_client(provider: str, model: str = None, temperature: float = None, 
 
     if provider == "huggingface":
         from .provider.llm_huggingface import HuggingFaceClient
-        return HuggingFaceClient(**kwargs)
+        client = HuggingFaceClient(**kwargs)
     elif provider == "gemini":
         from .provider.llm_gemini import GeminiClient
-        return GeminiClient(**kwargs)
+        client = GeminiClient(**kwargs)
     elif provider == "anthropic":
         from .provider.llm_anthropic import AnthropicClient
-        return AnthropicClient(**kwargs)
+        client = AnthropicClient(**kwargs)
     elif provider == "mistral":
         from .provider.llm_mistral import MistralClient
-        return MistralClient(**kwargs)
+        client = MistralClient(**kwargs)
     elif provider == "konstanz":
         from .provider.llm_konstanz import KonstanzClient
-        return KonstanzClient(**kwargs)
+        client = KonstanzClient(**kwargs)
     elif provider == "bsc":
         from .provider.llm_bsc import BSCClient
-        return BSCClient(**kwargs)
+        client = BSCClient(**kwargs)
     elif provider == "none":
         from .local.llm_salamandra import SalamandraClient
-        return SalamandraClient(**kwargs)
+        client = SalamandraClient(**kwargs)
     else:
         raise RuntimeError(
             "Unknown llm_provider: "
             f"'{provider}'. Supported: 'gemini', 'huggingface', 'anthropic', "
             "'mistral', 'konstanz', 'bsc', 'None' (local)"
         )
+
+    if shared:
+        _client_cache[cache_key] = client
+    return client
 
 
 def _create_client_from_config(simulation_config: dict):

@@ -1063,6 +1063,7 @@ async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
             top_p=effective_top_p,
             max_tokens=body.max_tokens,
             bsc_model_version=bsc_model_version,
+            shared=False,  # this endpoint closes the client below
         )
     except Exception as e:
         return {

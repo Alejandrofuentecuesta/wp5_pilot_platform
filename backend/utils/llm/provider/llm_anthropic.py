@@ -26,19 +26,31 @@ def _expanded_max_tokens(current: int) -> int:
 
 
 import json as _json
+import time as _time
 
-def _log_usage(model: str, message) -> None:
+def _log_usage(provider: str, model: str, message, latency: float) -> None:
     usage = getattr(message, "usage", None)
     if usage is None:
         return
     entry = {
+        "provider": provider,
         "model": model,
         "input_tokens": getattr(usage, "input_tokens", 0),
         "output_tokens": getattr(usage, "output_tokens", 0),
         "cache_creation_input_tokens": getattr(usage, "cache_creation_input_tokens", 0),
         "cache_read_input_tokens": getattr(usage, "cache_read_input_tokens", 0),
+        "latency_s": round(latency, 3),
     }
     print(f"[LLM_USAGE] {_json.dumps(entry)}", flush=True)
+
+def _log_error(provider: str, model: str, error: str, latency: float) -> None:
+    entry = {
+        "provider": provider,
+        "model": model,
+        "error": error,
+        "latency_s": round(latency, 3),
+    }
+    print(f"[LLM_ERROR] {_json.dumps(entry)}", flush=True)
 
 
 class AnthropicClient:
@@ -81,8 +93,9 @@ class AnthropicClient:
                     kwargs["temperature"] = self.temperature
                 elif self.top_p is not None:
                     kwargs["top_p"] = self.top_p
+                t0 = _time.monotonic()
                 message = self.client.messages.create(**kwargs)
-                _log_usage(self.model_name, message)
+                _log_usage("anthropic", self.model_name, message, _time.monotonic() - t0)
                 text = _extract_text(message)
                 if _is_max_tokens_stop(message):
                     attempts += 1
@@ -95,6 +108,8 @@ class AnthropicClient:
                 return text
 
             except Exception as e:
+                elapsed = _time.monotonic() - t0 if 't0' in locals() else 0
+                _log_error("anthropic", self.model_name, str(e), elapsed)
                 last_error = str(e)
                 attempts += 1
 
@@ -126,8 +141,9 @@ class AnthropicClient:
                         kwargs["temperature"] = self.temperature
                     elif self.top_p is not None:
                         kwargs["top_p"] = self.top_p
+                    t0 = _time.monotonic()
                     message = await self.aclient.messages.create(**kwargs)
-                    _log_usage(self.model_name, message)
+                    _log_usage("anthropic", self.model_name, message, _time.monotonic() - t0)
                     text = _extract_text(message)
                     if _is_max_tokens_stop(message):
                         attempts += 1
@@ -147,6 +163,7 @@ class AnthropicClient:
                     return resp
 
             except Exception as e:
+                _log_error("anthropic", self.model_name, str(e), _time.monotonic() - t0 if 't0' in locals() else 0)
                 last_error = str(e)
                 attempts += 1
 

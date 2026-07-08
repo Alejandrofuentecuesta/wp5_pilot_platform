@@ -750,12 +750,17 @@ async def session_report(session_id: str):
 
     lines.sort(key=lambda x: x["timestamp"])
 
-    buf = io.StringIO()
-    for line in lines:
-        buf.write(json.dumps(line) + "\n")
-    buf.seek(0)
+    def _render() -> str:
+        buf = io.StringIO()
+        for line in lines:
+            buf.write(json.dumps(line) + "\n")
+        buf.seek(0)
+        return generate_html_from_lines(buf, session_id)
 
-    html = generate_html_from_lines(buf, session_id)
+    # The event log includes every LLM prompt/response; serialising and
+    # rendering it can take seconds, so run it off the event loop to avoid
+    # stalling live sessions.
+    html = await asyncio.to_thread(_render)
     return HTMLResponse(content=html)
 
 
@@ -801,9 +806,12 @@ async def session_messages_csv(session_id: str):
         for msg in raw_messages
     ]
 
-    csv_path = export_session_messages_csv(session_id, messages)
-    with open(csv_path, "rb") as handle:
-        csv_bytes = handle.read()
+    def _export() -> bytes:
+        csv_path = export_session_messages_csv(session_id, messages)
+        with open(csv_path, "rb") as handle:
+            return handle.read()
+
+    csv_bytes = await asyncio.to_thread(_export)
 
     return StreamingResponse(
         io.BytesIO(csv_bytes),

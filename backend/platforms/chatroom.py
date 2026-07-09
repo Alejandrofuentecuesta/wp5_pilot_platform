@@ -397,6 +397,8 @@ class SimulationSession:
                 "drop_accents":         int(self.simulation_config.get("humanize_drop_accents", 40)),
                 "comma_spacing":        int(self.simulation_config.get("humanize_comma_spacing", 50)),
                 "max_emoji":            int(self.simulation_config.get("humanize_max_emoji", 1)),
+                "lowercase_initial":    int(self.simulation_config.get("humanize_lowercase_initial", 15)),
+                "drop_final_punct":     int(self.simulation_config.get("humanize_drop_final_punct", 25)),
             },
             humanize_mode=self.simulation_config.get("humanize_mode", "general"),
             humanize_per_agent=self.simulation_config.get("humanize_per_agent") or {},

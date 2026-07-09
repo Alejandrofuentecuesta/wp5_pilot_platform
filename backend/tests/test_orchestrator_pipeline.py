@@ -20,6 +20,8 @@ from agents.STAGE.orchestrator import (
     MAX_PERFORMER_RETRIES,
     TARGET_ELIGIBLE_SPEAKER_COUNT,
     anonymize_message,
+    default_message_length_range,
+    _looks_truncated_response,
 )
 
 
@@ -83,6 +85,29 @@ def _make_orchestrator(
         rng=rng or random.Random(42),
     )
     return orch, logger
+
+
+def test_default_message_length_ranges_by_civility():
+    assert default_message_length_range("uncivil") == (2, 45)
+    assert default_message_length_range("civil") == (18, 95)
+    assert default_message_length_range(None) == (18, 95)
+
+
+def test_long_chat_message_without_final_punctuation_is_not_truncated():
+    text = (
+        "Primera frase completa. Segunda frase tambien completa. "
+        "Esto sigue como un mensaje largo de chat escrito desde el movil, "
+        "con una idea que se alarga un poco y termina de forma natural sin punto final "
+    ) * 2
+
+    assert _looks_truncated_response(text.strip()) is False
+
+
+def test_obvious_cutoff_markers_still_count_as_truncated():
+    base = "Primera frase completa. Segunda frase completa. " * 5
+
+    assert _looks_truncated_response(base + "pero") is True
+    assert _looks_truncated_response(base + "esto acaba en una coma,") is True
 
 
 def _update_json(profile_update="Active participant with neutral stance."):

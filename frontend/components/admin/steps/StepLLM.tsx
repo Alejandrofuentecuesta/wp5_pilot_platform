@@ -360,16 +360,9 @@ const HUMANIZE_FIELDS: { key: keyof HumanizeRules; label: string; desc: string; 
   { key: "word_subs",            label: "Word contractions",         desc: "que→q, xq→porque, tb→también, pa→para, x→por…",  def: 80  },
   { key: "drop_accents",         label: "Drop accents",              desc: "Per-message chance to strip all accents",         def: 40  },
   { key: "comma_spacing",        label: "Remove space after comma",  desc: "Per-comma chance: hola,como vs hola, como",      def: 50  },
+  { key: "lowercase_initial",    label: "Lowercase start",           desc: "Chance to lowercase safe opening words",         def: 15  },
+  { key: "drop_final_punct",     label: "Drop final punctuation",    desc: "Chance to remove final .!? from short messages", def: 25  },
 ]
-
-const DEFAULT_HUMANIZE_RULES: HumanizeRules = {
-  strip_hashtags: 100,
-  strip_inverted_punct: 100,
-  word_subs: 80,
-  drop_accents: 40,
-  comma_spacing: 50,
-  max_emoji: 1,
-}
 
 function HumanizeRulesEditor({
   rules,
@@ -525,6 +518,8 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
                 drop_accents:         config.humanize_drop_accents         ?? 40,
                 comma_spacing:        config.humanize_comma_spacing        ?? 50,
                 max_emoji:            config.humanize_max_emoji            ?? 1,
+                lowercase_initial:    config.humanize_lowercase_initial    ?? 15,
+                drop_final_punct:     config.humanize_drop_final_punct     ?? 25,
               }}
               onChange={(r) => onChange({
                 humanize_strip_hashtags:       r.strip_hashtags,
@@ -533,6 +528,8 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
                 humanize_drop_accents:         r.drop_accents,
                 humanize_comma_spacing:        r.comma_spacing,
                 humanize_max_emoji:            r.max_emoji,
+                humanize_lowercase_initial:    r.lowercase_initial,
+                humanize_drop_final_punct:     r.drop_final_punct,
               })}
             />
           </div>

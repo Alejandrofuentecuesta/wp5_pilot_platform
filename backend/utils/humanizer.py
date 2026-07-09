@@ -16,7 +16,7 @@ _WORD_SUBS = [
     (r"\bque\b",      "q",    0.55),
     (r"\bpero\b",     "pero", 0.0),   # keep — too recognisable if changed
     (r"\btambién\b",  "tb",   0.40),
-    (r"\bpara\b",     "pa",   0.35),
+    (r"\bpara\b",     "para", 0.0),   # "pa" reads too dialectal/caricatured here
     (r"\bporque\b",   "xq",   0.45),
     (r"\bpor\b",      "x",    0.25),
     (r"\bcon\b",      "con",  0.0),
@@ -99,6 +99,47 @@ def _strip_excess_emoji(text: str, rng: random.Random, max_emoji: int = 1) -> st
     return emoji_pattern.sub(_replacer, text).strip()
 
 
+def _lowercase_initial(text: str, rng: random.Random, prob: float = 0.15) -> str:
+    """Sometimes lowercase a safe sentence-initial word."""
+    if rng.random() >= prob:
+        return text
+
+    match = re.match(r"^([A-ZÁÉÍÓÚÑ][A-Za-zÁÉÍÓÚÑáéíóúñü]*)", text)
+    if not match:
+        return text
+
+    word = match.group(1)
+    if len(word) <= 1 or word.isupper():
+        return text
+
+    protected = {
+        "AEMET", "IPCC", "CSIC", "CIS", "PSOE", "PP", "Vox", "VOX",
+        "España", "Moncloa", "Sánchez", "Ayuso", "Illa", "Madrid",
+        "Barcelona",
+    }
+    if word in protected:
+        return text
+
+    safe_openers = {
+        "Que", "Qué", "Vaya", "Menuda", "Menudo", "Pero", "No", "Si", "Sí",
+        "Claro", "Pues", "Esto", "Esa", "Ese", "Esos", "Esas", "Otra",
+        "Otro", "Madre", "Mira", "Vamos", "Tampoco", "Encima",
+    }
+    if word not in safe_openers:
+        return text
+
+    return word[:1].lower() + text[1:]
+
+
+def _drop_final_punctuation(text: str, rng: random.Random, prob: float = 0.25) -> str:
+    """Sometimes remove final sentence punctuation from short chat-like posts."""
+    if rng.random() >= prob:
+        return text
+    if len(text) > 240:
+        return text
+    return re.sub(r"([.!?])+$", "", text).rstrip()
+
+
 def humanize(
     text: str,
     seed: Optional[int] = None,
@@ -108,6 +149,8 @@ def humanize(
     drop_accents: int = 40,
     comma_spacing: int = 50,
     max_emoji: int = 1,
+    lowercase_initial: int = 15,
+    drop_final_punct: int = 25,
 ) -> str:
     """Apply informal chatroom humanization to a Spanish message.
 
@@ -118,6 +161,8 @@ def humanize(
       - drop_accents: chance to remove accents from the whole message
       - comma_spacing: per-comma chance to drop the space after it
       - max_emoji: hard cap on number of emoji kept (not a probability)
+      - lowercase_initial: chance to lowercase safe generic opening words
+      - drop_final_punct: chance to remove final .!? from short messages
 
     All transformations are probabilistic (seeded for reproducibility if
     `seed` is provided) so each call produces slightly different output.
@@ -139,5 +184,9 @@ def humanize(
         text = _drop_spaces_after_comma(text, rng, prob=comma_spacing / 100)
     if max_emoji >= 0:
         text = _strip_excess_emoji(text, rng, max_emoji=max_emoji)
+    if lowercase_initial > 0:
+        text = _lowercase_initial(text, rng, prob=lowercase_initial / 100)
+    if drop_final_punct > 0:
+        text = _drop_final_punctuation(text, rng, prob=drop_final_punct / 100)
 
     return text.strip()

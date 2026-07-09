@@ -13,6 +13,8 @@ export interface HumanizeRules {
   drop_accents: number
   comma_spacing: number
   max_emoji: number
+  lowercase_initial: number
+  drop_final_punct: number
 }
 
 export interface SimulationConfig {
@@ -58,6 +60,8 @@ export interface SimulationConfig {
   humanize_drop_accents?: number
   humanize_comma_spacing?: number
   humanize_max_emoji?: number
+  humanize_lowercase_initial?: number
+  humanize_drop_final_punct?: number
   humanize_per_agent?: Record<string, HumanizeRules>
   bsc_model_version?: string
   parallel_turns?: number

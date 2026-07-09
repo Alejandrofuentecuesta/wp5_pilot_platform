@@ -8,12 +8,19 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from types import SimpleNamespace
 
-from utils.llm.llm_manager import LLMManager, _create_client, _tune_bsc_generation_params
+from utils.llm.llm_manager import LLMManager, _client_cache, _create_client, _tune_bsc_generation_params
 from utils.llm.provider.llm_anthropic import AnthropicClient
 from utils.llm.provider.llm_mistral import MistralClient
 
 
 # ── Construction / validation ────────────────────────────────────────────────
+
+@pytest.fixture(autouse=True)
+def clear_llm_client_cache():
+    _client_cache.clear()
+    yield
+    _client_cache.clear()
+
 
 class TestLLMManagerInit:
 

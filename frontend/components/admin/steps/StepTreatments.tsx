@@ -170,6 +170,8 @@ const HUMANIZE_FIELDS: { key: keyof HumanizeRules; label: string; desc: string; 
   { key: "word_subs",            label: "Word contractions",         desc: "que→q, xq→porque, tb→también, pa→para, x→por…",  def: 80  },
   { key: "drop_accents",         label: "Drop accents",              desc: "Per-message chance to strip all accents",         def: 40  },
   { key: "comma_spacing",        label: "Remove space after comma",  desc: "Per-comma chance: hola,como vs hola, como",      def: 50  },
+  { key: "lowercase_initial",    label: "Lowercase start",           desc: "Chance to lowercase safe opening words",         def: 15  },
+  { key: "drop_final_punct",     label: "Drop final punctuation",    desc: "Chance to remove final .!? from short messages", def: 25  },
 ]
 
 const DEFAULT_HUMANIZE_RULES: HumanizeRules = {
@@ -179,6 +181,8 @@ const DEFAULT_HUMANIZE_RULES: HumanizeRules = {
   drop_accents: 40,
   comma_spacing: 50,
   max_emoji: 1,
+  lowercase_initial: 15,
+  drop_final_punct: 25,
 }
 
 function HumanizeRulesEditor({ rules, onChange }: { rules: HumanizeRules; onChange: (r: HumanizeRules) => void }) {

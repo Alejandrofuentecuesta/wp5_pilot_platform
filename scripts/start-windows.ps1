@@ -1,4 +1,4 @@
-$ErrorActionPreference = "Stop"
+﻿$ErrorActionPreference = "Stop"
 Set-StrictMode -Version Latest
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
@@ -49,7 +49,7 @@ function Get-EnvValue {
     return ""
 }
 
-# ── First-time setup wizard ───────────────────────────────────────────────────
+# First-time setup wizard
 
 function Set-EnvValue {
     param([string]$Key, [string]$Value, [string]$File = ".env")
@@ -73,9 +73,9 @@ function Test-NeedsSetup {
 
 function Invoke-SetupWizard {
     Write-Host ""
-    Write-Host "╔════════════════════════════════════════════════════════════╗"
-    Write-Host "║          WP5 Platform — First-time Setup                   ║"
-    Write-Host "╚════════════════════════════════════════════════════════════╝"
+    Write-Host "============================================================"
+    Write-Host "          WP5 Platform - First-time Setup"
+    Write-Host "============================================================"
     Write-Host ""
     Write-Host "  You need at least ONE API key to run the platform."
     Write-Host "  You can change these later by editing the .env file."
@@ -83,34 +83,34 @@ function Invoke-SetupWizard {
 
     $currentPass = Get-EnvValue -Key "ADMIN_PASSPHRASE" -Path ".env"
     if (-not $currentPass -or $currentPass -eq "changeme") {
-        Write-Host "── Admin panel password ──────────────────────────────────────"
+        Write-Host "-- Admin panel password ------------------------------------"
         Write-Host "  This is the password to access the researcher admin panel."
         $adminPass = Read-Host "  Choose a password (Enter to keep 'changeme')"
         if ($adminPass) {
             Set-EnvValue -Key "ADMIN_PASSPHRASE" -Value $adminPass
-            Write-Host "  ✓ Password saved."
+            Write-Host "  OK - Password saved."
         }
         Write-Host ""
     }
 
-    Write-Host "── LLM API Keys ──────────────────────────────────────────────"
+    Write-Host "-- LLM API Keys --------------------------------------------"
     Write-Host "  Enter keys for the providers you want to use."
     Write-Host "  Press Enter to skip any provider."
     Write-Host ""
 
     $providers = @(
-        @{ Key="ANTHROPIC_API_KEY"; Label="Anthropic (Claude) — Director agent (recommended)"; Url="https://console.anthropic.com/" },
-        @{ Key="HF_API_KEY";        Label="HuggingFace — Performer agents (chat bots)";        Url="https://huggingface.co/settings/tokens" },
-        @{ Key="GEMINI_API_KEY";    Label="Google Gemini — alternative provider";               Url="https://aistudio.google.com/app/apikey" },
-        @{ Key="MISTRAL_API_KEY";   Label="Mistral — alternative provider";                     Url="https://console.mistral.ai/api-keys" },
-        @{ Key="KONSTANZ_API_KEY";  Label="Konstanz vLLM — university-hosted model";            Url="(contact your institution)" }
+        @{ Key="ANTHROPIC_API_KEY"; Label="Anthropic (Claude) - Director agent (recommended)"; Url="https://console.anthropic.com/" },
+        @{ Key="HF_API_KEY";        Label="HuggingFace - Performer agents (chat bots)";        Url="https://huggingface.co/settings/tokens" },
+        @{ Key="GEMINI_API_KEY";    Label="Google Gemini - alternative provider";              Url="https://aistudio.google.com/app/apikey" },
+        @{ Key="MISTRAL_API_KEY";   Label="Mistral - alternative provider";                    Url="https://console.mistral.ai/api-keys" },
+        @{ Key="KONSTANZ_API_KEY";  Label="Konstanz vLLM - university-hosted model";           Url="(contact your institution)" }
     )
 
     $i = 1
     foreach ($p in $providers) {
         $current = Get-EnvValue -Key $p.Key -Path ".env"
         if ($current -and $current -ne "your_api_key_here") {
-            Write-Host "  [$i] $($p.Label) — already set, skipping."
+            Write-Host "  [$i] $($p.Label) - already set, skipping."
             Write-Host ""
         } else {
             Write-Host "  [$i] $($p.Label)"
@@ -118,7 +118,7 @@ function Invoke-SetupWizard {
             $keyVal = Read-Host "      $($p.Key)"
             if ($keyVal) {
                 Set-EnvValue -Key $p.Key -Value $keyVal
-                Write-Host "      ✓ Saved."
+                Write-Host "      OK - Saved."
             }
             Write-Host ""
         }
@@ -126,13 +126,13 @@ function Invoke-SetupWizard {
     }
 
     if (Test-NeedsSetup) {
-        Write-Host "  ⚠  No API key was provided. The platform will not work without at least one."
+        Write-Host "  WARNING - No API key was provided. The platform will not work without at least one."
         Write-Host "     You can add keys later by editing the .env file in the project folder."
         Write-Host ""
         $cont = Read-Host "  Continue anyway? (y/N)"
         if ($cont -ne "y" -and $cont -ne "Y") { exit 1 }
     } else {
-        Write-Host "  ✓ Setup complete — this wizard will not appear again."
+        Write-Host "  OK - Setup complete - this wizard will not appear again."
     }
     Write-Host ""
 }

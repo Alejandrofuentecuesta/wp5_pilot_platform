@@ -11,7 +11,7 @@ Spanish political context:
 - Isabel Diaz Ayuso (PP) has been President of the Community of Madrid since 2019 and is a prominent conservative figure.
 - Salvador Illa (PSC) became President of the Generalitat de Catalunya after the 2024 Catalan election.
 - Spanish political debate is often polarized between PSOE and its allies on the left and regional/nationalist parties, and PP and Vox on the right.
-- Common political themes include immigration, housing, climate policy, taxes, territorial tensions, Catalan politics, public services, feminism, law and order, and corruption.
+- Common political themes include immigration, housing, climate policy, taxes, territorial tensions, Catalan politics, public services, feminism, law and order, and corruption. Common political slang includes terms such as sanchismo, fachas, progres, rojos, zurdos, cayetanos, paguitas, chiringuitos, Agenda 2030, Moncloa, separatistas, indepes, and la casta.
 - Corruption can be mentioned as part of ordinary Spanish political debate, including examples such as the Gurtel case and PP financing controversies, the ERE case in Andalusia, the Koldo/contracting investigations linked to PSOE circles, or public-contract controversies around Madrid politics and Ayuso's environment.
 - Treat these as political references, investigations, accusations, or court cases as appropriate. Do not present unproven accusations as settled facts, and do not overuse corruption references if they are not relevant to the news topic.
 
@@ -31,7 +31,7 @@ export const ECOLOGICAL_VALIDITY_3X3 = `Messages should stay short, natural, and
 The flow should feel like a real Telegram group conversation in Spanish.
 Use a mix of standalone messages, replies, @mentions, and likes.
 Keep the flow natural; do not force strict alternation.
-When it fits naturally, agents should occasionally ground their arguments in recognizable Spanish political references such as PSOE, PP, Vox, Sanchez, Ayuso, Illa, housing, immigration, climate policy, Catalonia, public services, or corruption cases/investigations. Do not force these references into every message, but avoid making the debate sound generic or detached from Spain.`
+When it fits naturally, agents should occasionally ground their arguments in recognizable Spanish political references and slang such as PSOE, PP, Vox, Sanchez, Ayuso, Illa, Moncloa, sanchismo, fachas, progres, rojos, zurdos, cayetanos, paguitas, chiringuitos, Agenda 2030, housing, immigration, climate policy, Catalonia, public services, or corruption cases/investigations. Do not force these references into every message, but avoid making the debate sound generic or detached from Spain.`
 
 export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is defined through these three dimensions:
 
@@ -40,6 +40,7 @@ export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is define
   Examples: "mierda", "puta", "puta mierda", "joder", "cojones", "hijos de puta", "desgraciados", "friki", "chiflado", "estupido", "farsa", "infame", "maldito", "DEVOLVEDLOS A SU PAIS!!!!".
   These examples are illustrative, not phrases to reuse. Do not copy the same insult words or outrage formulas repeatedly across messages.
   Impoliteness should remain visible when required, but it can vary across direct insults, vulgar intensifiers, sarcasm, mockery, condescension, impatient dismissal, and contempt.
+  Some uncivil messages should use all-caps shouting for one short phrase or accusation, such as "NOS TOMAN POR IDIOTAS", "ESTO ES UNA TOMADURA DE PELO", or "BASTA YA". Do not uppercase the entire message.
   Avoid making most uncivil messages follow the same pattern: [outrage phrase] + [farsa/estafa claim] + [politicians/media want control].
   Avoid overusing the same bundles, especially "puta farsa", "estafa", "mierda", "controlarnos", "robarnos", "vender la moto", "ignorante total", "que verguenza", or "que escandalo".
 

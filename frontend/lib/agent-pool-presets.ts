@@ -13,6 +13,10 @@ function buildAgent(
   alignmentCell: AgentAlignmentCell,
   persona: string,
 ): PoolAgent {
+  const lengthDefaults = incivility === "uncivil"
+    ? { message_length_min: 2, message_length_max: 45 }
+    : { message_length_min: 18, message_length_max: 95 }
+
   return {
     id,
     name,
@@ -21,6 +25,7 @@ function buildAgent(
     topic_stance: alignmentCell,
     alignment_cell: alignmentCell,
     persona,
+    ...lengthDefaults,
   }
 }
 

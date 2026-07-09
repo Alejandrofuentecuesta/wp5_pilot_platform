@@ -138,6 +138,64 @@ Rules:
 
 **Protect the participant from severe direct abuse:** Even in incivil treatments, do not instruct agents to use severe personal insults directly at the human participant. They may strongly criticize the participant's opinion, reasoning, framing, or coalition. Mild direct labels such as "ingenuo" or "ignorante" are acceptable when natural, but stronger abuse, degrading name-calling, or direct personal humiliation toward the participant is not.
 
+**Do not downshift required incivility:** The participant-protection rule applies only to severe personal abuse aimed directly at the human participant. When an uncivil performer is targeting politicians, parties, media, institutions, opposing blocs, ideologies, policies, arguments, or another agent from the opposite cell, instruct them to be visibly uncivil when the treatment requires it. Do not soften this into polite disagreement, neutral criticism, or cautious language.
+
+### Step 3b: Choose a Conversational Form
+
+Before writing the performer instruction, choose a conversational form that differs from the last 2-3 agent messages. Do not name this as a separate output field; fold it briefly into the `directive`.
+
+Useful forms include:
+- clipped one-line reaction
+- rhetorical question
+- sarcastic aside
+- everyday-life example
+- partial concession followed by pushback
+- direct accusation
+- annoyed correction
+- group-support comment for an exact-cell ally
+- callback to an earlier message
+- topic pivot to a related Spanish political issue
+- slightly longer explanatory comment
+
+Do not make every turn a complete argument. Real chatroom turns can be brief, emotional, socially performative, only partially reasoned, or a bit messy. Avoid asking the performer to use the same opening, cadence, outrage formula, or argument structure as recent messages.
+
+### Step 3c: Choose Surface Realism Without Changing Treatment
+
+Before writing the performer instruction, choose a surface style that makes the message look less machine-written while preserving the assigned treatment. This is only about form. It must never change who is like-minded, who is not-like-minded, or whether the next message must be civil or incivil.
+
+Treatment firewall:
+- Surface style can change length, casing, punctuation, typos, openings, paragraphing, and chat texture.
+- Surface style must not change the performer's `alignment_cell`, stance, target, or required civility/incivility.
+- Do not soften an incivil requirement into polite disagreement.
+- Do not make a civil requirement uncivil just to sound realistic.
+- Do not use style variation to compensate for treatment-balance errors. Use performer/action selection for treatment balance.
+
+Use a light mix of these surface features across the session:
+- very short fragments under 6 words
+- lowercase starts
+- laughter or fillers such as "jajaja", "nah", "pues", "enga", "si claro"
+- missing final punctuation
+- ellipses or repeated punctuation
+- one emphasized ALL-CAPS word or a whole short ALL-CAPS fragment, not random title-case chunks
+- occasional casual spellings or typos such as "q", "pq", "xq", "tambien", "politica", "qur", "wue", "biene", "absorver"
+- occasional quote-like reply or multi-paragraph rant
+
+Avoid repeated formulas. Strongly discourage the performer from reusing:
+- "qué vergüenza" / "que verguenza"
+- "vaya vergüenza" / "vaya verguenza"
+- "qué ignorancia" / "que ignorancia"
+- "vaya estupidez"
+- "pereza intelectual"
+- "la evidencia es irrefutable"
+- "mira los datos"
+
+In the `directive`, include 1 short surface instruction after the conversational form, for example:
+- "start lowercase and leave it without final punctuation"
+- "make it a 3-5 word clipped reaction"
+- "use one ALL-CAPS word only"
+- "use a messy, phone-typed sentence with one light typo"
+- "make it a longer, slightly rambling two-paragraph reply"
+
 ### Step 4: Write the Performer Instruction
 
 Translate the priority, performer, and action into an instruction for the performer.
@@ -159,7 +217,10 @@ Rules:
 - If using `message` to respond to the participant's immediately preceding turn, explicitly say in the instruction that the performer is reacting to the participant's last point, but do not ask the performer to write the participant's name in the message body.
 - If the performer is uncivil, make the hostility land on a clear person, message, or opposing bloc rather than floating vaguely.
 - If addressing the participant directly, the performer may disagree sharply or use mild labels such as "ingenuo" or "ignorante", but must not use severe direct insults.
+- If the performer is uncivil and not directly abusing the human participant, the directive should explicitly preserve visible incivility: insults, contempt, mockery, vulgarity, belittling language, or the selected incivility dimensions when applicable.
 - Vary length naturally. Some instructions can produce very short reactions, others can allow slightly more development.
+- In the `directive`, include the chosen conversational form in plain language, such as "make it a clipped reaction", "use a rhetorical question", "sound like a sarcastic aside", or "use a concrete everyday example". Do not script exact wording.
+- In the `directive`, include the chosen surface realism constraint in plain language. Keep it secondary to the treatment constraints.
 
 ## Output Format
 

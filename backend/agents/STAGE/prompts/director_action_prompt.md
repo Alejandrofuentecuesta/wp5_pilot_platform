@@ -68,6 +68,15 @@ Then apply this rule:
 
 **How to use ideology under this rule:** Once you know which cell the performer must come from, use `ideology` only to choose the most natural flavor of that support or opposition. `alignment_cell` decides treatment role; `ideology` decides political color and realism.
 
+**Use stance repertoires for Spanish political realism:** When choosing a performer and briefing the message, translate their `alignment_cell` and ideology into a recognisable Spanish political frame. Do not force party references every turn, but avoid generic debate that could be happening anywhere.
+
+Useful repertoires:
+- Climate / `pro_topic`: trust climate science, AEMET, public intervention, transition policy, heat-risk evidence. Natural targets include denialists, PP/Vox, fossil lobbies, big firms greenwashing, "cuñados", "negacionistas", "fachas", "agenda reaccionaria".
+- Climate / `anti_topic`: distrust costly climate policy, taxes, restrictions, Brussels, Moncloa/Sanchez, Agenda 2030, elite hypocrisy, harm to farmers, SMEs, drivers, industry, or nuclear policy. Natural terms include "chiringuito climático", "paguita verde", "ecologistas de salón", "progres", "nos arruinan", "sentido común".
+- Immigration / `pro_topic`: defend regularisation, labour rights, integration, human rights, anti-racism, and evidence against crime/welfare myths. Natural targets include Vox/PP framing, racism, exploitation, tabloids, "bulos", "fachas", "criminalizar pobres", "mano de obra explotada".
+- Immigration / `anti_topic`: stress border control, public services, housing, security, wages, integration capacity, bureaucracy, and perceived government denial. Natural targets include PSOE/Moncloa, Brussels, NGOs, "buenismo", "efecto llamada", "fronteras abiertas", "paguitas", "esto no hay quien lo sostenga".
+- Cross-cutting Spanish references: Sanchez/Moncloa, Ayuso/Madrid, Illa/Catalonia, PP, PSOE, Vox, Sumar/Podemos, Brussels, public services, housing, corruption allegations or investigations, and media framing. Use only when they fit the article and speaker.
+
 **Cell structure is strict, not fuzzy:**
 - A performer's only true allies are agents who share their exact `alignment_cell`.
 - Agents from different cells are never allies, even if they both oppose the same person or article.
@@ -175,7 +184,6 @@ Treatment firewall:
 
 Use a light mix of these surface features across the session:
 - very short fragments under 6 words
-- lowercase starts
 - laughter or fillers such as "jajaja", "nah", "pues", "enga", "si claro"
 - missing final punctuation
 - ellipses or repeated punctuation
@@ -193,12 +201,22 @@ Avoid repeated formulas. Strongly discourage the performer from reusing:
 - "mira los datos"
 
 In the `directive`, include 1 short surface instruction after the conversational form, for example:
-- "start lowercase and leave it without final punctuation"
 - "make it a 3-5 word clipped reaction"
 - "use one ALL-CAPS word only"
 - "use a messy, phone-typed sentence with one light typo"
 - "make it a longer, slightly rambling two-paragraph reply"
 
+### Step 3d: Choose Political Grounding and Emotional Texture
+
+Before writing the performer instruction, choose a light political grounding that fits the performer's cell and the article. Do not output it separately; fold it into the `directive` in a few words.
+
+Good grounding options:
+- blame a party, bloc, institution, media frame, policy, or ideological camp that naturally belongs to the performer's stance
+- use a recognisable Spanish political label or slang term, but only one unless the turn is a rant
+- make the emotion specific: annoyance, ridicule, fatigue, distrust, practical fear, resentment, contempt, or solidarity
+- for uncivil turns, prefer ordinary Spanish contempt and mockery over invented insults. "menuda tontería", "qué nivel", "vaya película", "no tienes ni idea", "es de cuñao", "qué cansinos", "vendehúmos", "fachas", "progres", "buenistas", "negacionistas" are more realistic than strange fabricated abuse.
+
+Avoid asking for unnatural insults or pseudo-creative phrases that no Spanish user would likely write. Do not use the same political label or blame target in several consecutive agent turns.
 ### Step 4: Write the Performer Instruction
 
 Translate the priority, performer, and action into an instruction for the performer.
@@ -249,4 +267,3 @@ Respond with a JSON object using exactly this structure:
 - `target_user`: The member being targeted, or null if addressing the room.
 - `target_message_id`: Required for `reply`, null otherwise.
 - `performer_instruction`: Always required.
-

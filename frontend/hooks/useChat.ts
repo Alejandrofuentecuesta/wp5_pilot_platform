@@ -5,8 +5,10 @@ import { PARTICIPANT_SENDER, LS_SESSION_ID, LS_USERNAME, LS_BLOCKED, LS_PARTICIP
 import {
   previewSessionIntake as apiPreviewSessionIntake,
   startSession as apiStartSession,
+  joinQueue as apiJoinQueue,
   likeMessage as apiLikeMessage,
   reportMessage as apiReportMessage,
+  AtCapacityError,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
 import type {
@@ -40,6 +42,14 @@ export function useChat() {
   // Session end state
   const [sessionEnded, setSessionEnded] = useState(false)
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null)
+
+  // Queue state (not persisted — refresh re-enters token which restores position)
+  const [queueToken, setQueueToken] = useState<string | null>(null)
+  const [queueName, setQueueName] = useState<string>("")
+  const [queueStance, setQueueStance] = useState<ParticipantStance | null>(null)
+  const [queuePosition, setQueuePosition] = useState(0)
+  const [queueWaitMinutes, setQueueWaitMinutes] = useState(0)
+  const [queueSlotAvailable, setQueueSlotAvailable] = useState(false)
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([])
@@ -152,10 +162,49 @@ export function useChat() {
   }
 
   const startSession = async (token: string, name: string, stance: ParticipantStance) => {
-    const data = await apiStartSession(token, name || undefined, stance)
-    setSessionId(data.session_id)
-    if (name) setUsername(name)
-    setParticipantStance(stance)
+    try {
+      const data = await apiStartSession(token, name || undefined, stance)
+      setSessionId(data.session_id)
+      if (name) setUsername(name)
+      setParticipantStance(stance)
+      setQueueToken(null)
+    } catch (err) {
+      if (err instanceof AtCapacityError) {
+        const q = await apiJoinQueue(token, name || undefined, stance)
+        setQueueToken(token)
+        setQueueName(name)
+        setQueueStance(stance)
+        setQueuePosition(q.position)
+        setQueueWaitMinutes(q.estimated_wait_minutes)
+        setQueueSlotAvailable(q.slot_available)
+        return
+      }
+      throw err
+    }
+  }
+
+  const pollQueue = async () => {
+    if (!queueToken) return
+    try {
+      const q = await apiJoinQueue(queueToken)
+      setQueuePosition(q.position)
+      setQueueWaitMinutes(q.estimated_wait_minutes)
+      setQueueSlotAvailable(q.slot_available)
+    } catch {
+      setQueueToken(null)
+    }
+  }
+
+  const claimSlot = async () => {
+    if (!queueToken) return
+    await startSession(queueToken, queueName, queueStance!)
+  }
+
+  const clearQueue = () => {
+    setQueueToken(null)
+    setQueuePosition(0)
+    setQueueWaitMinutes(0)
+    setQueueSlotAvailable(false)
   }
 
   const dismissNewsArticle = useCallback(() => {
@@ -395,5 +444,13 @@ export function useChat() {
     exitModalOpen,
     setExitModalOpen,
     exitSession,
+    // Queue
+    queueToken,
+    queuePosition,
+    queueWaitMinutes,
+    queueSlotAvailable,
+    pollQueue,
+    claimSlot,
+    clearQueue,
   }
 }

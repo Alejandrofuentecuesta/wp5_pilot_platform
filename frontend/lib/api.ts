@@ -1,5 +1,5 @@
 import { API_BASE } from "./constants"
-import type { ParticipantStance, SessionIntakeResponse, SessionStartResponse } from "./types"
+import type { ParticipantStance, SessionIntakeResponse, SessionStartResponse, QueueJoinResponse } from "./types"
 
 export async function previewSessionIntake(
   token: string,
@@ -13,6 +13,13 @@ export async function previewSessionIntake(
   return res.json()
 }
 
+export class AtCapacityError extends Error {
+  constructor() {
+    super("at_capacity")
+    this.name = "AtCapacityError"
+  }
+}
+
 export async function startSession(
   token: string,
   participantName?: string,
@@ -23,7 +30,27 @@ export async function startSession(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, participant_name: participantName || null, participant_stance: participantStance }),
   })
+  if (res.status === 503) {
+    const body = await res.json().catch(() => ({}))
+    if (body?.detail?.reason === "at_capacity") {
+      throw new AtCapacityError()
+    }
+  }
   if (!res.ok) throw new Error("Invalid token")
+  return res.json()
+}
+
+export async function joinQueue(
+  token: string,
+  participantName?: string,
+  participantStance?: ParticipantStance,
+): Promise<QueueJoinResponse> {
+  const res = await fetch(`${API_BASE}/queue/join`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, participant_name: participantName || null, participant_stance: participantStance }),
+  })
+  if (!res.ok) throw new Error("Queue join failed")
   return res.json()
 }
 

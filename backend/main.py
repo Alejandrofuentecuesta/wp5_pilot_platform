@@ -223,6 +223,13 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
 
     session_queue.cap = SESSION_CAP
     print(f"Session cap: {SESSION_CAP}")
+
+    if os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
+        print("*" * 70)
+        print("*** MOCK_LLM ENABLED — all LLM calls return None, no agent    ***")
+        print("*** responses will be generated. Do NOT use during fieldwork.  ***")
+        print("*" * 70)
+
     print("Backend ready. Configure experiments via the admin panel at /admin.")
 
     reaper_task = asyncio.create_task(session_manager.reap_loop())
@@ -1097,7 +1104,8 @@ async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
     """Send a short test prompt to an LLM provider and return the raw call details.
 
     This lets the admin verify credentials, model availability, and parameter
-    support before committing to a config.
+    support before committing to a config. Intentionally bypasses MOCK_LLM
+    so it always makes a real API call.
     """
     _require_admin(x_admin_key)
     from utils.llm.llm_manager import _create_client, _tune_bsc_generation_params

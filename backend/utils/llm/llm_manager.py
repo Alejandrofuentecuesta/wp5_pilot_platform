@@ -1,7 +1,30 @@
 import asyncio
+import json as _json
+import os
+import random
 from typing import Optional
 
 LLM_TIMEOUT_SECONDS = 60
+
+_MOCK_DELAY_TABLE = {
+    "sonnet": (2.0, 8.0),
+    "haiku": (1.0, 3.0),
+    "konstanz": (0.5, 1.5),
+    "gemma": (0.5, 1.5),
+}
+_MOCK_DELAY_DEFAULT = (1.0, 3.0)
+
+
+def _mock_llm_enabled() -> bool:
+    return os.getenv("MOCK_LLM", "").lower() in ("1", "true", "yes")
+
+
+def _mock_delay_for_model(model_name: str) -> float:
+    name = (model_name or "").lower()
+    for key, (lo, hi) in _MOCK_DELAY_TABLE.items():
+        if key in name:
+            return random.uniform(lo, hi)
+    return random.uniform(*_MOCK_DELAY_DEFAULT)
 
 # Provider clients are configuration-only wrappers around HTTP connection
 # pools, so sessions with identical settings can share one instance. Sharing
@@ -153,7 +176,16 @@ class LLMManager:
         """Delegate to the LLM client's async generator.
 
         Returns the response text or None on failure or timeout.
+        When MOCK_LLM is enabled, skips the real call and returns None
+        after a model-appropriate delay.
         """
+        if _mock_llm_enabled():
+            model = getattr(self.client, "model_name", "unknown")
+            delay = _mock_delay_for_model(model)
+            await asyncio.sleep(delay)
+            print(f"[LLM_USAGE] {_json.dumps({'provider': type(self.client).__name__, 'model': model, 'input_tokens': 0, 'output_tokens': 0, 'mock': True, 'latency_s': round(delay, 3)})}", flush=True)
+            return None
+
         try:
             try:
                 coro = self.client.generate_response_async(prompt, max_retries=max_retries, system_prompt=system_prompt)  # type: ignore[attr-defined]

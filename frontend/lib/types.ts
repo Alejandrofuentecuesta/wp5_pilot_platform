@@ -66,3 +66,9 @@ export type BlockedSenders = Record<string, string>
 export type ParticipantStance =
   | "pro_topic"
   | "anti_topic"
+
+export interface QueueJoinResponse {
+  position: number
+  estimated_wait_minutes: number
+  slot_available: boolean
+}

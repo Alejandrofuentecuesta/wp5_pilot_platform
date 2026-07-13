@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import string
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
@@ -22,6 +23,7 @@ from platforms import SimulationSession
 from platforms.chatroom import _parse_target_percentage
 from models import Message
 from utils.session_manager import session_manager
+from utils.session_queue import session_queue
 from utils import token_manager
 from utils.log_viewer import generate_html_from_lines
 from utils.session_csv_exporter import export_session_messages_csv
@@ -170,6 +172,7 @@ def get_experiment_id() -> str:
 
 ADMIN_PASSPHRASE = os.environ.get("ADMIN_PASSPHRASE", "")
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "")  # comma-separated, e.g. "https://example.com"
+SESSION_CAP = int(os.environ.get("SESSION_CAP", "50"))
 
 
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
@@ -218,18 +221,42 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
         print(f"⚠  No API key set for: {', '.join(missing)}. "
               "These providers will fail if selected in the admin wizard.")
 
+    session_queue.cap = SESSION_CAP
+    print(f"Session cap: {SESSION_CAP}")
+
+    if os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
+        print("*" * 70)
+        print("*** MOCK_LLM ENABLED — all LLM calls return None, no agent    ***")
+        print("*** responses will be generated. Do NOT use during fieldwork.  ***")
+        print("*" * 70)
+
     print("Backend ready. Configure experiments via the admin panel at /admin.")
 
-    # Evict ended sessions from the in-process registry so memory tracks
-    # concurrent sessions, not cumulative ones.
     reaper_task = asyncio.create_task(session_manager.reap_loop())
+
+    async def _queue_reaper():
+        while True:
+            await asyncio.sleep(60)
+            try:
+                n = session_queue.reap_stale()
+                if n:
+                    print(f"[SessionQueue] Reaped {n} stale queue entries")
+            except Exception as exc:
+                print(f"[SessionQueue] Reaper error: {exc}")
+
+    queue_reaper_task = asyncio.create_task(_queue_reaper())
 
     yield
 
     # ── Shutdown ──
     reaper_task.cancel()
+    queue_reaper_task.cancel()
     try:
         await reaper_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await queue_reaper_task
     except asyncio.CancelledError:
         pass
 
@@ -409,29 +436,40 @@ async def preview_session_intake(request: SessionIntakeRequest):
 async def start_session(request: SessionStartRequest):
     """Start a new simulation session.
 
-    Validates and atomically consumes the participant token via the DB
-    (PostgreSQL SELECT FOR UPDATE — safe across multiple workers).
-    The experiment_id is resolved from the token row.
+    Validates the token, checks experiment availability and session cap,
+    then atomically consumes the token. If the cap is reached and the
+    token is not at the front of the queue, returns 503 with a structured
+    body so the frontend can transition to the queue screen.
     """
-    session_id = str(uuid.uuid4())
-
     pool = _get_pool()
+
+    token_row = await token_repo.get_token_status(pool, request.token)
+    if not token_row or token_row.get("used"):
+        raise HTTPException(status_code=401, detail="Invalid or already-used token")
+
+    experiment_id = token_row.get("experiment_id")
+    treatment_group = token_row.get("treatment_group")
+    if not experiment_id or not treatment_group:
+        raise HTTPException(status_code=400, detail="Token is missing experiment metadata")
+
+    unavailable = await config_repo.check_experiment_availability(pool, experiment_id)
+    if unavailable:
+        raise HTTPException(status_code=403, detail=unavailable)
+
+    if not session_queue.admits_token(request.token):
+        raise HTTPException(
+            status_code=503,
+            detail={"reason": "at_capacity"},
+        )
+
+    session_id = str(uuid.uuid4())
     result = await token_manager.consume_token(pool, request.token, session_id)
     if not result:
         raise HTTPException(status_code=401, detail="Invalid or already-used token")
 
     group, experiment_id = result
 
-    # Check experiment availability (date window + paused status).
-    unavailable = await config_repo.check_experiment_availability(pool, experiment_id)
-    if unavailable:
-        # Roll back token consumption so the participant can try again later.
-        async with pool.acquire() as conn:
-            await conn.execute(
-                "UPDATE tokens SET used = FALSE, used_at = NULL, session_id = NULL WHERE token = $1",
-                request.token,
-            )
-        raise HTTPException(status_code=403, detail=unavailable)
+    session_queue.remove(request.token)
 
     await session_manager.reserve_pending(
         session_id,
@@ -440,6 +478,7 @@ async def start_session(request: SessionStartRequest):
             "user_name": request.participant_name or "participant",
             "token": request.token,
             "participant_stance": request.participant_stance,
+            "_reserved_at": time.monotonic(),
         },
         experiment_id=experiment_id,
     )
@@ -448,6 +487,50 @@ async def start_session(request: SessionStartRequest):
         session_id=session_id,
         message=f"Session created (group: {group}). Connect via WebSocket to start.",
     )
+
+
+class QueueJoinRequest(BaseModel):
+    token: str
+    participant_name: Optional[str] = None
+    participant_stance: Optional[
+        Literal[
+            "pro_topic", "anti_topic", "favor", "against",
+            "qualified_favor", "qualified_against", "skeptical",
+        ]
+    ] = None
+
+
+class QueueJoinResponse(BaseModel):
+    position: int
+    estimated_wait_minutes: int
+    slot_available: bool
+
+
+@app.post("/queue/join", response_model=QueueJoinResponse)
+async def queue_join(request: QueueJoinRequest):
+    """Join or poll the session queue.
+
+    If the token is not yet queued, adds it. If already queued, refreshes
+    the entry and returns updated status. This endpoint doubles as the
+    30-second polling endpoint; no separate status endpoint is needed.
+    """
+    pool = _get_pool()
+    token_row = await token_repo.get_token_status(pool, request.token)
+    if not token_row or token_row.get("used"):
+        raise HTTPException(status_code=401, detail="Invalid or already-used token")
+
+    experiment_id = token_row.get("experiment_id")
+    if experiment_id:
+        unavailable = await config_repo.check_experiment_availability(pool, experiment_id)
+        if unavailable:
+            raise HTTPException(status_code=403, detail=unavailable)
+
+    session_queue.enqueue(request.token)
+    status = session_queue.check_status(request.token)
+    if status is None:
+        raise HTTPException(status_code=404, detail="Queue entry not found")
+
+    return QueueJoinResponse(**status)
 
 
 @app.post("/session/{session_id}/participant-stance")
@@ -1021,7 +1104,8 @@ async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
     """Send a short test prompt to an LLM provider and return the raw call details.
 
     This lets the admin verify credentials, model availability, and parameter
-    support before committing to a config.
+    support before committing to a config. Intentionally bypasses MOCK_LLM
+    so it always makes a real API call.
     """
     _require_admin(x_admin_key)
     from utils.llm.llm_manager import _create_client, _tune_bsc_generation_params

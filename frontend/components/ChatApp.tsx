@@ -4,12 +4,26 @@ import { useChat } from "@/hooks/useChat"
 import LoginScreen from "./LoginScreen"
 import ChatRoom from "./ChatRoom"
 import ThankYouScreen from "./ThankYouScreen"
+import QueueScreen from "./QueueScreen"
 
 export default function ChatApp() {
   const chat = useChat()
 
   if (chat.sessionEnded) {
     return <ThankYouScreen redirectUrl={chat.redirectUrl} />
+  }
+
+  if (chat.queueToken && !chat.sessionId) {
+    return (
+      <QueueScreen
+        position={chat.queuePosition}
+        waitMinutes={chat.queueWaitMinutes}
+        slotAvailable={chat.queueSlotAvailable}
+        onPoll={chat.pollQueue}
+        onClaim={chat.claimSlot}
+        onExpired={chat.clearQueue}
+      />
+    )
   }
 
   if (!chat.sessionId) {

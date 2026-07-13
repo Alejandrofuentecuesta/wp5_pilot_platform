@@ -1,7 +1,6 @@
 import os
 import asyncio
 import json as _json
-import random as _random
 import time as _time
 from openai import OpenAI, AsyncOpenAI
 from dotenv import load_dotenv
@@ -11,8 +10,6 @@ from typing import Optional
 load_dotenv()
 
 BASE_URL = "https://whatif.inf.uni-konstanz.de/v1"
-
-_MOCK_LLM = os.getenv("MOCK_LLM", "").lower() in ("1", "true", "yes")
 
 
 def _log_usage(provider: str, model: str, completion, latency: float) -> None:
@@ -57,11 +54,6 @@ class KonstanzClient:
 
     def generate_response(self, prompt: str, max_retries: int = 1, system_prompt: str = None) -> Optional[str]:
         """Synchronous response generation."""
-        if _MOCK_LLM:
-            delay = _random.uniform(0.5, 1.5)
-            _time.sleep(delay)
-            print(f"[LLM_USAGE] {_json.dumps({'provider': 'konstanz', 'model': self.model_name, 'input_tokens': 0, 'output_tokens': 0, 'mock': True, 'latency_s': round(delay, 3)})}", flush=True)
-            return None
         attempts = 0
         last_error = None
 
@@ -99,11 +91,6 @@ class KonstanzClient:
 
     async def generate_response_async(self, prompt: str, max_retries: int = 1, system_prompt: str = None) -> Optional[str]:
         """Async response generation using the async OpenAI client when available."""
-        if _MOCK_LLM:
-            delay = _random.uniform(0.5, 1.5)
-            await asyncio.sleep(delay)
-            print(f"[LLM_USAGE] {_json.dumps({'provider': 'konstanz', 'model': self.model_name, 'input_tokens': 0, 'output_tokens': 0, 'mock': True, 'latency_s': round(delay, 3)})}", flush=True)
-            return None
         attempts = 0
         last_error = None
 

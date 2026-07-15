@@ -462,31 +462,35 @@ async def start_session(request: SessionStartRequest):
             detail={"reason": "at_capacity"},
         )
 
-    session_id = str(uuid.uuid4())
-    result = await token_manager.consume_token(pool, request.token, session_id)
-    if not result:
-        raise HTTPException(status_code=401, detail="Invalid or already-used token")
+    session_queue._inflight += 1
+    try:
+        session_id = str(uuid.uuid4())
+        result = await token_manager.consume_token(pool, request.token, session_id)
+        if not result:
+            raise HTTPException(status_code=401, detail="Invalid or already-used token")
 
-    group, experiment_id = result
+        group, experiment_id = result
 
-    session_queue.remove(request.token)
+        session_queue.remove(request.token)
 
-    await session_manager.reserve_pending(
-        session_id,
-        {
-            "treatment_group": group,
-            "user_name": request.participant_name or "participant",
-            "token": request.token,
-            "participant_stance": request.participant_stance,
-            "_reserved_at": time.monotonic(),
-        },
-        experiment_id=experiment_id,
-    )
+        await session_manager.reserve_pending(
+            session_id,
+            {
+                "treatment_group": group,
+                "user_name": request.participant_name or "participant",
+                "token": request.token,
+                "participant_stance": request.participant_stance,
+                "_reserved_at": time.monotonic(),
+            },
+            experiment_id=experiment_id,
+        )
 
-    return SessionStartResponse(
-        session_id=session_id,
-        message=f"Session created (group: {group}). Connect via WebSocket to start.",
-    )
+        return SessionStartResponse(
+            session_id=session_id,
+            message=f"Session created (group: {group}). Connect via WebSocket to start.",
+        )
+    finally:
+        session_queue._inflight -= 1
 
 
 class QueueJoinRequest(BaseModel):

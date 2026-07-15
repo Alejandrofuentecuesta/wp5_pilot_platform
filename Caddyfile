@@ -23,6 +23,10 @@
 		reverse_proxy app:8000
 	}
 
+	handle /queue/* {
+		reverse_proxy app:8000
+	}
+
 	# Everything else → frontend
 	handle {
 		reverse_proxy frontend:3000

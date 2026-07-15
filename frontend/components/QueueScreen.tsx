@@ -31,10 +31,14 @@ export default function QueueScreen({
     }
   }, [onPoll])
 
-  const handleClaim = () => {
+  const handleClaim = async () => {
     if (claimingRef.current) return
     claimingRef.current = true
-    onClaim()
+    try {
+      await onClaim()
+    } finally {
+      claimingRef.current = false
+    }
   }
 
   return (

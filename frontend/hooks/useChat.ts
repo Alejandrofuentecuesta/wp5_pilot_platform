@@ -197,8 +197,10 @@ export function useChat() {
       setQueuePosition(q.position)
       setQueueWaitMinutes(q.estimated_wait_minutes)
       setQueueSlotAvailable(q.slot_available)
-    } catch {
-      setQueueToken(null)
+    } catch (err) {
+      if (err instanceof Error && (err.message.includes("401") || err.message.includes("403"))) {
+        setQueueToken(null)
+      }
     }
   }
 

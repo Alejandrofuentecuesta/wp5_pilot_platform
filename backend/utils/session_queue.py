@@ -42,6 +42,7 @@ class SessionQueue:
     def __init__(self, cap: int = 50) -> None:
         self.cap = cap
         self._queue: OrderedDict[str, QueueEntry] = OrderedDict()
+        self._inflight: int = 0
 
     @classmethod
     def get(cls) -> "SessionQueue":
@@ -60,7 +61,7 @@ class SessionQueue:
         return running + pending
 
     def has_capacity(self) -> int:
-        return self.cap - self._active_count()
+        return self.cap - self._active_count() - self._inflight
 
     def position(self, token: str) -> int:
         for i, key in enumerate(self._queue, 1):
@@ -95,6 +96,8 @@ class SessionQueue:
 
         if slot_available and entry.offered_at is None:
             entry.offered_at = time.monotonic()
+        elif not slot_available:
+            entry.offered_at = None
 
         return {
             "position": pos,

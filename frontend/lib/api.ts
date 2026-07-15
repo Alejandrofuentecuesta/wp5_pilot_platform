@@ -50,7 +50,7 @@ export async function joinQueue(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, participant_name: participantName || null, participant_stance: participantStance }),
   })
-  if (!res.ok) throw new Error("Queue join failed")
+  if (!res.ok) throw new Error(`Queue join failed: ${res.status}`)
   return res.json()
 }
 

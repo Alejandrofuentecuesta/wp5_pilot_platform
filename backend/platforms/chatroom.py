@@ -880,13 +880,36 @@ class SimulationSession:
         event = {
             "event_type": "session_end",
             "reason": reason,
-            "redirect_url": self.redirect_url or "",
+            "redirect_url": await self._build_return_url(reason),
         }
         try:
             r = redis_client.get_redis()
             await redis_client.publish_event(r, self.session_id, event)
         except Exception as exc:
             self.logger.log_error("publish_session_end", str(exc))
+
+    async def _build_return_url(self, reason: str) -> str:
+        """Append the panel hand-back parameters to the configured redirect URL.
+
+        The panel company matches the participant by their token and reads
+        the completion status from `r` (1 = completed the full session,
+        2 = left early). Falls back to the bare redirect URL if the token
+        cannot be fetched.
+        """
+        if not self.redirect_url:
+            return ""
+        r_code = "1" if reason.startswith("duration_expired") else "2"
+        try:
+            pool = db_conn.get_pool()
+            row = await session_repo.get_session(pool, self.session_id)
+            token = (row or {}).get("token", "")
+        except Exception as exc:
+            self.logger.log_error("build_return_url", str(exc))
+            token = ""
+        if not token:
+            return self.redirect_url
+        sep = "&" if "?" in self.redirect_url else "?"
+        return f"{self.redirect_url}{sep}token={token}&r={r_code}"
 
     async def _publish_emotions_checkup_trigger(self) -> None:
         """Publish an emotions_checkup event via Redis pub/sub so the client opens the modal."""

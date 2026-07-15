@@ -12,6 +12,7 @@ interface HandoffScreenProps {
 }
 
 type HandoffStatus = "checking" | "ready" | "invalid"
+type HandoffStep = "instructions" | "access"
 
 const ACTIONS = [
   ["Escribir mensajes", "cuando tengas algo que decir."],
@@ -29,6 +30,8 @@ export default function HandoffScreen({
   onStart,
 }: HandoffScreenProps) {
   const [status, setStatus] = useState<HandoffStatus>("checking")
+  const [step, setStep] = useState<HandoffStep>("instructions")
+  const [username, setUsername] = useState("")
   const [starting, setStarting] = useState(false)
   const [error, setError] = useState("")
 
@@ -56,7 +59,7 @@ export default function HandoffScreen({
     setStarting(true)
     setError("")
     try {
-      await onStart(token, "", stance)
+      await onStart(token, username.trim(), stance)
     } catch {
       setError("No se ha podido iniciar la sesión. Inténtalo de nuevo.")
       setStarting(false)
@@ -108,19 +111,20 @@ export default function HandoffScreen({
             </div>
           )}
 
-          {status === "ready" && (
+          {status === "ready" && step === "instructions" && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-4xl font-semibold text-primary">Antes de empezar</h2>
                 <p className="mt-2 max-w-3xl text-base font-semibold leading-7 text-secondary">
-                  A continuación leerás una noticia y después entrarás al chat.
+                  A continuación escribirás tu nombre, leerás una noticia y finalmente entrarás al chat.
                 </p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-2">
+              <div className="grid gap-3 md:grid-cols-3">
                 {[
-                  ["1", "Leer una noticia"],
-                  ["2", "Entrar al chat"],
+                  ["1", "Escribir tu nombre"],
+                  ["2", "Leer una noticia"],
+                  ["3", "Entrar al chat"],
                 ].map(([number, label]) => (
                   <div key={number} className="flex items-center gap-3 rounded-xl border border-border bg-bg-feed px-4 py-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-base font-semibold text-white">
@@ -168,6 +172,56 @@ export default function HandoffScreen({
                 </div>
               </div>
 
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setStep("access")}
+                  className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
+                >
+                  Siguiente
+                </button>
+              </div>
+            </div>
+          )}
+
+          {status === "ready" && step === "access" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-3xl font-semibold text-primary">Acceso a la plataforma</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
+                  Tu token de acceso ya está registrado. Escribe el nombre con el que quieres aparecer en el chat.
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="handoff-username" className="mb-1 block text-xs font-medium text-secondary">
+                    Nombre visible (opcional)
+                  </label>
+                  <input
+                    id="handoff-username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="p. ej. Alicia"
+                    autoFocus
+                    className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="handoff-token" className="mb-1 block text-xs font-medium text-secondary">
+                    Token de participante
+                  </label>
+                  <input
+                    id="handoff-token"
+                    type="text"
+                    value={token}
+                    disabled
+                    className="w-full cursor-not-allowed rounded-lg border border-border bg-bg-feed px-3 py-2.5 text-sm text-tertiary"
+                  />
+                </div>
+              </div>
+
               {error && <p className="text-sm font-medium text-red-600">{error}</p>}
 
               <div className="flex justify-end">
@@ -177,7 +231,7 @@ export default function HandoffScreen({
                   disabled={starting}
                   className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
-                  {starting ? "Entrando..." : "Siguiente"}
+                  {starting ? "Entrando..." : "Entrar al chat"}
                 </button>
               </div>
             </div>

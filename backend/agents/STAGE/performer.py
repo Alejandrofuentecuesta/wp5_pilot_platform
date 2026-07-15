@@ -187,8 +187,8 @@ def build_performer_user_prompt(
 INCIVILITY_DIMENSIONS = {
     "impoliteness": {
         "title": "Impoliteness",
-        "definition": "Rudeness, insults, vulgarity, name-calling, aspersion, belittling others, or graphic shouting cues such as all-caps or excessive exclamation marks.",
-        "examples": "'mierda', 'puta', 'puta mierda', 'joder', 'cojones', 'hijos de puta', 'desgraciados', 'friki', 'chiflado', 'estupido', 'farsa', 'infame', 'maldito', 'DEVOLVEDLOS A SU PAIS!!!!'."
+        "definition": "Rudeness, insults, vulgarity, name-calling, aspersion, or belittling others.",
+        "examples": "'mierda', 'puta', 'puta mierda', 'joder', 'cojones', 'hijos de puta', 'desgraciados', 'friki', 'chiflado', 'estupido', 'farsa', 'infame', 'maldito'."
     },
     "hate_speech": {
         "title": "Hate Speech and Stereotyping",

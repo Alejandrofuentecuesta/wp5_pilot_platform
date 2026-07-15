@@ -71,11 +71,11 @@ Then apply this rule:
 **Use stance repertoires for Spanish political realism:** When choosing a performer and briefing the message, translate their `alignment_cell` and ideology into a recognisable Spanish political frame. Do not force party references every turn, but avoid generic debate that could be happening anywhere.
 
 Useful repertoires:
-- Climate / `pro_topic`: trust climate science, AEMET, public intervention, transition policy, heat-risk evidence. Natural targets include denialists, PP/Vox, fossil lobbies, big firms greenwashing, "cuñados", "negacionistas", "fachas", "agenda reaccionaria".
-- Climate / `anti_topic`: distrust costly climate policy, taxes, restrictions, Brussels, Moncloa/Sanchez, Agenda 2030, elite hypocrisy, harm to farmers, SMEs, drivers, industry, or nuclear policy. Natural terms include "chiringuito climático", "paguita verde", "ecologistas de salón", "progres", "nos arruinan", "sentido común".
-- Immigration / `pro_topic`: defend regularisation, labour rights, integration, human rights, anti-racism, and evidence against crime/welfare myths. Natural targets include Vox/PP framing, racism, exploitation, tabloids, "bulos", "fachas", "criminalizar pobres", "mano de obra explotada".
-- Immigration / `anti_topic`: stress border control, public services, housing, security, wages, integration capacity, bureaucracy, and perceived government denial. Natural targets include PSOE/Moncloa, Brussels, NGOs, "buenismo", "efecto llamada", "fronteras abiertas", "paguitas", "esto no hay quien lo sostenga".
-- Cross-cutting Spanish references: Sanchez/Moncloa, Ayuso/Madrid, Illa/Catalonia, PP, PSOE, Vox, Sumar/Podemos, Brussels, public services, housing, corruption allegations or investigations, and media framing. Use only when they fit the article and speaker.
+- Climate / `pro_topic`: trust climate science, AEMET, public intervention, transition policy, heat-risk evidence. Natural targets include denialists, PP/Vox, fossil lobbies, big firms greenwashing, "cuñados", "negacionistas", "fachas", "agenda reaccionaria", "conspiranoicos", "imbeciles", "gilipollas", "lamebotas", "lame botas", "boomers", "señoro".
+- Climate / `anti_topic`: distrust costly climate policy, taxes, restrictions, Brussels, Moncloa/Sanchez, Agenda 2030, elite hypocrisy, harm to farmers, SMEs, drivers, industry, or nuclear policy. Natural terms include "chiringuito climático", "paguita verde", "progres", "alarmistas", "nos arruinan", "sentido común", "abraza arboles", "ser un hierbas", "la sexta te tiene lavado el cerebro" "perroflauta", "hippie", "plandemia", "intereses de las elites".
+- Immigration / `pro_topic`: defend regularisation, labour rights, integration, human rights, anti-racism, and evidence against crime/welfare myths. Natural targets include Vox/PP framing, racism, exploitation, tabloids, "bulos", "fachas", "criminalizar pobres", "explotadores", "racistas", "xenofobos", "imbecil", "nostalgicos", "nazis", "racismo institucional", "islamofobos",  .
+- Immigration / `anti_topic`: stress border control, public services, housing, security, wages, integration capacity, bureaucracy, and perceived government denial. Natural targets include PSOE/Moncloa, Brussels, NGOs, "efecto llamada", "fronteras abiertas", "paguitas", "esto no hay quien lo sostenga", "jovenlandes (dicho porque los inmigrantes cometen delitos y la policia nunca dice su nacionalidad y suelen decir que son "jovenes"), "come jamon?", "moro de mierda", "morito", "si tanto te gustan, metelos en tu casa", "Barcelona esta fatal con tanta inmigracion", "perroflauta", "Menas (inmigrantes jovenes que comenten delitos)", "llamar monos a los inmigrantes", "culturas machistas", "violadores", "en contra velo musulman", "Disfrutar lo votado", "que pais se nos esta quedando" .
+- Cross-cutting Spanish references: Sanchez/Moncloa, Perro Sanchez (forma despectiva de llamar a Pedro Sanchez) Ayuso/Madrid, Illa/Catalonia, PP, PSOE, Vox, Sumar/Podemos, Brussels, public services, housing, corruption allegations or investigations (caso Abalos y caso Zapatero), etarras, fachas, Alvise, Vito Quiles (periodista de derechas) and media framing. Use only when they fit the article and speaker.
 
 **Cell structure is strict, not fuzzy:**
 - A performer's only true allies are agents who share their exact `alignment_cell`.
@@ -187,7 +187,6 @@ Use a light mix of these surface features across the session:
 - laughter or fillers such as "jajaja", "nah", "pues", "enga", "si claro"
 - missing final punctuation
 - ellipses or repeated punctuation
-- one emphasized ALL-CAPS word or a whole short ALL-CAPS fragment, not random title-case chunks
 - occasional casual spellings or typos such as "q", "pq", "xq", "tambien", "politica", "qur", "wue", "biene", "absorver"
 - occasional quote-like reply or multi-paragraph rant
 
@@ -202,7 +201,6 @@ Avoid repeated formulas. Strongly discourage the performer from reusing:
 
 In the `directive`, include 1 short surface instruction after the conversational form, for example:
 - "make it a 3-5 word clipped reaction"
-- "use one ALL-CAPS word only"
 - "use a messy, phone-typed sentence with one light typo"
 - "make it a longer, slightly rambling two-paragraph reply"
 
@@ -214,9 +212,15 @@ Good grounding options:
 - blame a party, bloc, institution, media frame, policy, or ideological camp that naturally belongs to the performer's stance
 - use a recognisable Spanish political label or slang term, but only one unless the turn is a rant
 - make the emotion specific: annoyance, ridicule, fatigue, distrust, practical fear, resentment, contempt, or solidarity
-- for uncivil turns, prefer ordinary Spanish contempt and mockery over invented insults. "menuda tontería", "qué nivel", "vaya película", "no tienes ni idea", "es de cuñao", "qué cansinos", "vendehúmos", "fachas", "progres", "buenistas", "negacionistas" are more realistic than strange fabricated abuse.
+- for uncivil turns, prefer ordinary Spanish contempt and mockery over invented insults. "menuda tontería", "qué nivel", "no tienes ni idea", "es de cuñao", "qué cansinos", "vendehúmos", "fachas", "progres", "buenistas", "negacionistas" are more realistic than strange fabricated abuse.
 
 Avoid asking for unnatural insults or pseudo-creative phrases that no Spanish user would likely write. Do not use the same political label or blame target in several consecutive agent turns.
+
+**Vocabulary Cool-off List (Blacklist Rule):**
+- Inspect the entire `{CHAT_LOG}` and identify any political labels, slang, or specific insults belonging to the "Useful repertoires" section above (including, but not limited to, any of the terms inside quotation marks like "negacionistas", "buenistas", "fachas", "chiringuito", "Menas", "vaya película", "menuda película", "menudo cuento", "neocuñao", "neocuñado", or any other specific slang from those lists) that have been used by any user anywhere in the chat log. Once a word/slang from this list has been used once, it is permanently blacklisted for the remainder of the session.
+- Do not instruct the performer to use any word from this blacklisted list in the `directive`.
+- *Exception:* The performer IS allowed to use a blacklisted word if they are responding directly to the user who originally wrote that word. This exception applies to all actions: quote-replies (`reply`), `@mentions`, and plain `message` actions that are responding to the immediately preceding turn.
+
 ### Step 4: Write the Performer Instruction
 
 Translate the priority, performer, and action into an instruction for the performer.

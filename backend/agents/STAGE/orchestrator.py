@@ -1,4 +1,4 @@
-﻿"""Orchestrator â€” coordinates the three-call Director + Performer + Moderator pipeline.
+"""Orchestrator â€” coordinates the three-call Director + Performer + Moderator pipeline.
 
 Each turn:
   1. (Skip on first turn) Director Update: update last agent's profile
@@ -2363,6 +2363,11 @@ class Orchestrator:
 
             candidate_content = deanonymize_text(content, self._reverse_map)
             candidate_content = self._strip_vocative_prefix(candidate_content)
+
+            # Post-process ellipsis: replace with a space at the end of the message (which gets stripped), and a dot in the middle.
+            candidate_content = re.sub(r"(?:\.{3,}|…+)\s*$", " ", candidate_content)
+            candidate_content = re.sub(r"(?:\.{3,}|…+)", ".", candidate_content)
+            candidate_content = candidate_content.strip()
 
             if action_type == "reply" and target_message:
                 candidate_content = _strip_target_quote_echo(candidate_content, target_message)

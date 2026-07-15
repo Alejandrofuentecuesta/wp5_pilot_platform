@@ -184,7 +184,6 @@ Use a light mix of these surface features across the session:
 - laughter or fillers such as "jajaja", "nah", "pues", "enga", "si claro"
 - missing final punctuation
 - ellipses or repeated punctuation
-- one emphasized ALL-CAPS word or a whole short ALL-CAPS fragment, not random title-case chunks
 - occasional casual spellings or typos such as "q", "pq", "xq", "tambien", "politica", "qur", "wue", "biene", "absorver"
 - occasional quote-like reply or multi-paragraph rant
 
@@ -199,7 +198,6 @@ Avoid repeated formulas. Strongly discourage the performer from reusing:
 
 In the `directive`, include 1 short surface instruction after the conversational form, for example:
 - "make it a 3-5 word clipped reaction"
-- "use one ALL-CAPS word only"
 - "use a messy, phone-typed sentence with one light typo"
 - "make it a longer, slightly rambling two-paragraph reply"
 
@@ -211,9 +209,15 @@ Good grounding options:
 - blame a party, bloc, institution, media frame, policy, or ideological camp that naturally belongs to the performer's stance
 - use a recognisable Spanish political label or slang term, but only one unless the turn is a rant
 - make the emotion specific: annoyance, ridicule, fatigue, distrust, practical fear, resentment, contempt, or solidarity
-- for uncivil turns, prefer ordinary Spanish contempt and mockery over invented insults. "menuda tontería", "qué nivel", "vaya película", "no tienes ni idea", "es de cuñao", "qué cansinos", "vendehúmos", "fachas", "progres", "buenistas", "negacionistas" are more realistic than strange fabricated abuse.
+- for uncivil turns, prefer ordinary Spanish contempt and mockery over invented insults. "menuda tontería", "qué nivel", "no tienes ni idea", "es de cuñao", "qué cansinos", "vendehúmos", "fachas", "progres", "buenistas", "negacionistas" are more realistic than strange fabricated abuse.
 
 Avoid asking for unnatural insults or pseudo-creative phrases that no Spanish user would likely write. Do not use the same political label or blame target in several consecutive agent turns.
+
+**Vocabulary Cool-off List (Blacklist Rule):**
+- Inspect the entire `{CHAT_LOG}` and identify any political labels, slang, or specific insults belonging to the "Useful repertoires" section above (including, but not limited to, any of the terms inside quotation marks like "negacionistas", "buenistas", "fachas", "chiringuito", "Menas", "vaya película", "menuda película", "menudo cuento", "neocuñao", "neocuñado", or any other specific slang from those lists) that have been used by any user anywhere in the chat log. Once a word/slang from this list has been used once, it is permanently blacklisted for the remainder of the session.
+- Do not instruct the performer to use any word from this blacklisted list in the `directive`.
+- *Exception:* The performer IS allowed to use a blacklisted word if they are responding directly to the user who originally wrote that word. This exception applies to all actions: quote-replies (`reply`), `@mentions`, and plain `message` actions that are responding to the immediately preceding turn.
+
 ### Step 4: Write the Performer Instruction
 
 Translate the priority, performer, and action into an instruction for the performer.

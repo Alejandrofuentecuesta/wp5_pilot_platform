@@ -169,14 +169,21 @@ export function useChat() {
       setParticipantStance(stance)
       setQueueToken(null)
     } catch (err) {
-      if (err instanceof AtCapacityError) {
-        const q = await apiJoinQueue(token, name || undefined, stance)
-        setQueueToken(token)
-        setQueueName(name)
-        setQueueStance(stance)
-        setQueuePosition(q.position)
-        setQueueWaitMinutes(q.estimated_wait_minutes)
-        setQueueSlotAvailable(q.slot_available)
+      const isCapacity = err instanceof AtCapacityError ||
+        (err instanceof Error && err.message === "at_capacity")
+      if (isCapacity) {
+        try {
+          const q = await apiJoinQueue(token, name || undefined, stance)
+          setQueueToken(token)
+          setQueueName(name)
+          setQueueStance(stance)
+          setQueuePosition(q.position)
+          setQueueWaitMinutes(q.estimated_wait_minutes)
+          setQueueSlotAvailable(q.slot_available)
+        } catch (joinErr) {
+          console.error("[useChat] queue join failed:", joinErr)
+          throw joinErr
+        }
         return
       }
       throw err

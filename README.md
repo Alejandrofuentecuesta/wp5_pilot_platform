@@ -179,7 +179,7 @@ Minimum steps:
 
 If you use this platform in your research, please cite it:
 
-> Kiddle, R. & van Atteveldt, W. (2026). *STAGElab: A Platform for Agent-Generated Experiments* [Software]. GitHub. https://github.com/Rptkiddle/wp5_pilot_platform
+> Kiddle, R., van Atteveldt, W., de la Fuente Cuesta, A., Garcia, M., & Casadevall, A. (2026). *STAGElab: A Platform for Agent-Generated Experiments* [Software]. GitHub. https://github.com/Rptkiddle/wp5_pilot_platform
 
 A methods paper is forthcoming — this section will be updated with a full reference when available.
 

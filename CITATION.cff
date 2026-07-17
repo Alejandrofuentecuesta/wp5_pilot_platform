@@ -11,6 +11,14 @@ authors:
     family-names: van Atteveldt
     affiliation: "Vrije Universiteit Amsterdam, Dept. of Communication Science"
     orcid: "https://orcid.org/0000-0003-1237-538X"
+  - given-names: Alejandro
+    family-names: "de la Fuente Cuesta"
+    affiliation: "Barcelona Supercomputing Center"
+    orcid: "https://orcid.org/0009-0006-2961-4059"
+  - given-names: Martin
+    family-names: Garcia
+  - given-names: Alex
+    family-names: Casadevall
 license: AGPL-3.0
 repository-code: "https://github.com/Rptkiddle/wp5_pilot_platform"
 keywords:

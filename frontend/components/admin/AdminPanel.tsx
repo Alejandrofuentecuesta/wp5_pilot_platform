@@ -63,6 +63,9 @@ const DEFAULT_SIMULATION: SimulationConfig = {
   boost_replies_mentions: false,
   emotions_checkup_enabled: false,
   emotions_checkup_time_minutes: 1,
+  behavior_tracking_enabled: false,
+  idle_prompt_enabled: false,
+  idle_prompt_seconds: 300,
   ten_messages_mode: false,
 }
 
@@ -327,6 +330,10 @@ export default function AdminPanel() {
             return "Emotions checkup trigger time must be at least 1 minute."
           if (simulation.emotions_checkup_time_minutes > simulation.session_duration_minutes)
             return "Emotions checkup trigger time cannot exceed session duration."
+        }
+        if (simulation.idle_prompt_enabled) {
+          if (!simulation.idle_prompt_seconds || simulation.idle_prompt_seconds < 10)
+            return "Idle reminder delay must be at least 10 seconds."
         }
         return null
       }

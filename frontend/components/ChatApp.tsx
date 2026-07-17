@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { useChat } from "@/hooks/useChat"
 import LoginScreen from "./LoginScreen"
 import ChatRoom from "./ChatRoom"
+import IdleReminderBanner from "./IdleReminderBanner"
 import ThankYouScreen from "./ThankYouScreen"
 import QueueScreen from "./QueueScreen"
 import HandoffScreen from "./HandoffScreen"
@@ -80,7 +81,12 @@ export default function ChatApp() {
   }
 
   return (
-    <ChatRoom
+    <>
+      <IdleReminderBanner
+        visible={chat.idlePromptVisible}
+        onDismiss={chat.dismissIdlePrompt}
+      />
+      <ChatRoom
       visibleMessages={chat.visibleMessages}
       participants={chat.participants}
       displayName={chat.username}
@@ -108,6 +114,7 @@ export default function ChatApp() {
       exitModalOpen={chat.exitModalOpen}
       setExitModalOpen={chat.setExitModalOpen}
       exitSession={chat.exitSession}
-    />
+      />
+    </>
   )
 }

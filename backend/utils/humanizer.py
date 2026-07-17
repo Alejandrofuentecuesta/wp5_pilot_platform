@@ -11,18 +11,18 @@ from typing import Optional
 
 # ── Substitution tables ──────────────────────────────────────────────────────
 
-# Word-level contractions/abbreviations (applied probabilistically)
-_WORD_SUBS = [
-    (r"\bque\b",      "q",    0.55),
-    (r"\bpero\b",     "pero", 0.0),   # keep — too recognisable if changed
-    (r"\btambién\b",  "tb",   0.40),
-    (r"\bpara\b",     "para", 0.0),   # "pa" reads too dialectal/caricatured here
-    (r"\bporque\b",   "xq",   0.45),
-    (r"\bpor\b",      "x",    0.25),
-    (r"\bcon\b",      "con",  0.0),
-    (r"\bestoy\b",    "toy",  0.30),
-    (r"\bno sé\b",    "ni idea", 0.25),
-    (r"\bla verdad\b","la vd", 0.20),
+# Word-level contractions/abbreviations (applied probabilistically).
+# Each entry: {word, replacement, prob (0–100), enabled}. `word` is matched
+# case-insensitively as a whole word/phrase (escaped, not a raw regex).
+# Researchers can override this list per experiment via the admin panel.
+DEFAULT_WORD_SUBS = [
+    {"word": "que",       "replacement": "q",       "prob": 55, "enabled": True},
+    {"word": "también",   "replacement": "tb",      "prob": 40, "enabled": True},
+    {"word": "porque",    "replacement": "xq",      "prob": 45, "enabled": True},
+    {"word": "por",       "replacement": "x",       "prob": 25, "enabled": True},
+    {"word": "estoy",     "replacement": "toy",     "prob": 30, "enabled": True},
+    {"word": "no sé",     "replacement": "ni idea", "prob": 25, "enabled": True},
+    {"word": "la verdad", "replacement": "la vd",   "prob": 20, "enabled": True},
 ]
 
 # Accent removal (Spanish informal writing often drops accents)
@@ -47,15 +47,30 @@ def _drop_spaces_after_comma(text: str, rng: random.Random, prob: float = 0.50) 
     return result.replace(",\u200b", ",")
 
 
-def _apply_word_subs(text: str, rng: random.Random, scale: float = 1.0) -> str:
+def _apply_word_subs(
+    text: str,
+    rng: random.Random,
+    scale: float = 1.0,
+    subs_list: Optional[list] = None,
+) -> str:
     """Apply informal word contractions probabilistically.
 
     `scale` (0–1) multiplies every substitution probability; 0 disables all subs.
+    `subs_list` overrides the default contraction table (list of dicts with
+    keys word/replacement/prob/enabled); falls back to DEFAULT_WORD_SUBS.
     """
-    for pattern, replacement, prob in _WORD_SUBS:
-        effective_prob = prob * scale
+    subs = subs_list if subs_list is not None else DEFAULT_WORD_SUBS
+    for entry in subs:
+        if not entry.get("enabled", True):
+            continue
+        word = str(entry.get("word", "")).strip()
+        replacement = str(entry.get("replacement", ""))
+        if not word:
+            continue
+        effective_prob = (float(entry.get("prob", 0)) / 100.0) * scale
         if effective_prob <= 0.0:
             continue
+        pattern = r"\b" + re.escape(word) + r"\b"
         def _sub(m, rep=replacement, p=effective_prob):
             return rep if rng.random() < p else m.group(0)
         text = re.sub(pattern, _sub, text, flags=re.IGNORECASE)
@@ -151,6 +166,7 @@ def humanize(
     max_emoji: int = 1,
     lowercase_initial: int = 15,
     drop_final_punct: int = 25,
+    word_subs_list: Optional[list] = None,
 ) -> str:
     """Apply informal chatroom humanization to a Spanish message.
 
@@ -177,7 +193,7 @@ def humanize(
     if strip_inverted_punct > 0 and rng.random() < strip_inverted_punct / 100:
         text = _strip_inverted_punctuation(text)
     if word_subs > 0:
-        text = _apply_word_subs(text, rng, scale=word_subs / 100)
+        text = _apply_word_subs(text, rng, scale=word_subs / 100, subs_list=word_subs_list)
     if drop_accents > 0:
         text = _drop_accents(text, rng, prob=drop_accents / 100)
     if comma_spacing > 0:

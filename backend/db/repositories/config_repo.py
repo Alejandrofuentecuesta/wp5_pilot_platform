@@ -161,6 +161,42 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
         if out["emotions_checkup_time_minutes"] > out["session_duration_minutes"]:
             raise ValueError("'emotions_checkup_time_minutes' cannot exceed 'session_duration_minutes'")
 
+    # Behavioural telemetry: coarse client-side signals (tab visibility, window
+    # focus, typing effort, periodic mouse/keyboard activity). Opt-in so it can
+    # be tied to participant consent.
+    out["behavior_tracking_enabled"] = bool(out.get("behavior_tracking_enabled", False))
+
+    # Idle prompt: reminds an inactive participant to write in the chat. The
+    # timer runs client-side; these values are delivered to the browser on
+    # WebSocket attach.
+    out["idle_prompt_enabled"] = bool(out.get("idle_prompt_enabled", False))
+    out["idle_prompt_seconds"] = int(out.get("idle_prompt_seconds", 300))
+    if out["idle_prompt_enabled"] and out["idle_prompt_seconds"] <= 0:
+        raise ValueError("'idle_prompt_seconds' must be > 0")
+
+    # Custom word-contractions list for the humanizer. Optional: when absent the
+    # backend uses its built-in DEFAULT_WORD_SUBS. Normalised defensively.
+    raw_subs = out.get("humanize_word_subs_list")
+    if raw_subs is not None:
+        if not isinstance(raw_subs, list):
+            raise ValueError("'humanize_word_subs_list' must be a list")
+        cleaned_subs = []
+        for entry in raw_subs[:200]:
+            if not isinstance(entry, dict):
+                continue
+            word = str(entry.get("word", "")).strip()
+            if not word:
+                continue
+            prob = int(entry.get("prob", 0))
+            prob = max(0, min(100, prob))
+            cleaned_subs.append({
+                "word": word,
+                "replacement": str(entry.get("replacement", "")),
+                "prob": prob,
+                "enabled": bool(entry.get("enabled", True)),
+            })
+        out["humanize_word_subs_list"] = cleaned_subs
+
     return out
 
 

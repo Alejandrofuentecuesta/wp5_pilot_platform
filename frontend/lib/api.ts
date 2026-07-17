@@ -67,6 +67,33 @@ export async function updateParticipantStance(
   return res.json()
 }
 
+export function sendTelemetry(
+  sessionId: string,
+  events: Array<{ kind: string; at: string; data?: Record<string, unknown> }>,
+  useBeacon = false,
+): void {
+  if (events.length === 0) return
+  const url = `${API_BASE}/session/${sessionId}/telemetry`
+  const body = JSON.stringify({ events })
+  // sendBeacon survives page unload / tab backgrounding; fall back to fetch.
+  if (useBeacon && typeof navigator !== "undefined" && navigator.sendBeacon) {
+    try {
+      navigator.sendBeacon(url, new Blob([body], { type: "application/json" }))
+      return
+    } catch {
+      // fall through to fetch
+    }
+  }
+  fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body,
+    keepalive: true,
+  }).catch(() => {
+    // Telemetry is best-effort; never surface errors to the participant.
+  })
+}
+
 export async function likeMessage(
   sessionId: string,
   messageId: string,

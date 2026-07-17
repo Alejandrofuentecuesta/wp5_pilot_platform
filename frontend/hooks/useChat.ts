@@ -1,6 +1,7 @@
-import { useState, useCallback, useMemo, useEffect } from "react"
+import { useState, useCallback, useMemo, useEffect, useRef } from "react"
 import { useWebSocket } from "./useWebSocket"
 import { useLocalStorage } from "./useLocalStorage"
+import { useBehaviorTracking } from "./useBehaviorTracking"
 import { PARTICIPANT_SENDER, LS_SESSION_ID, LS_USERNAME, LS_BLOCKED, LS_PARTICIPANT_STANCE } from "@/lib/constants"
 import {
   previewSessionIntake as apiPreviewSessionIntake,
@@ -58,6 +59,13 @@ export function useChat() {
 
   // Typing indicator state (count of agents currently typing)
   const [typingCount, setTypingCount] = useState(0)
+
+  // Client-side behaviour config, delivered by the backend on WS attach.
+  const [behaviorConfig, setBehaviorConfig] = useState({
+    behaviorTrackingEnabled: false,
+    idlePromptEnabled: false,
+    idlePromptSeconds: 300,
+  })
 
   // Report modal state
   const [reportModalOpen, setReportModalOpen] = useState(false)
@@ -124,6 +132,12 @@ export function useChat() {
       }
     } else if (obj && obj.event_type === "emotions_checkup_trigger") {
       setEmotionsCheckupOpen(true)
+    } else if (obj && obj.event_type === "session_config") {
+      setBehaviorConfig({
+        behaviorTrackingEnabled: Boolean(obj.behavior_tracking_enabled),
+        idlePromptEnabled: Boolean(obj.idle_prompt_enabled),
+        idlePromptSeconds: Number(obj.idle_prompt_seconds) || 300,
+      })
     } else {
       const message = obj as unknown as Message
       setMessages((prev) => {
@@ -147,6 +161,38 @@ export function useChat() {
     onMessage: handleWSMessage,
     onSessionInvalid: handleSessionInvalid,
   })
+
+  // Behavioural telemetry + idle "please write" reminder.
+  const { track, noteActivity, idlePromptVisible, dismissIdlePrompt } =
+    useBehaviorTracking({
+      sessionId,
+      trackingEnabled: behaviorConfig.behaviorTrackingEnabled,
+      idleEnabled: behaviorConfig.idlePromptEnabled,
+      idleSeconds: behaviorConfig.idlePromptSeconds,
+    })
+
+  // Per-message composition metrics (time spent typing, edit effort).
+  const composeRef = useRef({ startedAt: 0, keystrokes: 0, backspaces: 0, pasted: false })
+
+  // Wrap raw input changes so we can measure composition without plumbing key
+  // events through InputBar. Deltas approximate typing effort.
+  const handleInputChange = useCallback(
+    (next: string) => {
+      const prevLen = inputValue.length
+      const nextLen = next.length
+      const c = composeRef.current
+      if (prevLen === 0 && nextLen > 0) {
+        composeRef.current = { startedAt: Date.now(), keystrokes: 0, backspaces: 0, pasted: false }
+      }
+      const delta = nextLen - prevLen
+      if (delta > 1) composeRef.current.pasted = true
+      else if (delta === 1) composeRef.current.keystrokes += 1
+      else if (delta < 0) composeRef.current.backspaces += 1
+      // Typing does NOT reset the idle reminder — only posting a message does.
+      setInputValue(next)
+    },
+    [inputValue],
+  )
 
   useEffect(() => {
     if (!sessionId || !newsArticle) return
@@ -256,6 +302,18 @@ export function useChat() {
     if (detectedMentions.length > 0) payload.mentions = detectedMentions
 
     send(payload)
+
+    // Record composition metrics for this message before clearing.
+    const c = composeRef.current
+    track("compose", {
+      compose_ms: c.startedAt ? Date.now() - c.startedAt : 0,
+      keystrokes: c.keystrokes,
+      backspaces: c.backspaces,
+      pasted: c.pasted,
+      char_count: content.length,
+    })
+    composeRef.current = { startedAt: 0, keystrokes: 0, backspaces: 0, pasted: false }
+    noteActivity()
 
     setInputValue("")
     setReplyTo(null)
@@ -419,7 +477,7 @@ export function useChat() {
     participants,
     // Input
     inputValue,
-    setInputValue,
+    setInputValue: handleInputChange,
     detectedMentions,
     // Reply
     replyTo,
@@ -443,6 +501,9 @@ export function useChat() {
     blockedSenders,
     // Typing indicator
     typingCount,
+    // Idle "please write in the chat" reminder
+    idlePromptVisible,
+    dismissIdlePrompt,
     // Session end
     sessionEnded,
     redirectUrl,

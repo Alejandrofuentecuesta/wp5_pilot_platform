@@ -357,6 +357,12 @@ class SimulationSession:
         self.emotions_checkup_time_minutes = float(self.simulation_config.get("emotions_checkup_time_minutes", 1))
         self._emotions_checkup_triggered = False
 
+        # Idle prompt (reminder to write) + behavioural telemetry are driven
+        # client-side; these values are pushed to the browser on WS attach.
+        self.behavior_tracking_enabled = bool(self.simulation_config.get("behavior_tracking_enabled", False))
+        self.idle_prompt_enabled = bool(self.simulation_config.get("idle_prompt_enabled", False))
+        self.idle_prompt_seconds = int(self.simulation_config.get("idle_prompt_seconds", 300))
+
 
     def _build_orchestrator(self, agent_names_subset: Optional[List[str]] = None) -> Orchestrator:
         """Instantiate a single Orchestrator for the current session config.
@@ -402,6 +408,7 @@ class SimulationSession:
             },
             humanize_mode=self.simulation_config.get("humanize_mode", "general"),
             humanize_per_agent=self.simulation_config.get("humanize_per_agent") or {},
+            humanize_word_subs_list=self.simulation_config.get("humanize_word_subs_list"),
             agent_traits=traits,
             boost_replies_mentions=bool(self.simulation_config.get("boost_replies_mentions", False)),
             ten_messages_mode=bool(self.simulation_config.get("ten_messages_mode", False)),
@@ -1042,6 +1049,17 @@ class SimulationSession:
         self._subscriber_task = asyncio.create_task(
             self._pubsub_loop(self.websocket_send)
         )
+
+        # Push client-side behaviour config (idle prompt + telemetry toggle).
+        try:
+            await self.websocket_send({
+                "event_type": "session_config",
+                "idle_prompt_enabled": self.idle_prompt_enabled,
+                "idle_prompt_seconds": self.idle_prompt_seconds,
+                "behavior_tracking_enabled": self.behavior_tracking_enabled,
+            })
+        except Exception as exc:
+            self.logger.log_error("send_session_config", str(exc))
 
         # Check if emotions checkup was triggered but not answered. If so, re-send trigger.
         if self.emotions_checkup_enabled:

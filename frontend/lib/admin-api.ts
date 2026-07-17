@@ -434,6 +434,25 @@ export async function downloadSessionsCSV(
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
+export async function downloadExperimentBundle(
+  key: string,
+  experimentId: string,
+): Promise<void> {
+  const res = await adminFetch(`/admin/experiment/${encodeURIComponent(experimentId)}/export-all`, key)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Export failed" }))
+    throw new Error(err.detail || "Export failed")
+  }
+
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = `${experimentId}_export.zip`
+  a.click()
+  window.setTimeout(() => URL.revokeObjectURL(url), 0)
+}
+
 export async function deleteExperiment(
   key: string,
   experimentId: string,

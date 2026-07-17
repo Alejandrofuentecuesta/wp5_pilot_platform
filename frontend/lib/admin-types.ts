@@ -17,6 +17,25 @@ export interface HumanizeRules {
   drop_final_punct: number
 }
 
+export interface WordSub {
+  word: string
+  replacement: string
+  prob: number
+  enabled: boolean
+}
+
+// Mirrors backend DEFAULT_WORD_SUBS (utils/humanizer.py) — used to seed the
+// contractions editor when an experiment has no custom list yet.
+export const DEFAULT_WORD_SUBS: WordSub[] = [
+  { word: "que", replacement: "q", prob: 55, enabled: true },
+  { word: "también", replacement: "tb", prob: 40, enabled: true },
+  { word: "porque", replacement: "xq", prob: 45, enabled: true },
+  { word: "por", replacement: "x", prob: 25, enabled: true },
+  { word: "estoy", replacement: "toy", prob: 30, enabled: true },
+  { word: "no sé", replacement: "ni idea", prob: 25, enabled: true },
+  { word: "la verdad", replacement: "la vd", prob: 20, enabled: true },
+]
+
 export interface SimulationConfig {
   random_seed: number
   session_duration_minutes: number
@@ -63,12 +82,16 @@ export interface SimulationConfig {
   humanize_lowercase_initial?: number
   humanize_drop_final_punct?: number
   humanize_per_agent?: Record<string, HumanizeRules>
+  humanize_word_subs_list?: WordSub[]
   bsc_model_version?: string
   parallel_turns?: number
   agent_mode?: "prompt" | "pool"
   boost_replies_mentions?: boolean
   emotions_checkup_enabled?: boolean
   emotions_checkup_time_minutes?: number
+  behavior_tracking_enabled?: boolean
+  idle_prompt_enabled?: boolean
+  idle_prompt_seconds?: number
   ten_messages_mode?: boolean
 }
 

@@ -11,9 +11,9 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 import uuid
 
-from fastapi import FastAPI, Header, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel
 from dotenv import load_dotenv, set_key
 
@@ -547,6 +547,63 @@ async def update_participant_stance(session_id: str, request: ParticipantStanceU
         "session_id": session_id,
         "participant_stance": request.participant_stance,
     }
+
+
+# Allowlist of client-emitted behavioural telemetry event kinds. Stored in the
+# events table as ``client_<kind>`` so they never collide with server events.
+_TELEMETRY_KINDS = {
+    "tab_hidden", "tab_visible", "window_focus", "window_blur",
+    "compose", "activity", "idle_prompt_shown", "page_unload",
+}
+
+
+@app.post("/session/{session_id}/telemetry")
+async def ingest_telemetry(session_id: str, request: Request):
+    """Append a batch of client behavioural events to the event log.
+
+    Tolerant by design so it works with ``navigator.sendBeacon`` (which sends a
+    Blob, often with a non-JSON content-type) and never blocks the participant:
+    unknown event kinds are dropped and any failure returns 204 rather than
+    surfacing an error to the browser.
+    """
+    try:
+        raw = await request.body()
+        payload = json.loads(raw or b"{}")
+    except (json.JSONDecodeError, ValueError):
+        return Response(status_code=204)
+
+    events = payload.get("events") if isinstance(payload, dict) else None
+    if not isinstance(events, list) or not events:
+        return Response(status_code=204)
+
+    pool = _get_pool()
+    try:
+        session_row = await session_repo.get_session(pool, session_id)
+    except Exception:
+        # Malformed session id (e.g. not a UUID) — drop silently.
+        return Response(status_code=204)
+    if not session_row:
+        return Response(status_code=204)
+    experiment_id = session_row["experiment_id"]
+
+    for evt in events[:200]:  # cap batch size defensively
+        if not isinstance(evt, dict):
+            continue
+        kind = evt.get("kind")
+        if kind not in _TELEMETRY_KINDS:
+            continue
+        data = evt.get("data") if isinstance(evt.get("data"), dict) else {}
+        if evt.get("at"):
+            data = {**data, "client_at": evt["at"]}
+        await event_repo.insert_event(
+            pool,
+            session_id=session_id,
+            experiment_id=experiment_id,
+            event_type=f"client_{kind}",
+            data=data,
+        )
+
+    return Response(status_code=204)
 
 
 @app.get("/health")
@@ -2436,6 +2493,51 @@ async def admin_tokens_csv(experiment_id: str, x_admin_key: str = Header(None)):
     return StreamingResponse(
         buf,
         media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/admin/events/csv/{experiment_id}")
+async def admin_events_csv(experiment_id: str, x_admin_key: str = Header(None)):
+    """Download every event (incl. behavioural telemetry) for an experiment."""
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+
+    experiment = await config_repo.get_experiment(pool, experiment_id)
+    if not experiment:
+        raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
+
+    from utils.exporters import build_events_csv
+    text = await build_events_csv(pool, experiment_id)
+    filename = f"{experiment_id}_events.csv"
+    return StreamingResponse(
+        io.StringIO(text),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/admin/experiment/{experiment_id}/export-all")
+async def admin_export_all(experiment_id: str, x_admin_key: str = Header(None)):
+    """Download one ZIP with every per-experiment CSV plus a codebook.
+
+    One-click "download everything" for researchers: sessions + messages,
+    the full event log (including behavioural telemetry), tokens, and a
+    codebook documenting every column and event type.
+    """
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+
+    experiment = await config_repo.get_experiment(pool, experiment_id)
+    if not experiment:
+        raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
+
+    from utils.exporters import build_experiment_zip
+    body = await build_experiment_zip(pool, experiment_id, experiment)
+    filename = f"{experiment_id}_export.zip"
+    return StreamingResponse(
+        io.BytesIO(body),
+        media_type="application/zip",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

@@ -293,6 +293,76 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
       </div>
 
       <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-admin-muted uppercase tracking-wider">Behavioural Tracking</h3>
+            <p className="text-xs text-admin-faint mt-0.5">
+              Collect coarse client-side signals per participant: tab visibility, window focus,
+              typing effort (time-to-send, keystrokes, edits) and periodic mouse/keyboard activity.
+              No keystroke content and no mouse coordinates are recorded. Exported in the event log.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange({ behavior_tracking_enabled: !config.behavior_tracking_enabled })}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${config.behavior_tracking_enabled ? "bg-admin-accent" : "bg-admin-border"}`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${config.behavior_tracking_enabled ? "translate-x-4" : "translate-x-1"}`} />
+          </button>
+        </div>
+
+        {config.behavior_tracking_enabled && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2.5">
+            <p className="text-xs text-amber-900">
+              <strong>⚠ GDPR:</strong> enabling this collects behavioural data about identifiable
+              participants. You are responsible for ensuring participants are informed and have
+              given consent for exactly what is collected (tab/window activity, typing behaviour,
+              mouse/keyboard activity) before you run this experiment.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-semibold text-admin-muted uppercase tracking-wider">Idle Reminder</h3>
+            <p className="text-xs text-admin-faint mt-0.5">
+              Remind an inactive participant to write in the chat after a period of no activity.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => onChange({ idle_prompt_enabled: !config.idle_prompt_enabled })}
+            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors flex-shrink-0 ${config.idle_prompt_enabled ? "bg-admin-accent" : "bg-admin-border"}`}
+          >
+            <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${config.idle_prompt_enabled ? "translate-x-4" : "translate-x-1"}`} />
+          </button>
+        </div>
+
+        {config.idle_prompt_enabled && (
+          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-admin-border">
+            <div>
+              <label className="block text-sm font-medium text-admin-text mb-1">
+                Inactivity delay (seconds)
+              </label>
+              <input
+                type="number"
+                min={10}
+                value={config.idle_prompt_seconds ?? 300}
+                onChange={(e) => onChange({ idle_prompt_seconds: Math.max(10, parseInt(e.target.value) || 300) })}
+                className={inputClass}
+              />
+              <p className="text-xs text-admin-muted mt-1">
+                The reminder appears after this many seconds without activity (typing, mouse,
+                or returning to the tab). Default 300 (5 minutes).
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">
         <h3 className="text-sm font-semibold text-admin-muted uppercase tracking-wider">Agents</h3>
         <div>
           <label className="block text-sm font-medium text-admin-text mb-1">

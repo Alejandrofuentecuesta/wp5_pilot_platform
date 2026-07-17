@@ -250,6 +250,7 @@ class Orchestrator:
         humanize_rules: Optional[Dict] = None,
         humanize_mode: str = "general",
         humanize_per_agent: Optional[Dict[str, Dict]] = None,
+        humanize_word_subs_list: Optional[list] = None,
         boost_replies_mentions: bool = False,
         ten_messages_mode: bool = False,
         rng: Optional[random.Random] = None,
@@ -300,6 +301,8 @@ class Orchestrator:
         self.humanize_rules = humanize_rules or {}
         self.humanize_mode = humanize_mode
         self.humanize_per_agent = humanize_per_agent or {}
+        # Global custom contractions list (None → humanizer uses its default).
+        self.humanize_word_subs_list = humanize_word_subs_list
         self.boost_replies_mentions = boost_replies_mentions
         self.ten_messages_mode = ten_messages_mode
 
@@ -2395,6 +2398,7 @@ class Orchestrator:
                     max_emoji=int(r.get("max_emoji", 1)),
                     lowercase_initial=int(r.get("lowercase_initial", 15)),
                     drop_final_punct=int(r.get("drop_final_punct", 25)),
+                    word_subs_list=self.humanize_word_subs_list,
                 )
 
             candidate_mentions = None

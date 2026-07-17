@@ -1,7 +1,8 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import type { SimulationConfig, ProviderParamsMeta, TestLLMResult, HumanizeRules } from "../../../lib/admin-types"
+import type { SimulationConfig, ProviderParamsMeta, TestLLMResult, HumanizeRules, WordSub } from "../../../lib/admin-types"
+import { DEFAULT_WORD_SUBS } from "../../../lib/admin-types"
 import { testLlm, fetchPromptDefaults } from "../../../lib/admin-api"
 
 export type LLMTestResults = Record<Role, boolean>
@@ -364,6 +365,111 @@ const HUMANIZE_FIELDS: { key: keyof HumanizeRules; label: string; desc: string; 
   { key: "drop_final_punct",     label: "Drop final punctuation",    desc: "Chance to remove final .!? from short messages", def: 25  },
 ]
 
+function WordSubsEditor({
+  list,
+  onChange,
+}: {
+  list: WordSub[]
+  onChange: (list: WordSub[]) => void
+}) {
+  const [open, setOpen] = useState(false)
+
+  const update = (i: number, patch: Partial<WordSub>) =>
+    onChange(list.map((s, j) => (j === i ? { ...s, ...patch } : s)))
+  const remove = (i: number) => onChange(list.filter((_, j) => j !== i))
+  const add = () => onChange([...list, { word: "", replacement: "", prob: 40, enabled: true }])
+
+  const activeCount = list.filter((s) => s.enabled && s.word.trim()).length
+
+  return (
+    <div className="border-t border-admin-border pt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 text-xs font-medium text-admin-accent hover:text-admin-accent-hover transition-colors"
+      >
+        <span>{open ? "▾" : "▸"}</span>
+        Manage word contractions ({activeCount} active of {list.length})
+      </button>
+
+      {open && (
+        <div className="mt-3 space-y-2">
+          <p className="text-xs text-admin-faint">
+            Each contraction replaces a whole word/phrase with its short form, at its own
+            probability. The <strong>Word contractions</strong> slider above scales all of these
+            (100% = use each probability as-is, 0% = disable all).
+          </p>
+
+          <div className="space-y-1.5">
+            {/* header */}
+            <div className="grid grid-cols-[auto_1fr_auto_1fr_auto_auto] items-center gap-2 px-1 text-[10px] uppercase tracking-wider text-admin-faint">
+              <span>On</span><span>Word / phrase</span><span></span><span>Replacement</span><span>Prob %</span><span></span>
+            </div>
+            {list.map((s, i) => (
+              <div key={i} className="grid grid-cols-[auto_1fr_auto_1fr_auto_auto] items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={s.enabled}
+                  onChange={(e) => update(i, { enabled: e.target.checked })}
+                  className="h-3.5 w-3.5 accent-admin-accent"
+                />
+                <input
+                  type="text"
+                  value={s.word}
+                  placeholder="que"
+                  onChange={(e) => update(i, { word: e.target.value })}
+                  className="px-2 py-1 border border-admin-border rounded text-xs bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent"
+                />
+                <span className="text-admin-faint text-xs">→</span>
+                <input
+                  type="text"
+                  value={s.replacement}
+                  placeholder="q"
+                  onChange={(e) => update(i, { replacement: e.target.value })}
+                  className="px-2 py-1 border border-admin-border rounded text-xs bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={s.prob}
+                  onChange={(e) => update(i, { prob: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+                  className="w-14 px-1.5 py-1 border border-admin-border rounded text-xs bg-admin-surface text-admin-text text-right focus:outline-none focus:border-admin-accent"
+                />
+                <button
+                  type="button"
+                  onClick={() => remove(i)}
+                  aria-label="Remove contraction"
+                  className="text-admin-faint hover:text-red-600 transition-colors px-1"
+                >
+                  ×
+                </button>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              type="button"
+              onClick={add}
+              className="text-xs font-medium text-admin-accent hover:text-admin-accent-hover transition-colors"
+            >
+              + Add contraction
+            </button>
+            <button
+              type="button"
+              onClick={() => onChange(DEFAULT_WORD_SUBS.map((s) => ({ ...s })))}
+              className="text-xs text-admin-faint hover:text-admin-text transition-colors"
+            >
+              Reset to defaults
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 function HumanizeRulesEditor({
   rules,
   onChange,
@@ -531,6 +637,10 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
                 humanize_lowercase_initial:    r.lowercase_initial,
                 humanize_drop_final_punct:     r.drop_final_punct,
               })}
+            />
+            <WordSubsEditor
+              list={config.humanize_word_subs_list ?? DEFAULT_WORD_SUBS}
+              onChange={(list) => onChange({ humanize_word_subs_list: list })}
             />
           </div>
         )}

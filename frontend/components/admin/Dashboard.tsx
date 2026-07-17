@@ -14,6 +14,7 @@ import {
   pauseExperiment,
   resumeExperiment,
   downloadSessionsCSV,
+  downloadExperimentBundle,
   downloadSessionBundle,
   stopSession,
   getComplianceStats,
@@ -592,6 +593,18 @@ function SessionsTab({
     }
   }
 
+  const handleExportBundle = async () => {
+    setExporting(true)
+    setExportError("")
+    try {
+      await downloadExperimentBundle(adminKey, experimentId)
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Filters */}
@@ -626,6 +639,14 @@ function SessionsTab({
           className="px-3 py-1.5 text-xs font-medium border border-admin-border text-admin-text rounded-lg hover:bg-admin-border/30 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {exporting ? "Exporting..." : "Export sessions CSV"}
+        </button>
+        <button
+          onClick={handleExportBundle}
+          disabled={!experimentId || exporting}
+          title="Download sessions, messages, full event log (incl. behavioural telemetry), tokens, and a codebook as a ZIP"
+          className="px-3 py-1.5 text-xs font-medium border border-admin-accent bg-admin-accent text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {exporting ? "Exporting..." : "Download everything (ZIP)"}
         </button>
       </div>
 

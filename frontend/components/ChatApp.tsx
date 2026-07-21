@@ -67,6 +67,7 @@ export default function ChatApp() {
           stance={handoff.stance}
           onPreview={chat.previewSessionIntake}
           onStart={chat.startSession}
+          onRejoin={chat.rejoinSession}
         />
       )
     }

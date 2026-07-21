@@ -59,6 +59,9 @@ export interface SessionStartResponse {
 
 export interface SessionIntakeResponse {
   topic_template_id: "climate_change" | "immigration"
+  // Present when the token was already consumed but its session is still
+  // alive (paused awaiting rejoin) — reconnect to it instead of starting.
+  rejoin_session_id?: string | null
 }
 
 export type BlockedSenders = Record<string, string>

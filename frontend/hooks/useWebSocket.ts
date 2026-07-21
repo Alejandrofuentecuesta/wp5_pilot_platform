@@ -24,11 +24,17 @@ export function useWebSocket({
   useEffect(() => {
     if (!sessionId) return
     let mounted = true
+    let stopped = false // session ended or invalid — no more reconnects
     let reconnectAttempts = 0
     let reconnectTimer: number | null = null
 
     const connect = () => {
-      if (!mounted) return
+      if (!mounted || stopped) return
+      // Never open a second socket alongside a live/connecting one.
+      const current = wsRef.current
+      if (current && (current.readyState === WebSocket.OPEN || current.readyState === WebSocket.CONNECTING)) {
+        return
+      }
       const ws = new WebSocket(`${WS_BASE}/ws/${sessionId}`)
       wsRef.current = ws
 
@@ -55,22 +61,25 @@ export function useWebSocket({
         setIsConnected(false)
 
         if (event && (event.code === 1008 || event.code === 1011)) {
+          stopped = true
           onSessionInvalidRef.current()
           return
         }
 
         // Don't reconnect if the session ended normally.
         if (event && event.code === 1000 && event.reason === "session_ended") {
+          stopped = true
           return
         }
 
-        if (reconnectAttempts < 5) {
-          reconnectAttempts += 1
-          reconnectTimer = window.setTimeout(
-            connect,
-            2000 * reconnectAttempts,
-          )
-        }
+        // Retry indefinitely: the backend pauses the session while we are
+        // away and allows rejoining within REJOIN_WINDOW_MINUTES, so the
+        // client must keep trying for at least that long.
+        reconnectAttempts += 1
+        reconnectTimer = window.setTimeout(
+          connect,
+          Math.min(2000 * reconnectAttempts, 15000),
+        )
       }
 
       ws.onerror = (error) => {
@@ -78,10 +87,27 @@ export function useWebSocket({
       }
     }
 
+    // Reconnect immediately when the participant comes back or the network
+    // returns, instead of waiting out the current backoff.
+    const reconnectNow = () => {
+      if (!mounted || stopped) return
+      if (document.visibilityState !== "visible") return
+      if (reconnectTimer) {
+        clearTimeout(reconnectTimer)
+        reconnectTimer = null
+      }
+      connect()
+    }
+    const onVisibility = () => reconnectNow()
+    document.addEventListener("visibilitychange", onVisibility)
+    window.addEventListener("online", reconnectNow)
+
     connect()
 
     return () => {
       mounted = false
+      document.removeEventListener("visibilitychange", onVisibility)
+      window.removeEventListener("online", reconnectNow)
       if (reconnectTimer) clearTimeout(reconnectTimer)
       if (wsRef.current) wsRef.current.close()
     }

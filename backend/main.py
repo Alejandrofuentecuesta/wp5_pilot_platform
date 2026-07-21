@@ -24,6 +24,7 @@ from platforms.chatroom import _parse_target_percentage
 from models import Message
 from utils.session_manager import session_manager
 from utils.session_queue import session_queue
+from platforms.chatroom import build_return_url
 from utils import token_manager
 from utils.log_viewer import generate_html_from_lines
 from utils.session_csv_exporter import export_session_messages_csv
@@ -327,6 +328,9 @@ class SessionIntakeRequest(BaseModel):
 
 class SessionIntakeResponse(BaseModel):
     topic_template_id: Literal["climate_change", "immigration"]
+    # Set when the token was already consumed but its session is still alive
+    # (e.g. paused awaiting rejoin) — the frontend reconnects to it directly.
+    rejoin_session_id: Optional[str] = None
 
 
 class ParticipantStanceUpdateRequest(BaseModel):
@@ -411,8 +415,19 @@ async def preview_session_intake(request: SessionIntakeRequest):
     """Validate an unused token and return the topic survey shown before joining."""
     pool = _get_pool()
     token_row = await token_repo.get_token_status(pool, request.token)
-    if not token_row or token_row.get("used"):
+    if not token_row:
         raise HTTPException(status_code=401, detail="Invalid or already-used token")
+
+    # A consumed token whose session is still alive (e.g. paused awaiting
+    # rejoin) lets the participant reconnect — covers cleared storage or a
+    # re-clicked panel link. A consumed token with an ended session stays 401.
+    rejoin_session_id = None
+    if token_row.get("used"):
+        sid = token_row.get("session_id")
+        srow = await session_repo.get_session(pool, sid) if sid else None
+        if not srow or srow.get("status") not in ("active", "pending"):
+            raise HTTPException(status_code=401, detail="Invalid or already-used token")
+        rejoin_session_id = sid
 
     experiment_id = token_row.get("experiment_id")
     treatment_group = token_row.get("treatment_group")
@@ -431,7 +446,7 @@ async def preview_session_intake(request: SessionIntakeRequest):
     if template_id not in {"climate_change", "immigration"}:
         raise HTTPException(status_code=400, detail="This experiment does not define a supported topic survey")
 
-    return SessionIntakeResponse(topic_template_id=template_id)
+    return SessionIntakeResponse(topic_template_id=template_id, rejoin_session_id=rejoin_session_id)
 
 
 @app.post("/session/start", response_model=SessionStartResponse)
@@ -654,6 +669,26 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         treatment_group = pending.get("treatment_group")
 
         if not treatment_group:
+            # Late return to an already-ended session: deliver the session_end
+            # event (with the panel return URL) instead of a bare rejection, so
+            # the participant is still handed back with their completion status.
+            pool = _get_pool()
+            row = await session_repo.get_session(pool, session_id)
+            if row and row.get("status") == "ended":
+                redirect = ""
+                try:
+                    cfg = await config_repo.get_experiment_config(pool, row["experiment_id"])
+                    base = ((cfg or {}).get("experimental") or {}).get("redirect_url", "")
+                    redirect = build_return_url(base, row.get("token", ""), row.get("end_reason") or "")
+                except Exception as exc:
+                    print(f"Return-URL build failed for ended session {session_id}: {exc}")
+                await websocket.send_json({
+                    "event_type": "session_end",
+                    "reason": row.get("end_reason") or "ended",
+                    "redirect_url": redirect,
+                })
+                await websocket.close(code=1000, reason="session_ended")
+                return
             await websocket.close(code=1008)
             print(f"WebSocket rejected for {session_id}: missing treatment_group")
             return
@@ -721,13 +756,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     except WebSocketDisconnect:
         print(f"WebSocket disconnected for session {session_id}")
-        if session:
+        # Only detach/pause if this socket is still the session's active one —
+        # a stale socket's disconnect must not clobber a newer connection.
+        if session and session._raw_ws_send is send_to_frontend:
             session.detach_websocket()
+            session.pause_for_disconnect()
 
     except Exception as e:
         print(f"WebSocket error for session {session_id}: {e}")
-        if session:
+        if session and session._raw_ws_send is send_to_frontend:
             session.detach_websocket()
+            session.pause_for_disconnect()
 
     finally:
         heartbeat_task.cancel()

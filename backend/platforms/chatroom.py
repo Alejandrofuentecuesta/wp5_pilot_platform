@@ -1,6 +1,8 @@
 import asyncio
+import os
 import random
 import re
+import time
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
@@ -14,6 +16,23 @@ from features import load_features
 from db import connection as db_conn
 from db.repositories import session_repo, message_repo, config_repo, event_repo
 from cache import redis_client
+
+# How long a disconnected participant has to rejoin before their session is
+# ended as non-complete. Takes effect on container recreate.
+REJOIN_WINDOW_MINUTES = int(os.getenv("REJOIN_WINDOW_MINUTES", "30"))
+
+
+def build_return_url(redirect_url: str, token: str, reason: str) -> str:
+    """Append the panel hand-back parameters (token + completion status) to
+    the configured return URL. r=1 means the participant received the full
+    session duration; r=2 means they did not."""
+    if not redirect_url:
+        return ""
+    if not token:
+        return redirect_url
+    r_code = "1" if (reason or "").startswith("duration_expired") else "2"
+    sep = "&" if "?" in redirect_url else "?"
+    return f"{redirect_url}{sep}token={token}&r={r_code}"
 
 
 def _parse_target_percentage(criteria: str, label: str, default: int) -> int:
@@ -190,6 +209,9 @@ class SimulationSession:
         self.experiment_id = experiment_id
         self.logger = Logger(session_id, experiment_id)
         self._paused = False
+        # Set (to a monotonic timestamp) while the participant is disconnected;
+        # the clock loop freezes and enforces the rejoin window.
+        self._pause_started_monotonic: Optional[float] = None
 
         if not _config:
             raise RuntimeError(
@@ -730,6 +752,18 @@ class SimulationSession:
 
         while self.running:
             try:
+                # Participant disconnected: freeze everything and enforce the
+                # rejoin window. attach_websocket() clears the pause.
+                if self._pause_started_monotonic is not None:
+                    away_seconds = time.monotonic() - self._pause_started_monotonic
+                    if away_seconds >= REJOIN_WINDOW_MINUTES * 60:
+                        await self._publish_session_end("abandoned")
+                        await asyncio.sleep(0.5)
+                        await self.stop(reason="abandoned")
+                        break
+                    await asyncio.sleep(tick_interval)
+                    continue
+
                 if self.state.is_expired():
                     await self._publish_session_end("duration_expired")
                     await asyncio.sleep(0.5)  # let pub/sub deliver before teardown
@@ -751,7 +785,7 @@ class SimulationSession:
                     continue
 
                 if self.emotions_checkup_enabled and not self._emotions_checkup_triggered:
-                    elapsed_minutes = (datetime.now(timezone.utc) - self.state.start_time).total_seconds() / 60.0
+                    elapsed_minutes = self.state.elapsed_active_minutes()
                     if elapsed_minutes >= self.emotions_checkup_time_minutes:
                         self._emotions_checkup_triggered = True
                         await self._publish_emotions_checkup_trigger()
@@ -905,7 +939,6 @@ class SimulationSession:
         """
         if not self.redirect_url:
             return ""
-        r_code = "1" if reason.startswith("duration_expired") else "2"
         try:
             pool = db_conn.get_pool()
             row = await session_repo.get_session(pool, self.session_id)
@@ -913,10 +946,7 @@ class SimulationSession:
         except Exception as exc:
             self.logger.log_error("build_return_url", str(exc))
             token = ""
-        if not token:
-            return self.redirect_url
-        sep = "&" if "?" in self.redirect_url else "?"
-        return f"{self.redirect_url}{sep}token={token}&r={r_code}"
+        return build_return_url(self.redirect_url, token, reason)
 
     async def _publish_emotions_checkup_trigger(self) -> None:
         """Publish an emotions_checkup event via Redis pub/sub so the client opens the modal."""
@@ -1009,12 +1039,37 @@ class SimulationSession:
 
     # ── WebSocket attachment / detachment ─────────────────────────────────────
 
+    def pause_for_disconnect(self) -> None:
+        """Freeze the session while the participant is away.
+
+        The clock loop stops running turns and the session countdown stops
+        consuming duration, so a returning participant receives their full
+        exposure time. If the participant does not rejoin within
+        REJOIN_WINDOW_MINUTES the clock loop ends the session as 'abandoned'.
+        """
+        if self._pause_started_monotonic is not None or not self.running:
+            return
+        self._pause_started_monotonic = time.monotonic()
+        self.logger.log_event("session_paused", {"trigger": "disconnected"})
+        print(f"Session {self.session_id} paused (participant disconnected)")
+
+    def resume_from_pause(self) -> None:
+        """Unfreeze after a rejoin; paused time is credited back to the session."""
+        if self._pause_started_monotonic is None:
+            return
+        paused_for = time.monotonic() - self._pause_started_monotonic
+        self.state.paused_seconds += paused_for
+        self._pause_started_monotonic = None
+        self.logger.log_event("session_resumed", {"paused_for_seconds": round(paused_for, 1)})
+        print(f"Session {self.session_id} resumed after {paused_for:.0f}s away")
+
     async def attach_websocket(self, websocket_send: Callable) -> None:
         """Attach (or re-attach) a WebSocket and replay missed messages.
 
         Messages are replayed from the DB so reconnects to a different worker
         (or after a crash) get the full history.
         """
+        self.resume_from_pause()
         self._raw_ws_send = websocket_send
         self.websocket_send = self._wrap_send(websocket_send)
 

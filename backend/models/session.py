@@ -26,6 +26,9 @@ class SessionState:
     # This allows keeping existing messages visible while suppressing new ones
     # created after the block time.
     blocked_agents: Dict[str, str] = field(default_factory=dict)
+    # Total seconds the session has been paused (participant away); excluded
+    # from the duration so every participant gets the full exposure time.
+    paused_seconds: float = 0.0
  
     def add_message(self, message: Message) -> None:
         """Add a message to the session history."""
@@ -35,10 +38,14 @@ class SessionState:
         """Get the last n messages from the history."""
         return self.messages[-n:] if len(self.messages) >= n else self.messages
     
+    def elapsed_active_minutes(self) -> float:
+        """Minutes of active (non-paused) session time."""
+        elapsed = (datetime.now(timezone.utc) - self.start_time).total_seconds() - self.paused_seconds
+        return elapsed / 60
+
     def is_expired(self) -> bool:
-        """Check if the session has exceeded its duration."""
-        elapsed = (datetime.now(timezone.utc) - self.start_time).total_seconds() / 60
-        return elapsed >= self.duration_minutes
+        """Check if the session has exceeded its duration (paused time excluded)."""
+        return self.elapsed_active_minutes() >= self.duration_minutes
 
     def block_agent(self, agent_name: str, when_iso: str) -> None:
         """Mark an agent as blocked at the given ISO timestamp for this session."""

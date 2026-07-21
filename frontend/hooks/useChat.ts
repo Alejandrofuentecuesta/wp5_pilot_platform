@@ -262,6 +262,13 @@ export function useChat() {
     setQueueSlotAvailable(false)
   }
 
+  // Reconnect to a still-alive session found via intake (used token whose
+  // session is paused awaiting rejoin) — e.g. after cleared storage or on
+  // another device.
+  const rejoinSession = (id: string) => {
+    setSessionId(id)
+  }
+
   const dismissNewsArticle = useCallback(() => {
     if (sessionId && typeof window !== "undefined") {
       window.sessionStorage.setItem(`news_article_seen:${sessionId}`, "1")
@@ -522,5 +529,7 @@ export function useChat() {
     pollQueue,
     claimSlot,
     clearQueue,
+    // Rejoin
+    rejoinSession,
   }
 }

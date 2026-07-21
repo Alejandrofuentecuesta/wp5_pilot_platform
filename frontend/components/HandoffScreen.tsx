@@ -9,6 +9,7 @@ interface HandoffScreenProps {
   stance: ParticipantStance | null
   onPreview: (token: string) => Promise<SessionIntakeResponse>
   onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
+  onRejoin: (sessionId: string) => void
 }
 
 type HandoffStatus = "checking" | "ready" | "invalid"
@@ -28,6 +29,7 @@ export default function HandoffScreen({
   stance,
   onPreview,
   onStart,
+  onRejoin,
 }: HandoffScreenProps) {
   const [status, setStatus] = useState<HandoffStatus>("checking")
   const [step, setStep] = useState<HandoffStep>("instructions")
@@ -42,8 +44,15 @@ export default function HandoffScreen({
       return
     }
     onPreview(token)
-      .then(() => {
-        if (!cancelled) setStatus("ready")
+      .then((resp) => {
+        if (cancelled) return
+        if (resp.rejoin_session_id) {
+          // Token already consumed but its session is still alive (paused
+          // awaiting rejoin) — reconnect straight into the chatroom.
+          onRejoin(resp.rejoin_session_id)
+          return
+        }
+        setStatus("ready")
       })
       .catch(() => {
         if (!cancelled) setStatus("invalid")

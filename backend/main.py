@@ -427,7 +427,7 @@ async def preview_session_intake(request: SessionIntakeRequest):
         srow = await session_repo.get_session(pool, sid) if sid else None
         if not srow or srow.get("status") not in ("active", "pending"):
             raise HTTPException(status_code=401, detail="Invalid or already-used token")
-        rejoin_session_id = sid
+        rejoin_session_id = str(sid)  # asyncpg returns uuid.UUID
 
     experiment_id = token_row.get("experiment_id")
     treatment_group = token_row.get("treatment_group")
@@ -657,8 +657,38 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     async def send_to_frontend(message_dict: dict):
         await websocket.send_json(message_dict)
 
+    async def send_ended_and_close() -> bool:
+        """Late return to an already-ended session: deliver the session_end
+        event (with the panel return URL) instead of a bare rejection, so the
+        participant is still handed back with their completion status."""
+        pool = _get_pool()
+        row = await session_repo.get_session(pool, session_id)
+        if not row or row.get("status") != "ended":
+            return False
+        redirect = ""
+        try:
+            cfg = await config_repo.get_experiment_config(pool, row["experiment_id"])
+            base = ((cfg or {}).get("experimental") or {}).get("redirect_url", "")
+            redirect = build_return_url(base, row.get("token", ""), row.get("end_reason") or "")
+        except Exception as exc:
+            print(f"Return-URL build failed for ended session {session_id}: {exc}")
+        await websocket.send_json({
+            "event_type": "session_end",
+            "reason": row.get("end_reason") or "ended",
+            "redirect_url": redirect,
+        })
+        await websocket.close(code=1000, reason="session_ended")
+        return True
+
     # Existing session check — handles reconnects (same worker).
     session = await session_manager.get_or_reconstruct(session_id, send_to_frontend)
+
+    if session and not session.running:
+        # Ended but not yet evicted from the registry (reaper grace period):
+        # treat as a late return, not a live reconnect.
+        if not await send_ended_and_close():
+            await websocket.close(code=1008)
+        return
 
     if session:
         # Reconnect: attach new WebSocket (replays history + subscribes pub/sub).
@@ -669,25 +699,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         treatment_group = pending.get("treatment_group")
 
         if not treatment_group:
-            # Late return to an already-ended session: deliver the session_end
-            # event (with the panel return URL) instead of a bare rejection, so
-            # the participant is still handed back with their completion status.
-            pool = _get_pool()
-            row = await session_repo.get_session(pool, session_id)
-            if row and row.get("status") == "ended":
-                redirect = ""
-                try:
-                    cfg = await config_repo.get_experiment_config(pool, row["experiment_id"])
-                    base = ((cfg or {}).get("experimental") or {}).get("redirect_url", "")
-                    redirect = build_return_url(base, row.get("token", ""), row.get("end_reason") or "")
-                except Exception as exc:
-                    print(f"Return-URL build failed for ended session {session_id}: {exc}")
-                await websocket.send_json({
-                    "event_type": "session_end",
-                    "reason": row.get("end_reason") or "ended",
-                    "redirect_url": redirect,
-                })
-                await websocket.close(code=1000, reason="session_ended")
+            if await send_ended_and_close():
                 return
             await websocket.close(code=1008)
             print(f"WebSocket rejected for {session_id}: missing treatment_group")

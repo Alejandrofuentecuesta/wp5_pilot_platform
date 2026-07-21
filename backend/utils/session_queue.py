@@ -8,7 +8,8 @@ the normal POST /session/start path.
 The queue is passive (polled by the frontend every 30 s). A periodic
 reaper evicts entries that haven't polled within QUEUE_TTL_SECONDS.
 Entries whose slot has been offered but not claimed within
-OFFER_TTL_SECONDS are rotated to the back to prevent starvation.
+`offer_timeout_seconds` (QUEUE_OFFER_TIMEOUT_MINUTES env var,
+default 10 minutes) are rotated to the back to prevent starvation.
 
 Single-worker, single-event-loop; all methods are synchronous (no awaits
 inside queue operations, so no lock is needed).
@@ -25,7 +26,6 @@ from datetime import datetime, timezone, timedelta
 from typing import Optional
 
 QUEUE_TTL_SECONDS = 300
-OFFER_TTL_SECONDS = 150
 
 
 @dataclass
@@ -39,8 +39,9 @@ class QueueEntry:
 class SessionQueue:
     _instance: Optional["SessionQueue"] = None
 
-    def __init__(self, cap: int = 50) -> None:
+    def __init__(self, cap: int = 50, offer_timeout_seconds: int = 600) -> None:
         self.cap = cap
+        self.offer_timeout_seconds = offer_timeout_seconds
         self._queue: OrderedDict[str, QueueEntry] = OrderedDict()
         self._inflight: int = 0
 
@@ -158,7 +159,7 @@ class SessionQueue:
 
         rotate = [t for t, e in self._queue.items()
                   if e.offered_at is not None
-                  and now - e.offered_at > OFFER_TTL_SECONDS]
+                  and now - e.offered_at > self.offer_timeout_seconds]
         for t in rotate:
             entry = self._queue.pop(t)
             entry.offered_at = None

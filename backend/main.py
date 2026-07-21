@@ -173,6 +173,7 @@ def get_experiment_id() -> str:
 ADMIN_PASSPHRASE = os.environ.get("ADMIN_PASSPHRASE", "")
 CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "")  # comma-separated, e.g. "https://example.com"
 SESSION_CAP = int(os.environ.get("SESSION_CAP", "50"))
+QUEUE_OFFER_TIMEOUT_MINUTES = int(os.environ.get("QUEUE_OFFER_TIMEOUT_MINUTES", "10"))
 
 
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
@@ -222,7 +223,8 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
               "These providers will fail if selected in the admin wizard.")
 
     session_queue.cap = SESSION_CAP
-    print(f"Session cap: {SESSION_CAP}")
+    session_queue.offer_timeout_seconds = QUEUE_OFFER_TIMEOUT_MINUTES * 60
+    print(f"Session cap: {SESSION_CAP} (queue offer timeout: {QUEUE_OFFER_TIMEOUT_MINUTES} min)")
 
     if os.environ.get("MOCK_LLM", "").lower() in ("1", "true", "yes"):
         print("*" * 70)

@@ -261,9 +261,9 @@ export default function LoginScreen({
                 </ul>
               </div>
 
-              <p className="max-w-3xl text-base leading-7 text-primary">
-                Participa como lo harías normalmente en una conversación online. Si te sientes cómodo/a, te animamos a
-                participar activamente durante el chat.
+              <p className="max-w-3xl text-base leading-7 text-primary font-medium">
+                Tu tarea en esta actividad consiste en formar parte activa de la discusión: comparte tus puntos de vista,
+                responde a otros participantes y mantén la conversación viva a lo largo de toda la sesión.
               </p>
 
               <div className="rounded-xl border-2 border-[#e0a800] bg-[#fff7b8] p-5 text-[#4d3f00]">

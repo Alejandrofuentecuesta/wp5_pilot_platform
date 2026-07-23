@@ -24,7 +24,7 @@ interface ChatRoomProps {
   replyTo: Message | null
   setReplyTo: (msg: Message | null) => void
   // Send
-  sendMessage: () => void
+  sendMessage: (customContent?: string) => void
   // Like
   toggleLike: (msg: Message) => void
   // Report
@@ -39,6 +39,8 @@ interface ChatRoomProps {
   newsArticleModalOpen: boolean
   dismissNewsArticle: () => void
   openNewsArticle: () => void
+  isInitialNewsRead?: boolean
+  submitInitialNewsMessage?: (initialMessage: string) => void
   participantStance: ParticipantStance | null
   emotionsCheckupOpen: boolean
   onSubmitEmotionsCheckup: (emotion: string, tempted: boolean, reportedUsers?: string[]) => void
@@ -69,6 +71,8 @@ export default function ChatRoom({
   newsArticleModalOpen,
   dismissNewsArticle,
   openNewsArticle,
+  isInitialNewsRead,
+  submitInitialNewsMessage,
   participantStance,
   emotionsCheckupOpen,
   onSubmitEmotionsCheckup,
@@ -126,6 +130,8 @@ export default function ChatRoom({
           open={newsArticleModalOpen}
           onClose={dismissNewsArticle}
           participantStance={participantStance}
+          isInitialRead={isInitialNewsRead}
+          onSubmitInitialMessage={submitInitialNewsMessage}
         />
       )}
 

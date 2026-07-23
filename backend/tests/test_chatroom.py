@@ -380,6 +380,7 @@ class TestSessionLifecycle:
         with _patch_externals() as mocks:
             session, _ = _create_session()
             await session.start()
+            await session.handle_user_message("First message")
             mocks["session_repo"].activate_session.assert_called_once()
             await session.stop()
 

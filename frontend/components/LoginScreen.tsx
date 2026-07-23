@@ -13,15 +13,6 @@ interface LoginScreenProps {
 
 type LoginStep = "token" | "instructions" | "stance"
 
-const ACTIONS = [
-  ["Escribir mensajes", "cuando tengas algo que decir."],
-  ["Responder a otros", "cuando estés de acuerdo, en desacuerdo o quieras reaccionar a un comentario."],
-  ["Dar Like", "a los comentarios que apoyes o con los que estés de acuerdo."],
-  ["Reportar o bloquear", "comentarios o usuarios que te parezcan inapropiados, molestos o incómodos."],
-  ["Consultar otras pestañas", "si quieres buscar información para participar en el debate."],
-  ["Salir de la discusión", "si normalmente dejarías de participar."],
-]
-
 export default function LoginScreen({
   initialUsername,
   onPreview,
@@ -204,14 +195,69 @@ export default function LoginScreen({
               <div className="rounded-xl border border-border bg-bg-surface p-5">
                 <h3 className="text-2xl font-semibold text-primary">Durante la discusión, puedes:</h3>
                 <ul className="mt-4 space-y-3 text-base leading-7 text-primary">
-                  {ACTIONS.map(([title, text]) => (
-                    <li key={title} className="flex gap-3">
-                      <span className="mt-2 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
-                      <span>
-                        <strong>{title}</strong> {text}
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span>
+                      <strong>Escribir mensajes</strong> cuando tengas algo que decir.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span className="inline-flex items-center flex-wrap gap-1.5">
+                      <strong>Responder a otros</strong>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-accent-soft text-accent font-medium">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <polyline points="9 17 4 12 9 7" />
+                          <path d="M20 18v-2a4 4 0 00-4-4H4" />
+                        </svg>
+                        Reply
                       </span>
-                    </li>
-                  ))}
+                      cuando estés de acuerdo, en desacuerdo o quieras reaccionar a un comentario.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span className="inline-flex items-center flex-wrap gap-1.5">
+                      <strong>Dar Like</strong>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-red-50 text-danger font-medium">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+                          <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
+                        </svg>
+                        Like
+                      </span>
+                      a los comentarios que apoyes o con los que estés de acuerdo.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span className="inline-flex items-center flex-wrap gap-1.5">
+                      <strong>Reportar o bloquear</strong>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-red-50 text-danger font-medium">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+                          <line x1="4" y1="22" x2="4" y2="15" />
+                        </svg>
+                        Report
+                      </span>
+                      comentarios o usuarios que te parezcan inapropiados, molestos o incómodos.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span>
+                      <strong>Consultar otras pestañas</strong> si quieres buscar información para participar en el debate.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span className="inline-flex items-center flex-wrap gap-1.5">
+                      <strong>Salir de la discusión</strong>
+                      <span className="px-2 py-0.5 text-xs border border-danger/35 bg-danger/5 text-danger font-medium rounded-lg">
+                        Salir
+                      </span>
+                      si normalmente dejarías de participar.
+                    </span>
+                  </li>
                 </ul>
               </div>
 
@@ -225,10 +271,6 @@ export default function LoginScreen({
                 <div className="mt-3 space-y-2 text-sm leading-6">
                   <p>El experimento dura aproximadamente 20 minutos y debe hacerse seguido, en una sola sesión.</p>
                   <p>Si no tienes tiempo para completarlo ahora, por favor entra en otro momento.</p>
-                  <p>
-                    No dejes la plataforma abierta en segundo plano mientras haces otra cosa. Podemos monitorizar el uso
-                    pasivo, como dejar la pestaña inactiva o no seguir la discusión.
-                  </p>
                   <p>
                     No escribas nombres reales, datos de contacto ni información personal tuya o de otras personas en tus
                     comentarios. Para proteger la privacidad de todos, participa sin incluir datos que puedan identificar

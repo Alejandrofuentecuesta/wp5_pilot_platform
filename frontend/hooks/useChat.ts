@@ -194,10 +194,13 @@ export function useChat() {
     [inputValue],
   )
 
+  const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
+
   useEffect(() => {
     if (!sessionId || !newsArticle) return
     const seenKey = `news_article_seen:${sessionId}`
     if (typeof window !== "undefined" && window.sessionStorage.getItem(seenKey) !== "1") {
+      setIsInitialNewsRead(true)
       setNewsArticleModalOpen(true)
     }
   }, [sessionId, newsArticle])
@@ -269,38 +272,11 @@ export function useChat() {
     setSessionId(id)
   }
 
-  const dismissNewsArticle = useCallback(() => {
-    if (sessionId && typeof window !== "undefined") {
-      window.sessionStorage.setItem(`news_article_seen:${sessionId}`, "1")
-    }
-    setNewsArticleModalOpen(false)
-  }, [sessionId])
-
-  const openNewsArticle = useCallback(() => {
-    setNewsArticleModalOpen(true)
-  }, [])
-
-  const submitEmotionsCheckup = useCallback((emotion: string, temptedToReport: boolean, reportedUsers?: string[]) => {
-    send({
-      type: "emotions_checkup_response",
-      emotion,
-      tempted_to_report: temptedToReport,
-      reported_users: reportedUsers,
-    } as any)
-    setEmotionsCheckupOpen(false)
-  }, [send])
-
-  const exitSession = useCallback(() => {
-    send({
-      type: "user_exit",
-    } as any)
-    setExitModalOpen(false)
-  }, [send])
-
   // Send message
-  const sendMessage = () => {
-    if (!inputValue.trim()) return
-    const content = inputValue.trim()
+  const sendMessage = useCallback((customContent?: string) => {
+    const text = typeof customContent === "string" ? customContent.trim() : inputValue.trim()
+    if (!text) return
+    const content = text
     const payload: UserMessagePayload = { type: "user_message", content }
     if (replyTo) {
       payload.reply_to = replyTo.message_id
@@ -324,7 +300,50 @@ export function useChat() {
 
     setInputValue("")
     setReplyTo(null)
-  }
+  }, [inputValue, replyTo, detectedMentions, send, track, noteActivity])
+
+  const submitInitialNewsMessage = useCallback(
+    (initialMessage: string) => {
+      if (!sessionId) return
+      sendMessage(initialMessage)
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem(`news_article_seen:${sessionId}`, "1")
+      }
+      setIsInitialNewsRead(false)
+      setNewsArticleModalOpen(false)
+    },
+    [sessionId, sendMessage],
+  )
+
+  const dismissNewsArticle = useCallback(() => {
+    if (sessionId && typeof window !== "undefined") {
+      window.sessionStorage.setItem(`news_article_seen:${sessionId}`, "1")
+    }
+    setIsInitialNewsRead(false)
+    setNewsArticleModalOpen(false)
+  }, [sessionId])
+
+  const openNewsArticle = useCallback(() => {
+    setIsInitialNewsRead(false)
+    setNewsArticleModalOpen(true)
+  }, [])
+
+  const submitEmotionsCheckup = useCallback((emotion: string, temptedToReport: boolean, reportedUsers?: string[]) => {
+    send({
+      type: "emotions_checkup_response",
+      emotion,
+      tempted_to_report: temptedToReport,
+      reported_users: reportedUsers,
+    } as any)
+    setEmotionsCheckupOpen(false)
+  }, [send])
+
+  const exitSession = useCallback(() => {
+    send({
+      type: "user_exit",
+    } as any)
+    setExitModalOpen(false)
+  }, [send])
 
   // Like message (with optimistic update + rollback)
   const toggleLike = async (msg: Message) => {
@@ -504,6 +523,8 @@ export function useChat() {
     newsArticleModalOpen,
     dismissNewsArticle,
     openNewsArticle,
+    isInitialNewsRead,
+    submitInitialNewsMessage,
     // Blocked
     blockedSenders,
     // Typing indicator

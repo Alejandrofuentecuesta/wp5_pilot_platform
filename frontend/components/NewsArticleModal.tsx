@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import { formatMessageTime } from "@/lib/dates"
 import type { ParticipantStance } from "@/lib/types"
 import type { Message } from "@/lib/types"
@@ -9,11 +10,8 @@ interface NewsArticleModalProps {
   open: boolean
   onClose: () => void
   participantStance: ParticipantStance | null
-}
-
-const STANCE_LABELS: Record<ParticipantStance, string> = {
-  pro_topic: "Column I / pro-topic",
-  anti_topic: "Column II / anti-topic",
+  isInitialRead?: boolean
+  onSubmitInitialMessage?: (initialMessage: string) => void
 }
 
 export default function NewsArticleModal({
@@ -21,13 +19,26 @@ export default function NewsArticleModal({
   open,
   onClose,
   participantStance,
+  isInitialRead = false,
+  onSubmitInitialMessage,
 }: NewsArticleModalProps) {
+  const [initialInput, setInitialInput] = useState("")
+
   if (!open) return null
 
   const title = message.headline || "News article"
   const source = message.source || "Source not specified"
   const body = message.body || message.content
-  const stanceLabel = participantStance ? STANCE_LABELS[participantStance] : "Not recorded"
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!initialInput.trim()) return
+    if (onSubmitInitialMessage) {
+      onSubmitInitialMessage(initialInput.trim())
+    } else {
+      onClose()
+    }
+  }
 
   return (
     <div
@@ -50,17 +61,16 @@ export default function NewsArticleModal({
               <p className="text-sm text-secondary">
                 {source} {message.timestamp ? `· ${formatMessageTime(message.timestamp)}` : ""}
               </p>
-              <p className="inline-flex items-center rounded-full border border-border bg-bg-feed px-2.5 py-1 text-[11px] font-medium text-secondary">
-                Recorded position: {stanceLabel}
-              </p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary hover:border-accent transition-colors"
-            >
-              Continue
-            </button>
+            {!isInitialRead && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-secondary hover:text-primary hover:border-accent transition-colors"
+              >
+                Cerrar
+              </button>
+            )}
           </div>
 
           <div className="rounded-xl bg-bg-feed border border-border/70 p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
@@ -68,8 +78,37 @@ export default function NewsArticleModal({
               {body}
             </p>
           </div>
+
+          {isInitialRead && (
+            <form onSubmit={handleSubmit} className="mt-2 space-y-3 pt-3 border-t border-border/60 shrink-0">
+              <div>
+                <label htmlFor="initial-reaction-input" className="block text-xs font-semibold text-primary mb-1 uppercase tracking-wider">
+                  Escribe tu mensaje inicial para unirte al debate
+                </label>
+                <textarea
+                  id="initial-reaction-input"
+                  rows={2}
+                  value={initialInput}
+                  onChange={(e) => setInitialInput(e.target.value)}
+                  placeholder="¿Qué opinas sobre esta noticia? Escribe tu mensaje inicial aquí..."
+                  className="w-full rounded-xl border border-border bg-bg-surface p-3 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30 resize-none"
+                  autoFocus
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  disabled={!initialInput.trim()}
+                  className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                >
+                  Publicar y entrar al chat
+                </button>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>
   )
 }
+

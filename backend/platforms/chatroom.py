@@ -385,6 +385,12 @@ class SimulationSession:
         self.idle_prompt_enabled = bool(self.simulation_config.get("idle_prompt_enabled", False))
         self.idle_prompt_seconds = int(self.simulation_config.get("idle_prompt_seconds", 300))
 
+        # Track whether the human participant has posted their first message.
+        # Preloaded messages from DB (crash recovery / reconstruction) count.
+        self._first_user_message_received = any(
+            m.get("sender") == self.state.user_name for m in (_preloaded_messages or [])
+        )
+
 
     def _build_orchestrator(self, agent_names_subset: Optional[List[str]] = None) -> Orchestrator:
         """Instantiate a single Orchestrator for the current session config.
@@ -641,23 +647,26 @@ class SimulationSession:
     async def start(self) -> None:
         """Start a fresh session (seed scenario + launch clock loop)."""
         self.running = True
-        self.logger.log_session_start(
-            self.experimental_config, self.simulation_config,
-            self.treatment_group,
-            chatroom_context=self.chatroom_context,
-            incivility_framework=self.incivility_framework,
-            participant_stance_hint=self.participant_stance_hint or "",
-        )
 
-        pool = db_conn.get_pool()
-        await session_repo.activate_session(
-            pool,
-            session_id=self.session_id,
-            started_at=self.state.start_time,
-            random_seed=int(self.simulation_config["random_seed"]),
-            simulation_config=self.simulation_config,
-            experimental_config=self.experimental_config,
-        )
+        # If reconstructed or user already posted, log start and activate in DB.
+        if self._first_user_message_received:
+            self.logger.log_session_start(
+                self.experimental_config, self.simulation_config,
+                self.treatment_group,
+                chatroom_context=self.chatroom_context,
+                incivility_framework=self.incivility_framework,
+                participant_stance_hint=self.participant_stance_hint or "",
+            )
+
+            pool = db_conn.get_pool()
+            await session_repo.activate_session(
+                pool,
+                session_id=self.session_id,
+                started_at=self.state.start_time,
+                random_seed=int(self.simulation_config["random_seed"]),
+                simulation_config=self.simulation_config,
+                experimental_config=self.experimental_config,
+            )
 
         await self.features.seed(self.state, self.websocket_send, experiment_id=self.experiment_id)
         self._seeded = True
@@ -761,6 +770,12 @@ class SimulationSession:
                         await asyncio.sleep(0.5)
                         await self.stop(reason="abandoned")
                         break
+                    await asyncio.sleep(tick_interval)
+                    continue
+
+                # Do not let the session timer, emotions checkup, or agent turns
+                # start until the human participant has posted their initial message.
+                if not self._first_user_message_received:
                     await asyncio.sleep(tick_interval)
                     continue
 
@@ -996,6 +1011,32 @@ class SimulationSession:
             mentions=mentions,
         )
         self.state.add_message(message)
+
+        # Reset session start_time when the participant posts their first message
+        # so the experiment duration timer counts from entering the chat.
+        if not getattr(self, "_first_user_message_received", False):
+            self._first_user_message_received = True
+            now = datetime.now(timezone.utc)
+            self.state.start_time = now
+            self.logger.log_session_start(
+                self.experimental_config, self.simulation_config,
+                self.treatment_group,
+                chatroom_context=self.chatroom_context,
+                incivility_framework=self.incivility_framework,
+                participant_stance_hint=self.participant_stance_hint or "",
+            )
+            try:
+                pool = db_conn.get_pool()
+                await session_repo.activate_session(
+                    pool,
+                    session_id=self.session_id,
+                    started_at=now,
+                    random_seed=int(self.simulation_config.get("random_seed", 42)),
+                    simulation_config=self.simulation_config,
+                    experimental_config=self.experimental_config,
+                )
+            except Exception as exc:
+                self.logger.log_error("activate_session_on_first_msg", str(exc))
 
         # Persist to DB (awaited — user messages are primary research data).
         try:

@@ -109,6 +109,8 @@ export default function ChatApp() {
       newsArticleModalOpen={chat.newsArticleModalOpen}
       dismissNewsArticle={chat.dismissNewsArticle}
       openNewsArticle={chat.openNewsArticle}
+      isInitialNewsRead={chat.isInitialNewsRead}
+      submitInitialNewsMessage={chat.submitInitialNewsMessage}
       participantStance={chat.participantStance}
       emotionsCheckupOpen={chat.emotionsCheckupOpen}
       onSubmitEmotionsCheckup={chat.submitEmotionsCheckup}

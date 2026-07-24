@@ -1173,6 +1173,9 @@ class SimulationSession:
                 "idle_prompt_enabled": self.idle_prompt_enabled,
                 "idle_prompt_seconds": self.idle_prompt_seconds,
                 "behavior_tracking_enabled": self.behavior_tracking_enabled,
+                # Server-authoritative: lets a rejoin from a fresh tab/device
+                # skip the initial-message news form.
+                "initial_message_done": self._first_user_message_received,
             })
         except Exception as exc:
             self.logger.log_error("send_session_config", str(exc))

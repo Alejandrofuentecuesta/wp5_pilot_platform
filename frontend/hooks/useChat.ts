@@ -138,6 +138,9 @@ export function useChat() {
         idlePromptEnabled: Boolean(obj.idle_prompt_enabled),
         idlePromptSeconds: Number(obj.idle_prompt_seconds) || 300,
       })
+      // Server-authoritative flag: on a rejoin from a fresh tab or device the
+      // initial message was already posted, so the news form must not reappear.
+      setInitialMessageDone(Boolean(obj.initial_message_done))
     } else {
       const message = obj as unknown as Message
       setMessages((prev) => {
@@ -195,15 +198,27 @@ export function useChat() {
   )
 
   const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
+  const [initialMessageDone, setInitialMessageDone] = useState(false)
 
   useEffect(() => {
-    if (!sessionId || !newsArticle) return
+    if (!sessionId || !newsArticle || typeof window === "undefined") return
     const seenKey = `news_article_seen:${sessionId}`
-    if (typeof window !== "undefined" && window.sessionStorage.getItem(seenKey) !== "1") {
+    if (initialMessageDone) {
+      // Rejoin: the server says the initial message was already posted. Mark
+      // the article seen in this tab and close the form if it auto-opened
+      // before the session_config event arrived.
+      window.sessionStorage.setItem(seenKey, "1")
+      if (isInitialNewsRead) {
+        setIsInitialNewsRead(false)
+        setNewsArticleModalOpen(false)
+      }
+      return
+    }
+    if (window.sessionStorage.getItem(seenKey) !== "1") {
       setIsInitialNewsRead(true)
       setNewsArticleModalOpen(true)
     }
-  }, [sessionId, newsArticle])
+  }, [sessionId, newsArticle, initialMessageDone, isInitialNewsRead])
 
   // Start session — sends participant name to backend so agents can infer gender.
   const previewSessionIntake = async (token: string): Promise<SessionIntakeResponse> => {

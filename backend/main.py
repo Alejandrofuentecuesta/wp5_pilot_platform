@@ -667,9 +667,18 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             return False
         redirect = ""
         try:
-            cfg = await config_repo.get_experiment_config(pool, row["experiment_id"])
-            base = ((cfg or {}).get("experimental") or {}).get("redirect_url", "")
-            redirect = build_return_url(base, row.get("token", ""), row.get("end_reason") or "")
+            # If the server already delivered the return signal for this
+            # session (timeout endings ping the panel directly), do not
+            # redirect the late returner — the panel must receive exactly one
+            # signal per token. If the ping failed, the browser redirect
+            # remains the fallback delivery channel.
+            pinged = await event_repo.get_session_events(
+                pool, session_id, ["panel_return_ping"]
+            )
+            if not pinged:
+                cfg = await config_repo.get_experiment_config(pool, row["experiment_id"])
+                base = ((cfg or {}).get("experimental") or {}).get("redirect_url", "")
+                redirect = build_return_url(base, row.get("token", ""), row.get("end_reason") or "")
         except Exception as exc:
             print(f"Return-URL build failed for ended session {session_id}: {exc}")
         await websocket.send_json({

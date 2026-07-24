@@ -53,7 +53,7 @@ export const PRE_CHAT_SURVEYS: Record<NewsTemplateId, PreChatSurvey> = {
         label: "Columna I",
         statements: [
           "El Estado español no da un trato de favor económico y social a los inmigrantes.",
-          "Los inmigrantes no tienen más probabilidad que los españoles de participar en actos de vandalismo y violencia.",
+          "Las personas inmigrantes son igual de propensas a cometer actos de vandalismo o violencia que las personas españolas",
           "Los inmigrantes generalmente se esfuerzan por integrarse en nuestra cultura, apreciando nuestras normas y valores.",
         ],
       },
@@ -62,7 +62,7 @@ export const PRE_CHAT_SURVEYS: Record<NewsTemplateId, PreChatSurvey> = {
         label: "Columna II",
         statements: [
           "El Estado español da un trato de favor económico y social a los inmigrantes.",
-          "Los inmigrantes tienen más probabilidad que los españoles de participar en actos de vandalismo y violencia.",
+          "Las personas inmigrantes tienen mayor tendencia a cometer actos de vandalismo o violencia que las personas españolas",
           "Los inmigrantes no hacen esfuerzo por integrarse en nuestra cultura, y desprecian nuestras normas y valores.",
         ],
       },

@@ -273,9 +273,9 @@ export function useChat() {
   }
 
   // Send message
-  const sendMessage = useCallback((customContent?: string) => {
+  const sendMessage = useCallback((customContent?: string): boolean => {
     const text = typeof customContent === "string" ? customContent.trim() : inputValue.trim()
-    if (!text) return
+    if (!text) return false
     const content = text
     const payload: UserMessagePayload = { type: "user_message", content }
     if (replyTo) {
@@ -284,7 +284,7 @@ export function useChat() {
     }
     if (detectedMentions.length > 0) payload.mentions = detectedMentions
 
-    send(payload)
+    if (!send(payload)) return false
 
     // Record composition metrics for this message before clearing.
     const c = composeRef.current
@@ -300,12 +300,16 @@ export function useChat() {
 
     setInputValue("")
     setReplyTo(null)
+    return true
   }, [inputValue, replyTo, detectedMentions, send, track, noteActivity])
 
   const submitInitialNewsMessage = useCallback(
     (initialMessage: string) => {
       if (!sessionId) return
-      sendMessage(initialMessage)
+      // Only mark the article as seen and close the modal if the message
+      // actually went out — a send during a reconnect gap is dropped, and
+      // the session cannot start without this first message.
+      if (!sendMessage(initialMessage)) return
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem(`news_article_seen:${sessionId}`, "1")
       }

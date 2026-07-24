@@ -1018,6 +1018,9 @@ class SimulationSession:
             self._first_user_message_received = True
             now = datetime.now(timezone.utc)
             self.state.start_time = now
+            # Pause credit accrued before the timer started (e.g. a disconnect
+            # on the news screen) must not extend the live session.
+            self.state.paused_seconds = 0.0
             self.logger.log_session_start(
                 self.experimental_config, self.simulation_config,
                 self.treatment_group,

@@ -132,6 +132,7 @@ export default function ChatRoom({
           participantStance={participantStance}
           isInitialRead={isInitialNewsRead}
           onSubmitInitialMessage={submitInitialNewsMessage}
+          isConnected={isConnected}
         />
       )}
 

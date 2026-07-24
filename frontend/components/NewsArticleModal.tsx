@@ -12,6 +12,7 @@ interface NewsArticleModalProps {
   participantStance: ParticipantStance | null
   isInitialRead?: boolean
   onSubmitInitialMessage?: (initialMessage: string) => void
+  isConnected?: boolean
 }
 
 export default function NewsArticleModal({
@@ -21,6 +22,7 @@ export default function NewsArticleModal({
   participantStance,
   isInitialRead = false,
   onSubmitInitialMessage,
+  isConnected = true,
 }: NewsArticleModalProps) {
   const [initialInput, setInitialInput] = useState("")
 
@@ -95,10 +97,13 @@ export default function NewsArticleModal({
                   autoFocus
                 />
               </div>
-              <div className="flex justify-end">
+              <div className="flex items-center justify-end gap-3">
+                {!isConnected && (
+                  <p className="text-xs text-secondary">Reconectando…</p>
+                )}
                 <button
                   type="submit"
-                  disabled={!initialInput.trim()}
+                  disabled={!initialInput.trim() || !isConnected}
                   className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   Publicar y entrar al chat

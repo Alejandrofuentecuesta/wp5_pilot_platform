@@ -113,10 +113,12 @@ export function useWebSocket({
     }
   }, [sessionId])
 
-  const send = useCallback((payload: UserMessagePayload) => {
+  const send = useCallback((payload: UserMessagePayload): boolean => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(payload))
+      return true
     }
+    return false
   }, [])
 
   return { isConnected, send }

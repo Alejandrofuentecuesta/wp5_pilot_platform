@@ -3,6 +3,8 @@ import os
 import random
 import re
 import time
+
+import httpx
 from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
@@ -751,7 +753,44 @@ class SimulationSession:
         except Exception as exc:
             print(f"[Session {self.session_id}] DB end_session failed: {exc}")
 
+        # Timeout endings happen with no browser present, so the participant
+        # cannot deliver the return redirect themselves. Fire it server-side
+        # so the panel never has to infer non-completion from silence.
+        if reason in ("abandoned", "no_first_message"):
+            await self._notify_panel_return(reason)
+
         print(f"Session {self.session_id} stopped: {reason}")
+
+    async def _notify_panel_return(self, reason: str) -> None:
+        """Server-side GET to the panel return URL (token + r code).
+
+        Used only for endings where no participant browser is attached. If the
+        participant reopens their link later they still receive the courtesy
+        browser redirect, so the panel may see the same token twice — the
+        panel treats the first signal per token as authoritative.
+        """
+        url = await self._build_return_url(reason)
+        if not url:
+            return
+        last_exc: Optional[Exception] = None
+        for attempt in (1, 2):
+            try:
+                async with httpx.AsyncClient(timeout=15, follow_redirects=True) as client:
+                    resp = await client.get(url)
+                print(
+                    f"[PANEL_RETURN] session={self.session_id} reason={reason} "
+                    f"status={resp.status_code} attempt={attempt}"
+                )
+                self.logger.log_event(
+                    "panel_return_ping",
+                    {"reason": reason, "status": resp.status_code, "attempt": attempt},
+                )
+                return
+            except Exception as exc:
+                last_exc = exc
+                await asyncio.sleep(2)
+        self.logger.log_error("panel_return_ping", str(last_exc))
+        print(f"[PANEL_RETURN] session={self.session_id} reason={reason} FAILED: {last_exc}")
 
     # ── Clock loop ────────────────────────────────────────────────────────────
 

@@ -3,20 +3,12 @@
 import { useEffect, useState } from "react"
 
 import { useChat } from "@/hooks/useChat"
-import LoginScreen from "./LoginScreen"
+import LoginScreen, { type HandoffParams } from "./LoginScreen"
 import ChatRoom from "./ChatRoom"
 import IdleReminderBanner from "./IdleReminderBanner"
 import ThankYouScreen from "./ThankYouScreen"
 import QueueScreen from "./QueueScreen"
-import HandoffScreen from "./HandoffScreen"
 import type { ParticipantStance } from "@/lib/types"
-
-// Panel hand-off: participants arrive with ?token=XXXX-XXXX&s=1|2 in the URL
-// (s encodes the pre-survey stance: 1 = pro_topic, 2 = anti_topic).
-interface HandoffParams {
-  token: string
-  stance: ParticipantStance | null
-}
 
 function parseHandoffParams(): HandoffParams | null {
   const params = new URLSearchParams(window.location.search)
@@ -60,23 +52,13 @@ export default function ChatApp() {
     // manual login screen.
     if (!bootChecked) return null
 
-    if (handoff) {
-      return (
-        <HandoffScreen
-          token={handoff.token}
-          stance={handoff.stance}
-          onPreview={chat.previewSessionIntake}
-          onStart={chat.startSession}
-          onRejoin={chat.rejoinSession}
-        />
-      )
-    }
-
     return (
       <LoginScreen
         initialUsername={chat.username}
+        handoff={handoff}
         onPreview={chat.previewSessionIntake}
         onStart={chat.startSession}
+        onRejoin={chat.rejoinSession}
       />
     )
   }

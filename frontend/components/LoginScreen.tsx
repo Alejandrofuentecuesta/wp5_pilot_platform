@@ -1,25 +1,43 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { getPreChatSurvey } from "@/lib/pre-chat-surveys"
 import type { ParticipantStance, SessionIntakeResponse } from "@/lib/types"
 
-interface LoginScreenProps {
-  initialUsername: string
-  onPreview: (token: string) => Promise<SessionIntakeResponse>
-  onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
+// Panel hand-off: participants arrive with ?token=XXXX-XXXX&s=1|2 in the URL.
+// When set, the token field is pre-filled and immutable and the stance step
+// is skipped (stance comes from the s parameter). When null, the classic
+// manual flow applies: token entry followed by the stance question.
+export interface HandoffParams {
+  token: string
+  stance: ParticipantStance | null
 }
 
-type LoginStep = "token" | "instructions" | "stance"
+interface LoginScreenProps {
+  initialUsername: string
+  handoff: HandoffParams | null
+  onPreview: (token: string) => Promise<SessionIntakeResponse>
+  onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
+  onRejoin: (sessionId: string) => void
+}
+
+type LoginStep = "instructions" | "access" | "stance"
+type HandoffStatus = "checking" | "ready" | "invalid"
 
 export default function LoginScreen({
   initialUsername,
+  handoff,
   onPreview,
   onStart,
+  onRejoin,
 }: LoginScreenProps) {
+  const isHandoff = handoff !== null
+
   const [step, setStep] = useState<LoginStep>("instructions")
-  const [token, setToken] = useState("")
+  // Only meaningful in handoff mode; manual mode is always "ready".
+  const [status, setStatus] = useState<HandoffStatus>(isHandoff ? "checking" : "ready")
+  const [token, setToken] = useState(handoff?.token ?? "")
   const [username, setUsername] = useState(initialUsername)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -31,12 +49,41 @@ export default function LoginScreen({
     [intake],
   )
 
+  // Handoff arrivals: validate the link before showing anything. A used
+  // token whose session is still alive (paused awaiting rejoin) reconnects
+  // straight into the chatroom.
+  useEffect(() => {
+    if (!handoff) return
+    let cancelled = false
+    if (!handoff.stance) {
+      setStatus("invalid")
+      return
+    }
+    onPreview(handoff.token)
+      .then((resp) => {
+        if (cancelled) return
+        if (resp.rejoin_session_id) {
+          onRejoin(resp.rejoin_session_id)
+          return
+        }
+        setStatus("ready")
+      })
+      .catch(() => {
+        if (!cancelled) setStatus("invalid")
+      })
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const resetIntake = useCallback(() => {
     setIntake(null)
     setSelectedStance(null)
-    setStep("token")
+    setStep("access")
   }, [])
 
+  // Manual flow: validate the typed token, then move to the stance question.
   const handlePreview = useCallback(async () => {
     if (!token.trim()) {
       setError("Introduce tu token para continuar.")
@@ -46,6 +93,10 @@ export default function LoginScreen({
     setError("")
     try {
       const response = await onPreview(token.trim())
+      if (response.rejoin_session_id) {
+        onRejoin(response.rejoin_session_id)
+        return
+      }
       setIntake(response)
       setSelectedStance(null)
       setStep("stance")
@@ -54,9 +105,22 @@ export default function LoginScreen({
     } finally {
       setLoading(false)
     }
-  }, [token, onPreview])
+  }, [token, onPreview, onRejoin])
 
-  const handleStart = useCallback(async () => {
+  // Handoff flow: stance is already known, start directly from the access step.
+  const handleHandoffStart = useCallback(async () => {
+    if (loading || !handoff?.stance) return
+    setLoading(true)
+    setError("")
+    try {
+      await onStart(handoff.token, username.trim(), handoff.stance)
+    } catch {
+      setError("No se ha podido iniciar la sesión. Inténtalo de nuevo.")
+      setLoading(false)
+    }
+  }, [loading, handoff, username, onStart])
+
+  const handleManualStart = useCallback(async () => {
     if (!selectedStance) {
       setError("Elige la columna que se acerque más a tu posición.")
       return
@@ -72,11 +136,24 @@ export default function LoginScreen({
   }, [selectedStance, token, username, onStart])
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && step === "token") {
+    if (e.key === "Enter" && step === "access" && !isHandoff) {
       e.preventDefault()
       handlePreview()
     }
   }
+
+  const flowSteps: [string, string][] = isHandoff
+    ? [
+        ["1", "Escribir tu nombre"],
+        ["2", "Leer una noticia"],
+        ["3", "Entrar al chat"],
+      ]
+    : [
+        ["1", "Introducir token"],
+        ["2", "Responder una pregunta"],
+        ["3", "Leer una noticia"],
+        ["4", "Entrar al chat"],
+      ]
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-bg-page px-4 py-8">
@@ -109,80 +186,33 @@ export default function LoginScreen({
         </div>
 
         <div className="px-6 py-6">
-          {step === "token" && (
-            <div className="space-y-5">
-              <div>
-                <h2 className="text-3xl font-semibold text-primary">Acceso a la plataforma</h2>
-                <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
-                  Introduce tu token de participante. Después responderás a una pregunta breve antes de ver la noticia.
-                </p>
-              </div>
+          {status === "checking" && (
+            <p className="py-10 text-center text-sm text-secondary">Comprobando tu acceso...</p>
+          )}
 
-              <div className="grid gap-4 md:grid-cols-2">
-                <div>
-                  <label htmlFor="username" className="mb-1 block text-xs font-medium text-secondary">
-                    Nombre visible (opcional)
-                  </label>
-                  <input
-                    id="username"
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="p. ej. Alicia"
-                    className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
-                  />
-                </div>
-                <div>
-                  <label htmlFor="token" className="mb-1 block text-xs font-medium text-secondary">
-                    Token de participante
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      id="token"
-                      type="text"
-                      value={token}
-                      onChange={(e) => {
-                        setToken(e.target.value)
-                        resetIntake()
-                        if (error) setError("")
-                      }}
-                      onKeyDown={handleKeyDown}
-                      placeholder="p. ej. user0002"
-                      className="min-w-0 flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={handlePreview}
-                      disabled={loading}
-                      className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
-                    >
-                      {loading ? "Comprobando..." : "Siguiente"}
-                    </button>
-                  </div>
-                </div>
-              </div>
+          {status === "invalid" && (
+            <div className="space-y-4 py-6 text-center">
+              <h2 className="text-2xl font-semibold text-primary">Enlace no válido</h2>
+              <p className="mx-auto max-w-xl text-sm leading-6 text-secondary">
+                Este enlace de acceso no es válido o ya ha sido utilizado. Por favor, vuelve a la
+                página del panel e inténtalo de nuevo desde allí.
+              </p>
             </div>
           )}
 
-          {step === "instructions" && (
+          {status === "ready" && step === "instructions" && (
             <div className="space-y-6">
               <div>
                 <h2 className="text-4xl font-semibold text-primary">Antes de empezar</h2>
                 <p className="mt-2 max-w-3xl text-base font-semibold leading-7 text-secondary">
-                  Después introducirás tu token, responderás a una pregunta breve, leerás una noticia y finalmente
-                  entrarás al chat.
+                  {isHandoff
+                    ? "A continuación escribirás tu nombre, leerás una noticia y finalmente entrarás al chat."
+                    : "Después introducirás tu token, responderás a una pregunta breve, leerás una noticia y finalmente entrarás al chat."}
                 </p>
               </div>
 
-              <div className="grid gap-3 md:grid-cols-4">
-                {[
-                  ["1", "Introducir token"],
-                  ["2", "Responder una pregunta"],
-                  ["3", "Leer una noticia"],
-                  ["4", "Entrar al chat"],
-                ].map(([number, label]) => (
+              <div className={`grid gap-3 ${isHandoff ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
+                {flowSteps.map(([number, label]) => (
                   <div key={number} className="flex items-center gap-3 rounded-xl border border-border bg-bg-feed px-4 py-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-base font-semibold text-white">
                       {number}
@@ -276,14 +306,18 @@ export default function LoginScreen({
                     comentarios. Para proteger la privacidad de todos, participa sin incluir datos que puedan identificar
                     a alguien.
                   </p>
-                  <p>Si sales después de entrar al chat, no podrás volver a la misma sesión.</p>
+                  <p>
+                    Si pierdes la conexión o cierras la pestaña por accidente, puedes volver a entrar con el mismo enlace
+                    dentro de una hora y continuar donde lo dejaste. Si usas el botón «Salir», tu participación termina de
+                    forma definitiva.
+                  </p>
                 </div>
               </div>
 
               <div className="flex justify-end">
                 <button
                   type="button"
-                  onClick={() => setStep("token")}
+                  onClick={() => setStep("access")}
                   className="rounded-lg bg-accent px-6 py-3 text-sm font-medium text-white transition-colors hover:bg-accent-hover"
                 >
                   Siguiente
@@ -292,7 +326,90 @@ export default function LoginScreen({
             </div>
           )}
 
-          {step === "stance" && survey && (
+          {status === "ready" && step === "access" && (
+            <div className="space-y-5">
+              <div>
+                <h2 className="text-3xl font-semibold text-primary">Acceso a la plataforma</h2>
+                <p className="mt-2 max-w-2xl text-sm leading-6 text-secondary">
+                  {isHandoff
+                    ? "Tu token de acceso ya está registrado. Escribe el nombre con el que quieres aparecer en el chat."
+                    : "Introduce tu token de participante. Después responderás a una pregunta breve antes de ver la noticia."}
+                </p>
+              </div>
+
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <label htmlFor="username" className="mb-1 block text-xs font-medium text-secondary">
+                    Nombre visible (opcional)
+                  </label>
+                  <input
+                    id="username"
+                    type="text"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    onKeyDown={handleKeyDown}
+                    placeholder="p. ej. Alicia"
+                    autoFocus={isHandoff}
+                    className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="token" className="mb-1 block text-xs font-medium text-secondary">
+                    Token de participante
+                  </label>
+                  {isHandoff ? (
+                    <input
+                      id="token"
+                      type="text"
+                      value={token}
+                      disabled
+                      className="w-full cursor-not-allowed rounded-lg border border-border bg-bg-feed px-3 py-2.5 text-sm text-tertiary"
+                    />
+                  ) : (
+                    <div className="flex gap-2">
+                      <input
+                        id="token"
+                        type="text"
+                        value={token}
+                        onChange={(e) => {
+                          setToken(e.target.value)
+                          resetIntake()
+                          if (error) setError("")
+                        }}
+                        onKeyDown={handleKeyDown}
+                        placeholder="p. ej. user0002"
+                        className="min-w-0 flex-1 rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
+                        autoFocus
+                      />
+                      <button
+                        type="button"
+                        onClick={handlePreview}
+                        disabled={loading}
+                        className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                      >
+                        {loading ? "Comprobando..." : "Siguiente"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {isHandoff && (
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={handleHandoffStart}
+                    disabled={loading}
+                    className="rounded-lg bg-accent px-6 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                  >
+                    {loading ? "Entrando..." : "Entrar al chat"}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {status === "ready" && step === "stance" && survey && (
             <div className="space-y-5">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-secondary">
@@ -335,14 +452,14 @@ export default function LoginScreen({
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <button
                   type="button"
-                  onClick={() => setStep("token")}
+                  onClick={() => setStep("access")}
                   className="rounded-lg border border-border px-4 py-2.5 text-sm font-medium text-secondary transition-colors hover:border-accent hover:text-primary"
                 >
                   Volver
                 </button>
                 <button
                   type="button"
-                  onClick={handleStart}
+                  onClick={handleManualStart}
                   disabled={loading || !selectedStance}
                   className="rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
                 >
@@ -352,7 +469,7 @@ export default function LoginScreen({
             </div>
           )}
 
-          {error && <p className="mt-5 text-sm text-danger">{error}</p>}
+          {status === "ready" && error && <p className="mt-5 text-sm text-danger">{error}</p>}
         </div>
       </div>
     </div>

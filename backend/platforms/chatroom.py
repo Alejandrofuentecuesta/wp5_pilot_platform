@@ -19,18 +19,25 @@ from cache import redis_client
 
 # How long a disconnected participant has to rejoin before their session is
 # ended as non-complete. Takes effect on container recreate.
-REJOIN_WINDOW_MINUTES = int(os.getenv("REJOIN_WINDOW_MINUTES", "30"))
+REJOIN_WINDOW_MINUTES = int(os.getenv("REJOIN_WINDOW_MINUTES", "60"))
 
 
 def build_return_url(redirect_url: str, token: str, reason: str) -> str:
     """Append the panel hand-back parameters (token + completion status) to
-    the configured return URL. r=1 means the participant received the full
-    session duration; r=2 means they did not."""
+    the configured return URL. r=1: full session duration received (complete);
+    r=3: participant chose to leave via the exit button; r=2: any other
+    outcome (non-complete)."""
     if not redirect_url:
         return ""
     if not token:
         return redirect_url
-    r_code = "1" if (reason or "").startswith("duration_expired") else "2"
+    reason = reason or ""
+    if reason.startswith("duration_expired"):
+        r_code = "1"
+    elif reason.startswith("user_exit"):
+        r_code = "3"
+    else:
+        r_code = "2"
     sep = "&" if "?" in redirect_url else "?"
     return f"{redirect_url}{sep}token={token}&r={r_code}"
 
@@ -775,7 +782,17 @@ class SimulationSession:
 
                 # Do not let the session timer, emotions checkup, or agent turns
                 # start until the human participant has posted their initial message.
+                # The rejoin window doubles as a non-response timeout here: a
+                # participant who stays connected but never posts is ended as a
+                # non-complete rather than holding a session (and cap slot) open
+                # indefinitely. Connected time only — disconnected periods are
+                # governed by the away-clock above.
                 if not self._first_user_message_received:
+                    if self.state.elapsed_active_minutes() >= REJOIN_WINDOW_MINUTES:
+                        await self._publish_session_end("no_first_message")
+                        await asyncio.sleep(0.5)
+                        await self.stop(reason="no_first_message")
+                        break
                     await asyncio.sleep(tick_interval)
                     continue
 

@@ -300,8 +300,12 @@ export default function LoginScreen({
               <div className="rounded-xl border-2 border-[#e0a800] bg-[#fff7b8] p-5 text-[#4d3f00]">
                 <h3 className="text-2xl font-semibold">Importante</h3>
                 <div className="mt-3 space-y-2 text-sm leading-6">
-                  <p>El experimento dura aproximadamente 20 minutos y debe hacerse seguido, en una sola sesión.</p>
-                  <p>Si no tienes tiempo para completarlo ahora, por favor entra en otro momento.</p>
+                  <p className="rounded-lg bg-[#4d3f00]/10 px-3 py-2 text-base font-bold">
+                    El experimento dura aproximadamente 20 minutos y{" "}
+                    <span className="underline decoration-2 underline-offset-2">debe hacerse de seguido, en una sola sesión y sin pausas</span>.
+                    Una vez que empieces, <span className="underline decoration-2 underline-offset-2">no podrás pararlo ni continuar más tarde</span>.
+                  </p>
+                  <p className="font-semibold">Si no tienes tiempo para completarlo ahora, por favor entra en otro momento.</p>
                   <p>
                     No escribas nombres reales, datos de contacto ni información personal tuya o de otras personas en tus
                     comentarios. Para proteger la privacidad de todos, participa sin incluir datos que puedan identificar

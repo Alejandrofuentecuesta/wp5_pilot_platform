@@ -360,9 +360,10 @@ export function useChat() {
     setEmotionsCheckupOpen(false)
   }, [send])
 
-  const exitSession = useCallback(() => {
+  const exitSession = useCallback((reason: string) => {
     send({
       type: "user_exit",
+      exit_reason: reason,
     } as any)
     setExitModalOpen(false)
   }, [send])

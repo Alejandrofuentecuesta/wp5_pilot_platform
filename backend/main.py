@@ -829,6 +829,20 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             elif data.get("type") == "emotions_checkup_response":
                 await session.handle_emotions_checkup_response(data)
             elif data.get("type") == "user_exit":
+                # Persist the required open-ended exit reason before tearing down
+                # the session (awaited so it can't be lost in the shutdown race).
+                exit_reason = (data.get("exit_reason") or "").strip()
+                if exit_reason:
+                    try:
+                        await event_repo.insert_event(
+                            _get_pool(),
+                            session_id=session_id,
+                            experiment_id=session.experiment_id,
+                            event_type="exit_survey",
+                            data={"reason": exit_reason},
+                        )
+                    except Exception as exc:
+                        print(f"[user_exit] failed to persist exit reason: {exc}")
                 await session._publish_session_end("user_exit")
                 await asyncio.sleep(0.5)
                 await session.stop(reason="user_exit")

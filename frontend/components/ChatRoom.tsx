@@ -46,7 +46,7 @@ interface ChatRoomProps {
   onSubmitEmotionsCheckup: (emotion: string, tempted: boolean, reportedUsers?: string[]) => void
   exitModalOpen: boolean
   setExitModalOpen: (open: boolean) => void
-  exitSession: () => void
+  exitSession: (reason: string) => void
 }
 
 export default function ChatRoom({

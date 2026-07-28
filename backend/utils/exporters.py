@@ -10,7 +10,7 @@ from __future__ import annotations
 import csv
 import io
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import asyncpg
 
@@ -222,9 +222,10 @@ are UTC ISO-8601 unless noted. Files:
 
 `event_type` values include server events (`session_start`, `session_end`,
 `message`, `message_like`, `message_report`, `user_block`,
-`emotions_checkup_trigger`, `emotions_checkup_response`, `websocket_attach`,
-`websocket_detach`, …) and **client behavioural telemetry** (prefixed
-`client_`):
+`emotions_checkup_trigger`, `emotions_checkup_response`, `exit_survey`
+(open-ended reason the participant gave when leaving early; payload key
+`reason`), `websocket_attach`, `websocket_detach`, …) and **client
+behavioural telemetry** (prefixed `client_`):
 
 | event_type | meaning | key payload fields |
 |---|---|---|

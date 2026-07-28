@@ -3,11 +3,15 @@ import type { ParticipantStance, SessionIntakeResponse, SessionStartResponse, Qu
 
 export async function previewSessionIntake(
   token: string,
+  panel?: { hkey?: string | null; g?: string | null },
 ): Promise<SessionIntakeResponse> {
+  const body: Record<string, string> = { token }
+  if (panel?.hkey) body.hkey = panel.hkey
+  if (panel?.g) body.g = panel.g
   const res = await fetch(`${API_BASE}/session/intake`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token }),
+    body: JSON.stringify(body),
   })
   if (!res.ok) throw new Error("Invalid token")
   return res.json()

@@ -1,8 +1,10 @@
 import asyncio
 import csv
+import hashlib
 import io
 import json
 import os
+import re
 import secrets
 import string
 import time
@@ -176,6 +178,23 @@ CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "")  # comma-separated, e.g. "http
 SESSION_CAP = int(os.environ.get("SESSION_CAP", "50"))
 QUEUE_OFFER_TIMEOUT_MINUTES = int(os.environ.get("QUEUE_OFFER_TIMEOUT_MINUTES", "10"))
 
+# Maps the g query parameter (NetQuest's randomised condition, Table 1 of the
+# experimental design doc) to the platform treatment-group keys. Agreed
+# contract with NetQuest/UB — do not renumber.
+PANEL_GROUP_MAP = {
+    "1": "not_incivil_like_minded",
+    "2": "not_incivil_mix",
+    "3": "not_incivil_not_like_minded",
+    "4": "mix_like_minded",
+    "5": "mix_mix",
+    "6": "mix_not_like_minded",
+    "7": "incivil_like_minded",
+    "8": "incivil_mix",
+    "9": "incivil_not_like_minded",
+}
+
+_PANEL_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
+
 
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
 
@@ -324,6 +343,11 @@ class SessionStartResponse(BaseModel):
 
 class SessionIntakeRequest(BaseModel):
     token: str
+    # Panel entry (NetQuest): hkey authenticates the token, g carries the
+    # randomised condition. Both required to mint an unknown token; ignored
+    # for tokens that already exist.
+    hkey: Optional[str] = None
+    g: Optional[str] = None
 
 
 class SessionIntakeResponse(BaseModel):
@@ -410,11 +434,45 @@ def _resolve_group_topic_template_id(experiment_config: Dict[str, Any], treatmen
 
 # ── HTTP endpoints ────────────────────────────────────────────────────────────
 
+async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str]):
+    """Mint a token row for a first-time panel (NetQuest) arrival.
+
+    Admits an unknown token only when the active experiment opts in
+    (`panel_entry: true` in its experimental config) and the link is
+    well-formed: hkey must equal sha256(token) — an integrity check against
+    truncated or mistyped URLs — and g must name one of the agreed
+    conditions. Returns the minted token row, or None if any check fails
+    (caller then 401s as usual).
+    """
+    if not (_experiment_id and hkey and g):
+        return None
+    if not _PANEL_TOKEN_RE.match(token):
+        return None
+    cfg = await config_repo.get_experiment_config(pool, _experiment_id)
+    experimental = (cfg or {}).get("experimental") or {}
+    if not experimental.get("panel_entry"):
+        return None
+    expected = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    if expected != hkey.strip().lower():
+        print(f"[PANEL_MINT] rejected token={token[:12]}... (bad hkey)")
+        return None
+    group = PANEL_GROUP_MAP.get((g or "").strip())
+    if not group or group not in (experimental.get("groups") or {}):
+        print(f"[PANEL_MINT] rejected token={token[:12]}... (bad g={g!r})")
+        return None
+    # Idempotent — a concurrent duplicate arrival is skipped, not duplicated.
+    await token_manager.seed_tokens(pool, _experiment_id, {group: [token]})
+    print(f"[PANEL_MINT] minted token={token} group={group} experiment={_experiment_id}")
+    return await token_repo.get_token_status(pool, token)
+
+
 @app.post("/session/intake", response_model=SessionIntakeResponse)
 async def preview_session_intake(request: SessionIntakeRequest):
     """Validate an unused token and return the topic survey shown before joining."""
     pool = _get_pool()
     token_row = await token_repo.get_token_status(pool, request.token)
+    if not token_row:
+        token_row = await _try_panel_mint(pool, request.token, request.hkey, request.g)
     if not token_row:
         raise HTTPException(status_code=401, detail="Invalid or already-used token")
 

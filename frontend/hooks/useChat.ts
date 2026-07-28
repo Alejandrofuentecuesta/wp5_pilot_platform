@@ -221,8 +221,11 @@ export function useChat() {
   }, [sessionId, newsArticle, initialMessageDone, isInitialNewsRead])
 
   // Start session — sends participant name to backend so agents can infer gender.
-  const previewSessionIntake = async (token: string): Promise<SessionIntakeResponse> => {
-    return apiPreviewSessionIntake(token)
+  const previewSessionIntake = async (
+    token: string,
+    panel?: { hkey?: string | null; g?: string | null },
+  ): Promise<SessionIntakeResponse> => {
+    return apiPreviewSessionIntake(token, panel)
   }
 
   const startSession = async (token: string, name: string, stance: ParticipantStance) => {

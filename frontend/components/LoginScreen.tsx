@@ -12,12 +12,19 @@ import type { ParticipantStance, SessionIntakeResponse } from "@/lib/types"
 export interface HandoffParams {
   token: string
   stance: ParticipantStance | null
+  // Panel (NetQuest) links: hkey authenticates the token, g carries the
+  // randomised condition. Absent on internally issued token links.
+  hkey?: string | null
+  g?: string | null
 }
 
 interface LoginScreenProps {
   initialUsername: string
   handoff: HandoffParams | null
-  onPreview: (token: string) => Promise<SessionIntakeResponse>
+  onPreview: (
+    token: string,
+    panel?: { hkey?: string | null; g?: string | null },
+  ) => Promise<SessionIntakeResponse>
   onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
   onRejoin: (sessionId: string) => void
 }
@@ -59,7 +66,7 @@ export default function LoginScreen({
       setStatus("invalid")
       return
     }
-    onPreview(handoff.token)
+    onPreview(handoff.token, { hkey: handoff.hkey, g: handoff.g })
       .then((resp) => {
         if (cancelled) return
         if (resp.rejoin_session_id) {

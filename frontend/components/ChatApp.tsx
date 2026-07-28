@@ -17,7 +17,11 @@ function parseHandoffParams(): HandoffParams | null {
   const s = (params.get("s") || "").trim()
   const stance: ParticipantStance | null =
     s === "1" ? "pro_topic" : s === "2" ? "anti_topic" : null
-  return { token, stance }
+  // Panel (NetQuest) links additionally carry hkey (token authentication)
+  // and g (randomised condition); passed through to the intake call.
+  const hkey = (params.get("hkey") || "").trim() || null
+  const g = (params.get("g") || "").trim() || null
+  return { token, stance, hkey, g }
 }
 
 export default function ChatApp() {

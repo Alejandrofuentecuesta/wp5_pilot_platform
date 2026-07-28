@@ -151,9 +151,10 @@ export default function LoginScreen({
 
   const flowSteps: [string, string][] = isHandoff
     ? [
-        ["1", "Escribir tu nombre"],
-        ["2", "Leer una noticia"],
-        ["3", "Entrar al chat"],
+        ["1", "Introduce tu nombre de pila"],
+        ["2", "Lee la noticia"],
+        ["3", "Escribe tu opinión y entra en el chat"],
+        ["4", "Debate con el resto de usuarios"],
       ]
     : [
         ["1", "Introducir token"],
@@ -213,12 +214,12 @@ export default function LoginScreen({
                 <h2 className="text-4xl font-semibold text-primary">Antes de empezar</h2>
                 <p className="mt-2 max-w-3xl text-base font-semibold leading-7 text-secondary">
                   {isHandoff
-                    ? "A continuación escribirás tu nombre, leerás una noticia y finalmente entrarás al chat."
+                    ? "A continuación introducirás tu nombre, leerás la noticia, escribirás tu opinión y debatirás con el resto de usuarios en el chat."
                     : "Después introducirás tu token, responderás a una pregunta breve, leerás una noticia y finalmente entrarás al chat."}
                 </p>
               </div>
 
-              <div className={`grid gap-3 ${isHandoff ? "md:grid-cols-3" : "md:grid-cols-4"}`}>
+              <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
                 {flowSteps.map(([number, label]) => (
                   <div key={number} className="flex items-center gap-3 rounded-xl border border-border bg-bg-feed px-4 py-3">
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-base font-semibold text-white">

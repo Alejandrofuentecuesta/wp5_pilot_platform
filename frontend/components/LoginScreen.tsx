@@ -149,19 +149,14 @@ export default function LoginScreen({
     }
   }
 
-  const flowSteps: [string, string][] = isHandoff
-    ? [
-        ["1", "Introduce tu nombre de pila"],
-        ["2", "Lee la noticia"],
-        ["3", "Escribe tu opinión y entra en el chat"],
-        ["4", "Debate con el resto de usuarios"],
-      ]
-    : [
-        ["1", "Introducir token"],
-        ["2", "Responder una pregunta"],
-        ["3", "Leer una noticia"],
-        ["4", "Entrar al chat"],
-      ]
+  // Participants always arrive with their token (panel hand-off), so the
+  // instructions show the same 4-step flow regardless of entry path.
+  const flowSteps: [string, string][] = [
+    ["1", "Introduce tu nombre de pila"],
+    ["2", "Lee la noticia"],
+    ["3", "Escribe tu opinión y entra en el chat"],
+    ["4", "Debate con el resto de usuarios"],
+  ]
 
   return (
     <div className="flex min-h-dvh items-center justify-center bg-bg-page px-4 py-8">
@@ -213,9 +208,7 @@ export default function LoginScreen({
               <div>
                 <h2 className="text-4xl font-semibold text-primary">Antes de empezar</h2>
                 <p className="mt-2 max-w-3xl text-base font-semibold leading-7 text-secondary">
-                  {isHandoff
-                    ? "A continuación introducirás tu nombre, leerás la noticia, escribirás tu opinión y debatirás con el resto de usuarios en el chat."
-                    : "Después introducirás tu token, responderás a una pregunta breve, leerás una noticia y finalmente entrarás al chat."}
+                  A continuación introducirás tu nombre, leerás la noticia, escribirás tu opinión y debatirás con el resto de usuarios en el chat.
                 </p>
               </div>
 

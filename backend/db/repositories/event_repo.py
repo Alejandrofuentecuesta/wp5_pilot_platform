@@ -17,21 +17,39 @@ async def insert_event(
 ) -> None:
     """Append an event row. Swallows exceptions so logging never crashes callers."""
     try:
-        async with pool.acquire() as conn:
-            await conn.execute(
-                """
-                INSERT INTO events(session_id, experiment_id, event_type, data)
-                VALUES($1, $2, $3, $4)
-                """,
-                session_id,
-                experiment_id,
-                event_type,
-                json.dumps(data),
-            )
+        await insert_event_strict(
+            pool,
+            session_id=session_id,
+            experiment_id=experiment_id,
+            event_type=event_type,
+            data=data,
+        )
     except Exception as exc:
         # Event logging must never crash the application.
         import sys
         print(f"[event_repo] Failed to insert event '{event_type}': {exc}", file=sys.stderr)
+
+
+async def insert_event_strict(
+    pool: asyncpg.Pool,
+    *,
+    session_id: str,
+    experiment_id: str,
+    event_type: str,
+    data: Any,
+) -> None:
+    """Append an event row and propagate failures to callers that need durability."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            INSERT INTO events(session_id, experiment_id, event_type, data)
+            VALUES($1, $2, $3, $4)
+            """,
+            session_id,
+            experiment_id,
+            event_type,
+            json.dumps(data),
+        )
 
 
 async def get_session_events(

@@ -8,6 +8,7 @@ import ChatRoom from "./ChatRoom"
 import IdleReminderBanner from "./IdleReminderBanner"
 import ThankYouScreen from "./ThankYouScreen"
 import QueueScreen from "./QueueScreen"
+import AgentRatingSurvey from "./AgentRatingSurvey"
 import type { ParticipantStance } from "@/lib/types"
 
 function parseHandoffParams(): HandoffParams | null {
@@ -33,6 +34,17 @@ export default function ChatApp() {
     setHandoff(parseHandoffParams())
     setBootChecked(true)
   }, [])
+
+  if (chat.agentRatingSurveyOpen) {
+    return (
+      <AgentRatingSurvey
+        agentNames={chat.sessionAgentNames}
+        submitting={chat.agentRatingsSubmitting}
+        error={chat.agentRatingsError}
+        onSubmit={chat.submitAgentRatings}
+      />
+    )
+  }
 
   if (chat.sessionEnded) {
     return <ThankYouScreen redirectUrl={chat.redirectUrl} />

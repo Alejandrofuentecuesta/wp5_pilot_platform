@@ -224,9 +224,7 @@ are UTC ISO-8601 unless noted. Files:
 `message`, `message_like`, `message_report`, `user_block`,
 `emotions_checkup_trigger`, `emotions_checkup_response`, `exit_survey`
 (open-ended reason the participant gave when leaving early; payload key
-`reason`), `agent_ratings` (final 1–5 impression score or explicit
-`no_opinion` response for each assigned agent; payload key `ratings`),
-`websocket_attach`, `websocket_detach`, …) and **client
+`reason`), `websocket_attach`, `websocket_detach`, …) and **client
 behavioural telemetry** (prefixed `client_`):
 
 | event_type | meaning | key payload fields |

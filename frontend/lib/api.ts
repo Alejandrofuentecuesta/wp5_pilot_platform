@@ -132,19 +132,3 @@ export async function reportMessage(
   if (!res.ok) throw new Error("Network error")
   return res.json()
 }
-
-export async function submitAgentRatings(
-  sessionId: string,
-  ratings: Array<{
-    agent_name: string
-    rating: number | null
-    no_opinion: boolean
-  }>,
-): Promise<void> {
-  const res = await fetch(`${API_BASE}/session/${sessionId}/agent-ratings`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ratings }),
-  })
-  if (!res.ok) throw new Error("Failed to save agent ratings")
-}

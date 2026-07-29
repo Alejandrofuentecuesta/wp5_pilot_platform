@@ -379,16 +379,6 @@ class ReportRequest(BaseModel):
     reason: Optional[str] = None
 
 
-class AgentRatingRequest(BaseModel):
-    agent_name: str
-    rating: Optional[Literal[1, 2, 3, 4, 5]] = None
-    no_opinion: bool = False
-
-
-class AgentRatingsRequest(BaseModel):
-    ratings: List[AgentRatingRequest]
-
-
 class ManualEvaluationRowRequest(BaseModel):
     message_id: str
     incivility: bool = False
@@ -691,67 +681,6 @@ async def ingest_telemetry(session_id: str, request: Request):
     return Response(status_code=204)
 
 
-@app.post("/session/{session_id}/agent-ratings", status_code=204)
-async def submit_agent_ratings(session_id: str, payload: AgentRatingsRequest):
-    """Persist the participant's final 1–5 impression rating for each agent."""
-    if not payload.ratings or len(payload.ratings) > 20:
-        raise HTTPException(status_code=422, detail="Provide between 1 and 20 ratings")
-
-    normalized = []
-    seen_names = set()
-    for item in payload.ratings:
-        name = item.agent_name.strip()
-        if not name or len(name) > 100:
-            raise HTTPException(status_code=422, detail="Invalid agent name")
-        if (item.rating is not None) == item.no_opinion:
-            raise HTTPException(
-                status_code=422,
-                detail="Choose either a 1–5 rating or no opinion",
-            )
-        if name in seen_names:
-            raise HTTPException(status_code=422, detail="Duplicate agent name")
-        seen_names.add(name)
-        normalized.append({
-            "agent_name": name,
-            "rating": item.rating,
-            "no_opinion": item.no_opinion,
-        })
-
-    pool = _get_pool()
-    try:
-        session_row = await session_repo.get_session(pool, session_id)
-    except Exception:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if not session_row:
-        raise HTTPException(status_code=404, detail="Session not found")
-
-    # A retry after a lost HTTP response must not create duplicate survey rows.
-    existing = await event_repo.get_session_events(pool, session_id, ["agent_ratings"])
-    if existing:
-        return Response(status_code=204)
-
-    await event_repo.insert_event_strict(
-        pool,
-        session_id=session_id,
-        experiment_id=session_row["experiment_id"],
-        event_type="agent_ratings",
-        data={
-            "ratings": normalized,
-            "scale_min": 1,
-            "scale_max": 5,
-            "scale_labels": {
-                "1": "very_bad",
-                "2": "bad",
-                "3": "neutral",
-                "4": "good",
-                "5": "very_good",
-                "no_opinion": "no_opinion_in_particular",
-            },
-        },
-    )
-    return Response(status_code=204)
-
-
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -814,11 +743,6 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             "event_type": "session_end",
             "reason": row.get("end_reason") or "ended",
             "redirect_url": redirect,
-            "agent_names": (
-                (row.get("simulation_config") or {}).get("agent_names", [])
-                if isinstance(row.get("simulation_config"), dict)
-                else []
-            ),
         })
         await websocket.close(code=1000, reason="session_ended")
         return True

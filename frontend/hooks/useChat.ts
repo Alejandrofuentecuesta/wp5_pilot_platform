@@ -9,7 +9,6 @@ import {
   joinQueue as apiJoinQueue,
   likeMessage as apiLikeMessage,
   reportMessage as apiReportMessage,
-  submitAgentRatings as apiSubmitAgentRatings,
   AtCapacityError,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
@@ -22,7 +21,6 @@ import type {
   BlockEvent,
   ParticipantStance,
   SessionIntakeResponse,
-  AgentRatingValue,
 } from "@/lib/types"
 
 export function useChat() {
@@ -45,10 +43,6 @@ export function useChat() {
   // Session end state
   const [sessionEnded, setSessionEnded] = useState(false)
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null)
-  const [sessionAgentNames, setSessionAgentNames] = useState<string[]>([])
-  const [agentRatingSurveyOpen, setAgentRatingSurveyOpen] = useState(false)
-  const [agentRatingsSubmitting, setAgentRatingsSubmitting] = useState(false)
-  const [agentRatingsError, setAgentRatingsError] = useState<string | null>(null)
 
   // Queue state (not persisted — refresh re-enters token which restores position)
   const [queueToken, setQueueToken] = useState<string | null>(null)
@@ -127,19 +121,10 @@ export function useChat() {
       setTypingCount((prev) => Math.max(0, prev - 1))
     } else if (obj && obj.event_type === "session_end") {
       const url = (obj as Record<string, unknown>).redirect_url as string | undefined
-      const eventAgentNames = Array.isArray(obj.agent_names)
-        ? obj.agent_names.filter((name): name is string => typeof name === "string" && name.trim().length > 0)
-        : []
-      const ratingNames = eventAgentNames.length > 0 ? eventAgentNames : sessionAgentNames
       setSessionEnded(true)
       setRedirectUrl(url || null)
-      if (sessionId && ratingNames.length > 0) {
-        setSessionAgentNames(ratingNames)
-        setAgentRatingSurveyOpen(true)
-      } else {
-        // No agents to rate: continue directly to the thank-you screen.
-        setSessionId(null)
-      }
+      // Clear session so user can't refresh back into the chatroom
+      setSessionId(null)
     } else if (obj && obj.event_type === "user_block") {
       const evt = obj as unknown as BlockEvent
       if (evt.blocked && typeof evt.blocked === "object") {
@@ -148,13 +133,6 @@ export function useChat() {
     } else if (obj && obj.event_type === "emotions_checkup_trigger") {
       setEmotionsCheckupOpen(true)
     } else if (obj && obj.event_type === "session_config") {
-      if (Array.isArray(obj.agent_names)) {
-        setSessionAgentNames(
-          obj.agent_names.filter(
-            (name): name is string => typeof name === "string" && name.trim().length > 0,
-          ),
-        )
-      }
       setBehaviorConfig({
         behaviorTrackingEnabled: Boolean(obj.behavior_tracking_enabled),
         idlePromptEnabled: Boolean(obj.idle_prompt_enabled),
@@ -172,7 +150,7 @@ export function useChat() {
         return [...prev, message]
       })
     }
-  }, [sessionAgentNames, sessionId, setBlockedSenders, setSessionId])
+  }, [setBlockedSenders, setSessionId])
 
   const handleSessionInvalid = useCallback(() => {
     setSessionId(null)
@@ -390,32 +368,6 @@ export function useChat() {
     setExitModalOpen(false)
   }, [send])
 
-  const submitAgentRatings = useCallback(async (ratings: Record<string, AgentRatingValue>) => {
-    if (!sessionId) return
-    setAgentRatingsSubmitting(true)
-    setAgentRatingsError(null)
-    try {
-      await apiSubmitAgentRatings(
-        sessionId,
-        sessionAgentNames.map((agentName) => {
-          const value = ratings[agentName]
-          return {
-            agent_name: agentName,
-            rating: typeof value === "number" ? value : null,
-            no_opinion: value === "no_opinion",
-          }
-        }),
-      )
-      setAgentRatingSurveyOpen(false)
-      // The ended session stays in local storage until the survey is safely persisted.
-      setSessionId(null)
-    } catch {
-      setAgentRatingsError("No se pudo guardar la valoración. Inténtalo de nuevo.")
-    } finally {
-      setAgentRatingsSubmitting(false)
-    }
-  }, [sessionAgentNames, sessionId, setSessionId])
-
   // Like message (with optimistic update + rollback)
   const toggleLike = async (msg: Message) => {
     if (!sessionId) return
@@ -606,11 +558,6 @@ export function useChat() {
     // Session end
     sessionEnded,
     redirectUrl,
-    sessionAgentNames,
-    agentRatingSurveyOpen,
-    agentRatingsSubmitting,
-    agentRatingsError,
-    submitAgentRatings,
     // Emotions Checkup
     emotionsCheckupOpen,
     submitEmotionsCheckup,

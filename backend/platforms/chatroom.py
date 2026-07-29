@@ -993,7 +993,6 @@ class SimulationSession:
             "event_type": "session_end",
             "reason": reason,
             "redirect_url": await self._build_return_url(reason),
-            "agent_names": self._agent_names,
         }
         try:
             r = redis_client.get_redis()
@@ -1213,7 +1212,6 @@ class SimulationSession:
                 "idle_prompt_enabled": self.idle_prompt_enabled,
                 "idle_prompt_seconds": self.idle_prompt_seconds,
                 "behavior_tracking_enabled": self.behavior_tracking_enabled,
-                "agent_names": self._agent_names,
                 # Server-authoritative: lets a rejoin from a fresh tab/device
                 # skip the initial-message news form.
                 "initial_message_done": self._first_user_message_received,

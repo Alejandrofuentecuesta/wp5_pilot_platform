@@ -426,6 +426,17 @@ def _config_row(label: str, value: str, *, mono: bool = True) -> str:
     )
 
 
+def _format_config_value(value: object) -> str:
+    """Format arbitrary JSON config values without assuming list item types."""
+    if isinstance(value, list):
+        if all(isinstance(item, str) for item in value):
+            return ", ".join(value)
+        return json.dumps(value, ensure_ascii=False)
+    if isinstance(value, dict):
+        return json.dumps(value, ensure_ascii=False)
+    return str(value)
+
+
 def _llm_row(role: str, sim: dict) -> str:
     prefix = role.lower()
     provider = sim.get(f"{prefix}_llm_provider", "?")
@@ -556,11 +567,9 @@ def render_session_start(ev: dict) -> str:
         parts.append('    <div class="config-section">')
         parts.append('      <h3>Other</h3>')
         for k, v in extra_sim.items():
-            display_v = ", ".join(v) if isinstance(v, list) else str(v)
-            parts.append(_config_row(k, display_v))
+            parts.append(_config_row(k, _format_config_value(v)))
         for k, v in extra_exp.items():
-            display_v = ", ".join(v) if isinstance(v, list) else str(v)
-            parts.append(_config_row(k, display_v))
+            parts.append(_config_row(k, _format_config_value(v)))
         parts.append('    </div>')
 
     parts.append('  </div>')  # close config-grid

@@ -65,17 +65,23 @@ export default function MessageFeed({
   onReport,
   onArticleClick,
 }: MessageFeedProps) {
-  const endRef = useRef<HTMLDivElement>(null)
+  const feedRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll on new messages
+  // Scroll only the feed. scrollIntoView() can also move the document viewport,
+  // leaving the fixed-height chat partially off-screen on short windows.
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages])
+    const feed = feedRef.current
+    if (!feed) return
+    feed.scrollTo({ top: feed.scrollHeight, behavior: "smooth" })
+  }, [messages.length])
 
   const dateGroups = groupByDate(messages)
 
   return (
-    <div className="flex-1 overflow-y-auto chat-scrollbar bg-bg-feed py-2">
+    <div
+      ref={feedRef}
+      className="min-h-0 flex-1 overflow-y-auto overscroll-contain chat-scrollbar bg-bg-feed py-2"
+    >
       {dateGroups.map((group) => (
         <Fragment key={group.dateKey}>
           <DateSeparator label={group.label} />
@@ -124,7 +130,6 @@ export default function MessageFeed({
           <TypingDots />
         </div>
       )}
-      <div ref={endRef} />
     </div>
   )
 }

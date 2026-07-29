@@ -225,4 +225,3 @@ def build_incivility_instruction_block(selected_dims: List[str]) -> str:
     lines.append("")
 
     return "\n".join(lines)
-

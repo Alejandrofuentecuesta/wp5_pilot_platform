@@ -1,0 +1,395 @@
+CAMBIOS RESPECTO A what-if-horizon/STAGElab (rama main)
+========================================================
+Fecha de comparación: 2026-04-27
+Repo base: https://github.com/what-if-horizon/STAGElab/tree/main
+Repo nuestro: https://github.com/Alejandrofuentecuesta/wp5_pilot_platform
+
+
+════════════════════════════════════════════════════════════════
+1. ARQUITECTURA DEL PIPELINE DE AGENTES (STAGE)
+════════════════════════════════════════════════════════════════
+
+1.1 Nuevo campo de ideología — eliminación de "stance"
+------------------------------------------------------
+- El campo `stance` (agree/disagree/neutral) se eliminó completamente de
+  todo el codebase (backend + frontend).
+- Se consolida en un único campo `ideology`:
+    left   = pro-medida (pro-inmigración / pro-acción climática)
+    right  = anti-medida
+    center = escéptico / neutral
+- Afecta: orchestrator.py, director.py, performer.py, chatroom.py,
+  admin-types.ts, StepTreatments.tsx, agent-pool-presets.ts.
+
+1.2 Nuevas posturas cualificadas del participante
+-------------------------------------------------
+- Añadidas dos nuevas opciones de self-report del participante:
+    qualified_favor  — a favor de la dirección general pero con reservas
+                       sobre la medida concreta
+    qualified_against — en contra de la medida pero sin compartir la
+                        visión ideológica del lado opuesto
+- El director las trata como "favor"/"against" en la selección de agentes
+  pero prefiere performers con matices más cercanos al frame del
+  participante.
+- Afecta: main.py, orchestrator.py, director.py, types.ts,
+  NewsArticleModal.tsx, LoginScreen.tsx.
+
+1.3 Selector secundario de topic-stance en el Director
+------------------------------------------------------
+- El Director infiere un segundo nivel de postura del participante:
+    pro_topic  — apoya la causa subyacente (ej. pro-clima en general)
+    anti_topic — se opone a la causa subyacente
+    unclear    — no se puede determinar
+- Esto permite elegir performers que reflejen la complejidad real del
+  participante (ej. pro-clima pero anti esta medida concreta).
+- Solo afecta a la selección de performers; no redefine like-minded.
+- Afecta: director_action_prompt.md.
+
+1.4 Pipeline de clasificación mejorado
+---------------------------------------
+- El clasificador ahora recibe tres inputs adicionales:
+    · agent_ideology (left/right/center) — no tiene que inferir el lado
+      del agente desde cero
+    · addresses_participant (yes/no) — detecta si el mensaje va dirigido
+      al participante o a otro agente, para no confundir hostilidad
+      hacia un oponente con hostilidad hacia el participante
+    · recent_context — últimos 3 mensajes del chat para entender el
+      contexto del ataque
+- Corrección del bug donde mensajes uncivil dirigidos a agentes del lado
+  opuesto se marcaban erróneamente como stance mismatch.
+- Afecta: classifier.py, orchestrator.py,
+  prompts/system/classifier_prompt.md, prompts/user/classifier_prompt.md.
+
+1.5 Clasificación fuera del bucle de retry
+-------------------------------------------
+- Antes: el clasificador se llamaba en CADA intento del performer,
+  incluyendo mensajes que luego se descartaban por stance mismatch.
+- Ahora: el stance guard (pre-clasificación) solo se ejecuta cuando el
+  agente tiene fixed traits definidos. La clasificación final se hace
+  UNA sola vez sobre el mensaje aprobado, fuera del bucle de retry.
+- Elimina llamadas LLM innecesarias y tokens desperdiciados.
+- Afecta: orchestrator.py.
+
+1.6 Mejoras en el prompt del Performer
+---------------------------------------
+- Reglas de estilo condensadas y reescritas (más directas, menos
+  redundantes): 12 reglas → 7 más claras.
+- Añadido: "Hard stop after the message", "2-4 sentence mode",
+  "Be creative in phrasing", "Vary the shape".
+- Afecta: performer_prompt.md.
+
+1.7 Mejoras en el prompt del Director (Action)
+-----------------------------------------------
+- `message` ahora se describe como "last resort, not a default action".
+- "Non-targeted room messages are exceptional" — lenguaje más prohibitivo
+  contra openers genéricos de sala.
+- Instrucciones más explícitas sobre mensajes con target: nombrar al
+  oponente y decir explícitamente a quién no validar.
+- Anchor hostile support: hostilidad uncivil debe apuntar a un objetivo
+  concreto, no flotar vagamente.
+- Variety de longitud de mensajes: no defaultear siempre a "short".
+- Afecta: director_action_prompt.md.
+
+1.8 Mejoras en el prompt del Director (Update)
+-----------------------------------------------
+- El perfil acumulado del agente describe ideology=left/right en vez de
+  stance=agree/disagree.
+- Afecta: director_update_prompt.md.
+
+
+════════════════════════════════════════════════════════════════
+2. SELECCIÓN DE AGENTES DEL POOL
+════════════════════════════════════════════════════════════════
+
+2.1 Algoritmo de selección por cuotas
+--------------------------------------
+- El pool de agentes se selecciona satisfaciendo cuotas hard de
+  ideología x incivility:
+    · like_uncivil, opposite_uncivil (cuotas duras primero)
+    · like_non_uncivil, opposite_non_uncivil
+    · fallback si el pool no puede satisfacer la estructura exacta
+- Basado en LIKEMINDED_TARGET e INCIVILITY_TARGET de
+  internal_validity_criteria.
+- Afecta: chatroom.py (_select_pool_agents, _take_ranked_agents,
+  _participant_stance_preferences, _rank_pool_agents).
+
+2.2 Actualización dinámica de stance del participante
+------------------------------------------------------
+- Cuando el participante actualiza su self-report mid-session (en modo
+  pool), el roster de agentes se re-selecciona automáticamente.
+- Afecta: chatroom.py (set_participant_stance_hint, _apply_agent_roster).
+
+2.3 Presets de agentes para clima e inmigración
+-----------------------------------------------
+- Dos pools completos predefinidos: CLIMATE_CHANGE_AGENT_POOL e
+  IMMIGRATION_AGENT_POOL.
+- 5 agentes por lado (civil, civil, moderate, uncivil, uncivil).
+- Personas actualizadas para reflejar matices: agentes civiles reconocen
+  imperfecciones de la medida; agentes del lado opuesto aceptan el
+  problema pero cuestionan la solución.
+- Afecta: agent-pool-presets.ts.
+
+
+════════════════════════════════════════════════════════════════
+3. HUMANIZADOR DE MENSAJES
+════════════════════════════════════════════════════════════════
+
+- Nuevo módulo: backend/utils/humanizer.py
+- Post-procesado de mensajes de agentes para simular escritura informal
+  en español:
+    · Elimina hashtags (#topic)
+    · Elimina puntuación invertida (¿ ¡)
+    · Contracciones informales: "que"→"q", "también"→"tb", "porque"→"xq"
+    · Eliminación aleatoria de acentos
+    · Espaciado irregular después de comas
+    · Cap de emojis (máximo configurable, default 1)
+- Bug fix: el regex de emojis usaba `+` haciendo que clusters (😂😂😂)
+  contasen como 1. Corregido para contar cada codepoint por separado.
+- Configurable por agente (humanize_per_agent) y globalmente.
+- Afecta: humanizer.py, orchestrator.py.
+
+
+════════════════════════════════════════════════════════════════
+4. CLIENTE BSC (GEMMA 4 30B)
+════════════════════════════════════════════════════════════════
+
+- Nuevo provider: backend/utils/llm/provider/llm_bsc.py
+- Cliente OpenAI-compatible para la API del BSC (incivility endpoint).
+- Soporte para múltiples base URLs con fallback automático.
+- Resolución de API key desde env var o fichero compartido
+  (/etc/incivility-api/api_keys.json).
+- Versionado del modelo (v1=Gemma 4 30B, v2=otro).
+- Temperature floor automático: BSC v1 sube temperatura mínimo a 1.1
+  para evitar respuestas planas y repetitivas de Gemma.
+- Retry con fallback a endpoints alternativos en errores transitorios.
+- Afecta: llm_bsc.py, llm_manager.py.
+
+
+════════════════════════════════════════════════════════════════
+5. LLM MANAGER — MEJORAS GENERALES
+════════════════════════════════════════════════════════════════
+
+- Timeout de 60 segundos en generate_response (asyncio.wait_for).
+  Evita que sesiones queden bloqueadas si un proveedor se cuelga.
+- Soporte para claves de configuración por rol:
+    director_llm_provider, director_llm_model, director_temperature
+    performer_llm_provider, performer_llm_model, performer_temperature
+    (y equivalentes para moderator, classifier)
+- Temperature floor para BSC v1 (_tune_bsc_generation_params).
+- Afecta: llm_manager.py.
+
+
+════════════════════════════════════════════════════════════════
+6. BACKEND — NUEVOS ENDPOINTS Y MEJORAS
+════════════════════════════════════════════════════════════════
+
+6.1 Nuevos endpoints de admin
+------------------------------
+- POST /admin/session/{session_id}/stop
+    Para una sesión individual desde el dashboard sin tocar el resto.
+- GET  /admin/session/{session_id}/messages
+    Mensajes de una sesión con clasificaciones para anotación manual.
+- GET  /admin/session/{session_id}/export
+    Bundle JSON completo de una sesión (mensajes + eventos + config).
+- PUT  /admin/session/{session_id}/evaluation
+    Guardar evaluación manual de mensajes de una sesión.
+- GET  /admin/experiment/{experiment_id}/compliance
+    Estadísticas de fidelidad de tratamiento en tiempo real
+    (% incivility, % like-minded por grupo).
+- GET  /admin/evaluations/summary-csv/{experiment_id}
+    CSV con una fila por sesión: conteos y % de incivility, hate speech,
+    like-minded, compliance vs targets. Los targets ahora se leen
+    directamente de internal_validity_criteria en la config (no del
+    nombre del grupo).
+- GET  /admin/sessions/csv/{experiment_id}
+    CSV plano de todos los mensajes de todas las sesiones.
+- GET  /admin/tokens/{experiment_id}
+    Tokens del experimento como JSON (para automatización).
+- POST /admin/experiment/{experiment_id}/clone
+    Clonar un experimento existente con nuevo ID.
+- PUT  /admin/config/{experiment_id}
+    Editar config de un experimento existente.
+- GET  /admin/provider-keys / POST /admin/provider-keys
+    Gestión de API keys de proveedores LLM desde el admin panel
+    (sin exponer el valor, solo estado configurado/no).
+- GET  /admin/prompt-defaults
+    Devuelve los templates de prompts por defecto para edición desde UI.
+
+6.2 Nuevos endpoints de sesión
+--------------------------------
+- POST /session/{session_id}/participant-stance
+    Actualizar la postura del participante mid-session.
+- GET  /session/{session_id}/messages-csv
+    CSV de anotación de mensajes de una sesión individual.
+
+6.3 Mejoras en main.py
+------------------------
+- _parse_iso_datetime(): helper centralizado para parsear fechas ISO
+  con sufijo Z (sustituye múltiples .replace("Z", "+00:00") inline).
+- _write_env_var(): usa dotenv.set_key para escritura atómica del .env
+  (sustituye manipulación manual con regex que podía corromper el fichero).
+- Compliance calculation: lee INCIVILITY_TARGET y LIKEMINDED_TARGET
+  directamente de la config del experimento en vez de derivarlos del
+  nombre del grupo (frágil con nombres no estándar).
+- Afecta: main.py.
+
+
+════════════════════════════════════════════════════════════════
+7. BASE DE DATOS
+════════════════════════════════════════════════════════════════
+
+- Nueva tabla: manual_message_evaluations
+    Almacena anotaciones manuales por mensaje: incivility, hate_speech,
+    threats_to_dem_freedom, impoliteness, alignment, human_like, other.
+- Nuevas columnas en messages: is_incivil, is_like_minded,
+  inferred_participant_stance, classification_rationale,
+  stance_confidence — clasificaciones automáticas del classifier.
+- Nuevas columnas en sessions: user_name, participant_stance,
+  random_seed, simulation_config, experimental_config.
+- Afecta: schema.sql, message_repo.py, session_repo.py.
+
+
+════════════════════════════════════════════════════════════════
+8. FRONTEND — ADMIN PANEL
+════════════════════════════════════════════════════════════════
+
+8.1 Dashboard
+--------------
+- Pestaña Sessions: tabla de sesiones activas y completadas con filtros
+  por status y grupo, export CSV, botón Stop por sesión activa.
+- Pestaña Compliance: estadísticas de fidelidad de tratamiento en
+  tiempo real (% incivility y % like-minded por grupo vs targets).
+- Pestaña Evaluate: interfaz de anotación manual mensaje a mensaje
+  (incivility, hate speech, impoliteness, threats to democracy,
+  alignment, human-like, campo libre).
+- Pestaña Events: log de eventos en tiempo real con filtros y export TSV.
+- Gestión de API keys de proveedores LLM (muestra si están configuradas,
+  permite actualizarlas sin reiniciar Docker).
+- Botón "Copy" individual por token en la vista de tokens.
+- Botón Stop por sesión activa (con confirmación).
+
+8.2 Wizard de configuración
+-----------------------------
+- Step LLM: configuración de proveedor/modelo por rol (director,
+  performer, moderator, classifier) con test de conexión en vivo.
+- Step Treatments: selector de story template que aplica a todos los
+  grupos con news_article. Grupos por ideología (left/right) en vez de
+  por stance. Visualización de pool de agentes con badge de ideología e
+  incivility.
+- Step Session: modo pool de agentes con explicación de cómo funciona
+  la selección por cuotas.
+- Preset 3x3: genera automáticamente 9 grupos (incivility x like-minded)
+  con los targets de validez correctos.
+- Presets de artículos: inmigración y cambio climático con resumen para
+  agentes incluido.
+
+8.3 Nuevas opciones de stance del participante
+-----------------------------------------------
+- qualified_favor: "In favor, but with important reservations"
+- qualified_against: "Against, but not for the usual opposite-side reasons"
+- Visible en el dropdown de NewsArticleModal y reflejado en LoginScreen.
+
+8.4 Otros
+----------
+- EvaluateTab: componente completo de anotación manual.
+- Guías HTML para investigadores en español e inglés.
+- Scripts de inicio para Windows, macOS y Linux.
+
+
+════════════════════════════════════════════════════════════════
+9. DEFINICIONES DE INCIVILITY (treatment-presets.ts)
+════════════════════════════════════════════════════════════════
+
+- Framework detallado de 4 dimensiones:
+    · Impoliteness (insultos, mockery, vulgarity)
+    · Hate speech and stereotyping (slurs, dehumanización)
+    · Threats to democratic freedoms (lenguaje pro-autoritario)
+    · (implícita) Tono y estilo
+- Mapeado por nivel de agente:
+    civil:   solo rudeness leve / sarcasmo ocasional
+    medium:  sarcasmo, mockery, name-calling; generalizaciones de grupo
+             indirectas; framing anti-democrático leve
+    high:    insultos fuertes obligatorios, slurs frecuentes, framing
+             pro-autoritario marcado; estilo breve y confrontacional
+- Ejemplos en español para cada dimensión.
+- Afecta: treatment-presets.ts, INCIVILITY_FRAMEWORK_3X3.
+
+
+════════════════════════════════════════════════════════════════
+10. SCRIPTS E INFRAESTRUCTURA
+════════════════════════════════════════════════════════════════
+
+- Scripts de inicio multiplataforma:
+    scripts/start-linux.sh     — instala dependencias, construye Docker,
+                                 abre el navegador automáticamente
+    scripts/start-macos.command — equivalente para macOS
+    scripts/start-windows.ps1  — PowerShell para Windows
+    scripts/start-windows.bat  — wrapper .bat para ejecutar el PS1
+- Icono de escritorio Linux (.desktop).
+- docker-compose.yml: ajustes de healthcheck y perfiles.
+- .env.example: documentación de todas las variables disponibles
+  incluyendo los nuevos providers y opciones de humanizador.
+
+
+════════════════════════════════════════════════════════════════
+11. UTILIDADES
+════════════════════════════════════════════════════════════════
+
+- session_csv_exporter.py: exporta mensajes de una sesión a CSV local
+  al terminar la sesión (backup en disco además de la DB).
+- log_viewer.py: genera HTML de reporte de sesión desde el log.
+- session_manager.py: gestión de sesiones en memoria con lookup
+  threadsafe y soporte para reconstrucción tras crash.
+- Logger mejorado: fire-and-forget async, pipeline_id_var para
+  tagging de pipelines paralelas, drain al cerrar sesión.
+
+
+════════════════════════════════════════════════════════════════
+12. DOCUMENTACIÓN
+════════════════════════════════════════════════════════════════
+
+- CHANGELOG.md: historial completo de versiones.
+- docs/PIPELINE-README.md + .html: documentación técnica del pipeline.
+- docs/pipeline-diagram.svg: diagrama visual del pipeline STAGE.
+- docs/BSC-INCIVILITY-API.md: guía de integración con la API del BSC.
+- frontend/public/experiment-config-guide.html: guía en inglés para
+  investigadores sobre cómo configurar experimentos.
+- frontend/public/guia-experimentos.html: guía en español.
+- assets/news_climate_change.txt, assets/news_immigration.txt:
+  artículos de noticia de referencia para los experimentos.
+
+
+════════════════════════════════════════════════════════════════
+RESUMEN DE ARCHIVOS NUEVOS (no existían en STAGElab)
+════════════════════════════════════════════════════════════════
+
+backend:
+  agents/STAGE/classifier.py
+  agents/STAGE/prompts/system/classifier_prompt.md
+  agents/STAGE/prompts/user/classifier_prompt.md
+  utils/humanizer.py
+  utils/llm/provider/llm_bsc.py
+  utils/session_csv_exporter.py
+  tests/test_classifier.py
+  tests/test_llm_bsc.py
+  tests/test_message_repo.py
+  tests/test_session_csv_exporter.py
+  tests/test_session_repo.py (ampliado)
+
+frontend:
+  components/admin/EvaluateTab.tsx
+  components/NewsArticleModal.tsx
+  lib/agent-pool-presets.ts
+  lib/agent-name-options.ts
+  lib/news-story-options.ts
+  lib/treatment-presets.ts
+
+docs/scripts:
+  docs/PIPELINE-README.md + .html + pipeline-diagram.svg
+  docs/BSC-INCIVILITY-API.md
+  scripts/start-linux.sh, start-macos.command,
+         start-windows.ps1, start-windows.bat
+  scripts/WP5-Platform.desktop
+  frontend/public/experiment-config-guide.html
+  frontend/public/guia-experimentos.html
+  assets/news_climate_change.txt
+  assets/news_immigration.txt

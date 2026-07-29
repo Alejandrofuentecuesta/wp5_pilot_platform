@@ -2,6 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 
+const MAX_CUSTOM_EMOTION_LENGTH = 300
+
 interface EmotionsCheckupModalProps {
   onSubmit: (emotion: string, temptedToReport: boolean, reportedUsers?: string[]) => void
   participants: string[]
@@ -102,14 +104,17 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
                 <label className="block text-xs font-semibold text-secondary">
                   Especifica otra emoción:
                 </label>
-                <input
-                  type="text"
+                <textarea
                   value={customEmotion}
                   onChange={(e) => setCustomEmotion(e.target.value)}
                   placeholder="¿Cómo te sientes?"
-                  className="w-full px-3 py-2 text-sm rounded-xl border border-border focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none"
-                  maxLength={50}
+                  rows={3}
+                  className="w-full min-h-24 resize-y px-3 py-2 text-sm leading-relaxed rounded-xl border border-border focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none"
+                  maxLength={MAX_CUSTOM_EMOTION_LENGTH}
                 />
+                <p className="text-right text-xs text-secondary" aria-live="polite">
+                  {customEmotion.length}/{MAX_CUSTOM_EMOTION_LENGTH} caracteres
+                </p>
               </div>
             )}
           </div>

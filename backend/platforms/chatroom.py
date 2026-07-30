@@ -24,9 +24,9 @@ from cache import redis_client
 REJOIN_WINDOW_MINUTES = int(os.getenv("REJOIN_WINDOW_MINUTES", "60"))
 
 _REPLACEMENT_AGENT_NAMES = [
-    "Alba", "Inés", "Nerea", "Marina", "Raúl", "Sergio", "Irene", "Hugo",
-    "Marta", "Álex", "Noelia", "Iván", "Clara", "Rubén", "Aitana", "Óscar",
-    "Vega", "Adrián", "Lola", "Bruno", "Eva", "Mario", "Sara", "Daniel",
+    "Raúl", "Alba", "Sergio", "Inés", "Hugo", "Nerea", "Iván", "Marina",
+    "Rubén", "Irene", "Óscar", "Marta", "Adrián", "Noelia", "Bruno", "Clara",
+    "Mario", "Aitana", "Daniel", "Vega", "Pablo", "Lola", "Javier", "Eva",
 ]
 
 

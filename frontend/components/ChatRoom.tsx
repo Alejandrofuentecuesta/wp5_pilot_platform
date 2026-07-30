@@ -81,7 +81,7 @@ export default function ChatRoom({
   exitSession,
 }: ChatRoomProps) {
   return (
-    <div className="flex flex-col h-dvh max-w-3xl mx-auto bg-bg-surface shadow-lg relative">
+    <div className="fixed inset-0 mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden overscroll-none bg-bg-surface shadow-lg">
       <ChatHeader
         participantCount={participants.length}
         isConnected={isConnected}

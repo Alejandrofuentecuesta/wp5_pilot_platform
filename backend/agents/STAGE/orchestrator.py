@@ -54,6 +54,10 @@ DEFAULT_UNCIVIL_LENGTH_RANGE = (2, 45)
 DEFAULT_CIVIL_LENGTH_RANGE = (18, 95)
 PARTICIPANT_TARGET_REPLY_PROBABILITY = 0.75
 MAX_INTERVENING_AGENT_MESSAGES_FOR_REPLY = 3
+REPLY_TARGET_NAME_PROBABILITY = 0.20
+MAX_REPLIES_PER_AGENT_MESSAGE = 2
+MAX_REPLIES_PER_PARTICIPANT_MESSAGE = 3
+MAX_CONSECUTIVE_REPLIES_TO_SAME_SENDER = 2
 
 
 @dataclass
@@ -1260,12 +1264,69 @@ class Orchestrator:
         for message in reversed(self.state.messages):
             if message.sender == agent_name or message.sender == "[news]":
                 continue
+            if self._reply_target_is_overused(message):
+                continue
             return message
         return None
+
+    def _reply_count_for_message(self, target_message_id: str) -> int:
+        return sum(
+            1
+            for message in self.state.messages
+            if message.reply_to == target_message_id
+            and message.sender != self.state.user_name
+        )
+
+    def _trailing_reply_target_streak(self) -> tuple[Optional[str], int]:
+        """Return the sender targeted by the current run of agent replies."""
+        agent_names = {
+            agent.name
+            for agent in self.state.agents
+            if agent.name != self.state.user_name
+        }
+        messages_by_id = {
+            message.message_id: message
+            for message in self.state.messages
+        }
+        target_sender = None
+        count = 0
+        for message in reversed(self.state.messages):
+            if message.sender not in agent_names or not message.reply_to:
+                break
+            target = messages_by_id.get(message.reply_to)
+            if target is None:
+                break
+            if target_sender is None:
+                target_sender = target.sender
+            elif target.sender != target_sender:
+                break
+            count += 1
+        return target_sender, count
+
+    def _reply_target_is_overused(self, target_message: Message) -> bool:
+        """Prevent several agents from piling onto one message or person."""
+        per_message_limit = (
+            MAX_REPLIES_PER_PARTICIPANT_MESSAGE
+            if target_message.sender == self.state.user_name
+            else MAX_REPLIES_PER_AGENT_MESSAGE
+        )
+        if self._reply_count_for_message(target_message.message_id) >= per_message_limit:
+            return True
+
+        trailing_sender, trailing_count = self._trailing_reply_target_streak()
+        return (
+            trailing_count >= MAX_CONSECUTIVE_REPLIES_TO_SAME_SENDER
+            and trailing_sender == target_message.sender
+        )
 
     def _can_directly_target_message(self, actor_name: str, message: Message) -> bool:
         """Return True when a message is a coherent direct target for this actor."""
         if not message or message.sender in {actor_name, "[news]"}:
+            return False
+        if (
+            message.sender != self.state.user_name
+            and self._reply_target_is_overused(message)
+        ):
             return False
         if message.sender == self.state.user_name:
             return True
@@ -1367,7 +1428,33 @@ class Orchestrator:
             if not unicodedata.combining(char)
         )
 
-    def _strip_vocative_prefix(self, text: str) -> str:
+    def _should_keep_reply_target_name(
+        self,
+        agent_name: str,
+        target_message: Message,
+    ) -> bool:
+        """Keep a reply's target-name vocative only occasionally."""
+        probability = float(
+            self.state.simulation_config.get(
+                "reply_target_name_probability",
+                REPLY_TARGET_NAME_PROBABILITY,
+            )
+        )
+        probability = max(0.0, min(probability, 1.0))
+        digest = hashlib.sha256(
+            (
+                f"{self.state.session_id}:reply-target-name:"
+                f"{agent_name}:{target_message.message_id}"
+            ).encode("utf-8")
+        ).digest()
+        sample = int.from_bytes(digest[:8], "big") / float(2**64)
+        return sample < probability
+
+    def _strip_vocative_prefix(
+        self,
+        text: str,
+        preserve_name: Optional[str] = None,
+    ) -> str:
         if not text:
             return text
         names = list(self._name_map.keys())
@@ -1378,6 +1465,12 @@ class Orchestrator:
 
         normalized_text = self._strip_accents(text)
         for name in names:
+            if (
+                preserve_name
+                and self._strip_accents(name).casefold()
+                == self._strip_accents(preserve_name).casefold()
+            ):
+                continue
             normalized_name = re.escape(self._strip_accents(name))
             pattern = (
                 r"^([\u00bf\u00a1]*)\s*@?"
@@ -1921,6 +2014,62 @@ class Orchestrator:
                     "directive": action_data["performer_instruction"].get("directive", "Stay true to your fixed stance and character."),
                 }
 
+        # Do not let multiple agents keep quote-replying to the same message or
+        # pile onto the same person. A participant's explicit reply/mention to
+        # a particular agent remains exempt so the addressed agent can answer.
+        if action_type == "reply" and target_message_id and not addressed_agent:
+            overused_target = next(
+                (
+                    message
+                    for message in self.state.messages
+                    if message.message_id == target_message_id
+                ),
+                None,
+            )
+            if overused_target and self._reply_target_is_overused(overused_target):
+                replacement_target = self._find_best_direct_target_message(
+                    agent_name,
+                    recent_action,
+                    exclude_senders={overused_target.sender},
+                    exclude_message_ids={overused_target.message_id},
+                )
+                if replacement_target is not None:
+                    self.logger.log_error(
+                        "director_overused_reply_target",
+                        (
+                            f"Redirected '{agent_name}' away from overused reply target "
+                            f"'{overused_target.sender}' to '{replacement_target.sender}'"
+                        ),
+                    )
+                    target_message_id = replacement_target.message_id
+                    action_data["target_message_id"] = target_message_id
+                    target_user = None
+                    action_data["target_user"] = None
+                    action_data["performer_instruction"] = {
+                        "objective": f"Respond to {replacement_target.sender}'s recent point.",
+                        "motivation": "The previous person has already received enough direct replies; keep the discussion distributed.",
+                        "directive": "Reply naturally to the new quoted message and stay true to your fixed stance and character.",
+                    }
+                else:
+                    self.logger.log_error(
+                        "director_overused_reply_target",
+                        (
+                            f"Converted '{agent_name}' reply to overused target "
+                            f"'{overused_target.sender}' into a general message"
+                        ),
+                    )
+                    action_type = "message"
+                    action_data["action_type"] = "message"
+                    target_message_id = None
+                    action_data["target_message_id"] = None
+                    target_user = None
+                    action_data["target_user"] = None
+                    action_data["performer_instruction"] = {
+                        "objective": "Move the discussion forward without piling onto the previous target.",
+                        "motivation": "That person has already received enough direct replies.",
+                        "directive": "Make a natural contribution to the current topic without naming or quoting that person.",
+                    }
+
         cross_cell_target = None
 
         # 3c. Prevent direct infighting between agents in the same alignment cell.
@@ -2431,7 +2580,17 @@ class Orchestrator:
                 content = performer_raw.strip()
 
             candidate_content = deanonymize_text(content, self._reverse_map)
-            candidate_content = self._strip_vocative_prefix(candidate_content)
+            preserved_reply_name = None
+            if (
+                action_type == "reply"
+                and target_message
+                and self._should_keep_reply_target_name(agent_name, target_message)
+            ):
+                preserved_reply_name = target_message.sender
+            candidate_content = self._strip_vocative_prefix(
+                candidate_content,
+                preserve_name=preserved_reply_name,
+            )
 
             # Post-process ellipsis: replace with a space at the end of the message (which gets stripped), and a dot in the middle.
             candidate_content = re.sub(r"(?:\.{3,}|…+)\s*$", " ", candidate_content)

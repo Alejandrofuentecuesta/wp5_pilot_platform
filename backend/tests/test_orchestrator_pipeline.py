@@ -1367,6 +1367,58 @@ class TestRoomWideOpeners:
         )
 
 
+class TestReplyTargetPileOnLimit:
+
+    def test_agent_message_is_overused_after_two_direct_replies(self):
+        state = _make_state(
+            agents=[
+                Agent(name="Alice"),
+                Agent(name="Bob"),
+                Agent(name="Carol"),
+                Agent(name="David"),
+            ],
+        )
+        target = Message.create(sender="Bob", content="Mi argumento")
+        state.add_message(target)
+        state.add_message(Message.create(sender="Carol", content="Respuesta 1", reply_to=target.message_id))
+        state.add_message(Message.create(sender="David", content="Respuesta 2", reply_to=target.message_id))
+        orch, _ = _make_orchestrator(state=state)
+
+        assert orch._reply_target_is_overused(target)
+        assert not orch._can_directly_target_message("Alice", target)
+
+    def test_two_replies_to_same_sender_also_exclude_their_other_messages(self):
+        state = _make_state(
+            agents=[
+                Agent(name="Alice"),
+                Agent(name="Bob"),
+                Agent(name="Carol"),
+                Agent(name="David"),
+            ],
+        )
+        older_target = Message.create(sender="Bob", content="Primer argumento")
+        latest_target = Message.create(sender="Bob", content="Segundo argumento")
+        state.add_message(older_target)
+        state.add_message(latest_target)
+        state.add_message(Message.create(sender="Carol", content="Respuesta 1", reply_to=latest_target.message_id))
+        state.add_message(Message.create(sender="David", content="Respuesta 2", reply_to=latest_target.message_id))
+        orch, _ = _make_orchestrator(state=state)
+
+        assert orch._reply_target_is_overused(older_target)
+        assert not orch._can_directly_target_message("Alice", older_target)
+
+    def test_participant_message_allows_three_replies_unless_sender_streak_is_reached(self):
+        state = _make_state(
+            agents=[Agent(name="Alice"), Agent(name="Bob"), Agent(name="Carol")],
+        )
+        participant_message = Message.create(sender="participant", content="Mi opinión")
+        state.add_message(participant_message)
+        state.add_message(Message.create(sender="Bob", content="Respuesta 1", reply_to=participant_message.message_id))
+        orch, _ = _make_orchestrator(state=state)
+
+        assert not orch._reply_target_is_overused(participant_message)
+
+
 class TestFixedStanceGuard:
 
     def test_expected_like_minded_requires_same_alignment_cell(self):
@@ -1985,6 +2037,25 @@ class TestUpgradeAndStripping:
         assert orch._strip_vocative_prefix("¿Lucía: dónde vas?") == "¿Dónde vas?"
         
         assert orch._strip_vocative_prefix("Charlie, hello") == "Charlie, hello"
+
+    def test_reply_target_name_can_be_preserved_or_removed_by_configuration(self):
+        state = _make_state()
+        orch, _ = _make_orchestrator(state=state)
+        target = Message.create(sender="Bob", content="What do you think?")
+
+        state.simulation_config["reply_target_name_probability"] = 0
+        assert not orch._should_keep_reply_target_name("Alice", target)
+        assert orch._strip_vocative_prefix("Bob, no estoy de acuerdo") == "No estoy de acuerdo"
+
+        state.simulation_config["reply_target_name_probability"] = 1
+        assert orch._should_keep_reply_target_name("Alice", target)
+        assert (
+            orch._strip_vocative_prefix(
+                "Bob, no estoy de acuerdo",
+                preserve_name=target.sender,
+            )
+            == "Bob, no estoy de acuerdo"
+        )
 
 
 class TestDowngradePrecedingTarget:

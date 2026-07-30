@@ -783,7 +783,9 @@ class TestExecuteTurnLike:
 class TestExecuteTurnReply:
 
     def test_participant_quote_reply_targets_original_agent(self):
-        state = _make_state()
+        state = _make_state(
+            simulation_config={"participant_target_reply_probability": 1.0},
+        )
         agent_message = Message.create(sender="Alice", content="Mi opinión")
         state.add_message(agent_message)
         participant_reply = Message.create(
@@ -803,9 +805,79 @@ class TestExecuteTurnReply:
         assert target == "Alice"
         assert pending_message is participant_reply
 
+    def test_target_remains_pending_after_another_agent_intervenes(self):
+        state = _make_state(
+            simulation_config={"participant_target_reply_probability": 1.0},
+        )
+        agent_message = Message.create(sender="Alice", content="Mi opinión")
+        state.add_message(agent_message)
+        participant_reply = Message.create(
+            sender="participant",
+            content="Respóndeme a esto",
+            reply_to=agent_message.message_id,
+        )
+        state.add_message(participant_reply)
+        state.add_message(Message.create(sender="Bob", content="Mensaje que estaba en curso"))
+        orch, _ = _make_orchestrator(state=state)
+
+        target, pending_message = orch._pending_participant_target(
+            state.messages,
+            {"Alice", "Bob"},
+        )
+
+        assert target == "Alice"
+        assert pending_message is participant_reply
+
+    def test_target_is_discharged_when_same_agent_answers(self):
+        state = _make_state(
+            simulation_config={"participant_target_reply_probability": 1.0},
+        )
+        agent_message = Message.create(sender="Alice", content="Mi opinión")
+        state.add_message(agent_message)
+        participant_reply = Message.create(
+            sender="participant",
+            content="Respóndeme a esto",
+            reply_to=agent_message.message_id,
+        )
+        state.add_message(participant_reply)
+        state.add_message(Message.create(sender="Alice", content="Mi respuesta"))
+        orch, _ = _make_orchestrator(state=state)
+
+        target, pending_message = orch._pending_participant_target(
+            state.messages,
+            {"Alice", "Bob"},
+        )
+
+        assert target is None
+        assert pending_message is participant_reply
+
+    def test_target_reply_can_be_left_unforced(self):
+        state = _make_state(
+            simulation_config={"participant_target_reply_probability": 0.0},
+        )
+        agent_message = Message.create(sender="Alice", content="Mi opinión")
+        state.add_message(agent_message)
+        participant_reply = Message.create(
+            sender="participant",
+            content="Respóndeme a esto",
+            reply_to=agent_message.message_id,
+        )
+        state.add_message(participant_reply)
+        orch, _ = _make_orchestrator(state=state)
+
+        target, pending_message = orch._pending_participant_target(
+            state.messages,
+            {"Alice", "Bob"},
+        )
+
+        assert target is None
+        assert pending_message is participant_reply
+
     @pytest.mark.asyncio
     async def test_participant_quote_reply_forces_same_agent_to_answer(self):
-        state = _make_state()
+        state = _make_state(
+            simulation_config={"participant_target_reply_probability": 1.0},
+        )
         agent_message = Message.create(sender="Alice", content="Mi opinión")
         state.add_message(agent_message)
         participant_reply = Message.create(

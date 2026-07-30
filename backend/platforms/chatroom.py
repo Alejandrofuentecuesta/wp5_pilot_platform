@@ -997,30 +997,6 @@ class SimulationSession:
             finally:
                 await self._publish_typing(started=False)
 
-    def _latest_participant_target(self) -> Optional[str]:
-        """Resolve the agent targeted by the participant's latest message, if any."""
-        if not self.state.messages:
-            return None
-        latest = self.state.messages[-1]
-        if latest.sender != self.state.user_name:
-            return None
-        agent_names = set(self._agent_names)
-        if latest.reply_to:
-            target = next(
-                (
-                    message.sender
-                    for message in self.state.messages
-                    if message.message_id == latest.reply_to
-                ),
-                None,
-            )
-            if target in agent_names:
-                return target
-        for mentioned_name in latest.mentions or []:
-            if mentioned_name in agent_names:
-                return mentioned_name
-        return None
-
     async def _parallel_turn(self, pid: int, allowed_agents: List[str], stagger_delay: float = 0.0) -> None:
         """Execute a single agent turn in parallel-friendly mode.
 
@@ -1038,7 +1014,10 @@ class SimulationSession:
         pipeline_id_var.set(pid)
         orchestrator = self._pipeline_orchestrators[pid - 1]
         try:
-            participant_target = self._latest_participant_target()
+            participant_target, _ = orchestrator._pending_participant_target(
+                self.state.get_recent_messages(orchestrator.action_window_size),
+                set(self._agent_names),
+            )
             if participant_target and participant_target not in allowed_agents:
                 return
 

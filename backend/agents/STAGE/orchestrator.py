@@ -15,6 +15,7 @@ Agent profiles accumulate over the session, updated by the Update call.
 Performer labels stay fixed for the full session and now use the agents' real names.
 """
 import asyncio
+import hashlib
 import random
 import re
 import unicodedata
@@ -51,6 +52,8 @@ MAX_ROOM_WIDE_OPENERS = 3
 TARGET_ELIGIBLE_SPEAKER_COUNT = 4
 DEFAULT_UNCIVIL_LENGTH_RANGE = (2, 45)
 DEFAULT_CIVIL_LENGTH_RANGE = (18, 95)
+PARTICIPANT_TARGET_REPLY_PROBABILITY = 0.75
+MAX_INTERVENING_AGENT_MESSAGES_FOR_REPLY = 3
 
 
 @dataclass
@@ -772,18 +775,17 @@ class Orchestrator:
         recent_messages: List[Message],
         agent_names: Set[str],
     ) -> tuple[Optional[str], Optional[Message]]:
-        """Return the agent explicitly targeted by the latest unanswered participant post."""
+        """Return a frequently-enforced, still-unanswered participant target."""
         pending_human_msg: Optional[Message] = None
         for msg in reversed(recent_messages):
             if msg.sender == self.state.user_name:
                 pending_human_msg = msg
                 break
-            if msg.sender in agent_names:
-                return None, None
 
         if pending_human_msg is None:
             return None, None
 
+        addressed_agent: Optional[str] = None
         if pending_human_msg.reply_to:
             replied_to = next(
                 (
@@ -794,18 +796,60 @@ class Orchestrator:
                 None,
             )
             if replied_to and replied_to.sender in agent_names:
-                return replied_to.sender, pending_human_msg
+                addressed_agent = replied_to.sender
 
-        for mentioned_name in pending_human_msg.mentions or []:
-            if mentioned_name in agent_names:
-                return mentioned_name, pending_human_msg
+        if addressed_agent is None:
+            for mentioned_name in pending_human_msg.mentions or []:
+                if mentioned_name in agent_names:
+                    addressed_agent = mentioned_name
+                    break
 
-        content_lower = (pending_human_msg.content or "").lower()
-        for name in agent_names:
-            if content_lower.startswith(name.lower()) or f"@{name.lower()}" in content_lower:
-                return name, pending_human_msg
+        if addressed_agent is None:
+            content_lower = (pending_human_msg.content or "").lower()
+            for name in agent_names:
+                if content_lower.startswith(name.lower()) or f"@{name.lower()}" in content_lower:
+                    addressed_agent = name
+                    break
 
-        return None, pending_human_msg
+        if addressed_agent is None:
+            return None, pending_human_msg
+
+        # Make the probability stable per participant message. All parallel
+        # pipelines therefore agree on whether this reply should be enforced.
+        probability = float(
+            self.state.simulation_config.get(
+                "participant_target_reply_probability",
+                PARTICIPANT_TARGET_REPLY_PROBABILITY,
+            )
+        )
+        probability = max(0.0, min(probability, 1.0))
+        digest = hashlib.sha256(
+            f"{self.state.session_id}:{pending_human_msg.message_id}".encode("utf-8")
+        ).digest()
+        sample = int.from_bytes(digest[:8], "big") / float(2**64)
+        if sample >= probability:
+            return None, pending_human_msg
+
+        try:
+            message_index = next(
+                index
+                for index, message in enumerate(self.state.messages)
+                if message.message_id == pending_human_msg.message_id
+            )
+        except StopIteration:
+            return None, pending_human_msg
+
+        following_agent_messages = [
+            message
+            for message in self.state.messages[message_index + 1:]
+            if message.sender in agent_names
+        ]
+        if any(message.sender == addressed_agent for message in following_agent_messages):
+            return None, pending_human_msg
+        if len(following_agent_messages) >= MAX_INTERVENING_AGENT_MESSAGES_FOR_REPLY:
+            return None, pending_human_msg
+
+        return addressed_agent, pending_human_msg
 
     def _filter_candidate_agents_for_targets(
         self,

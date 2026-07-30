@@ -1,5 +1,5 @@
 import { API_BASE } from "./constants"
-import type { ParticipantStance, SessionIntakeResponse, SessionStartResponse, QueueJoinResponse } from "./types"
+import type { AgentImpression, ParticipantStance, SessionIntakeResponse, SessionStartResponse, QueueJoinResponse } from "./types"
 
 export async function previewSessionIntake(
   token: string,
@@ -131,4 +131,16 @@ export async function reportMessage(
   )
   if (!res.ok) throw new Error("Network error")
   return res.json()
+}
+
+export async function submitAgentImpressions(
+  sessionId: string,
+  ratings: AgentImpression[],
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/session/${sessionId}/agent-impressions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ratings }),
+  })
+  if (!res.ok) throw new Error("Failed to save agent impressions")
 }

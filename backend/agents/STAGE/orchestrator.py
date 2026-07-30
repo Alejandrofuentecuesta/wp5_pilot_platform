@@ -767,6 +767,46 @@ class Orchestrator:
 
         return False
 
+    def _pending_participant_target(
+        self,
+        recent_messages: List[Message],
+        agent_names: Set[str],
+    ) -> tuple[Optional[str], Optional[Message]]:
+        """Return the agent explicitly targeted by the latest unanswered participant post."""
+        pending_human_msg: Optional[Message] = None
+        for msg in reversed(recent_messages):
+            if msg.sender == self.state.user_name:
+                pending_human_msg = msg
+                break
+            if msg.sender in agent_names:
+                return None, None
+
+        if pending_human_msg is None:
+            return None, None
+
+        if pending_human_msg.reply_to:
+            replied_to = next(
+                (
+                    message
+                    for message in self.state.messages
+                    if message.message_id == pending_human_msg.reply_to
+                ),
+                None,
+            )
+            if replied_to and replied_to.sender in agent_names:
+                return replied_to.sender, pending_human_msg
+
+        for mentioned_name in pending_human_msg.mentions or []:
+            if mentioned_name in agent_names:
+                return mentioned_name, pending_human_msg
+
+        content_lower = (pending_human_msg.content or "").lower()
+        for name in agent_names:
+            if content_lower.startswith(name.lower()) or f"@{name.lower()}" in content_lower:
+                return name, pending_human_msg
+
+        return None, pending_human_msg
+
     def _filter_candidate_agents_for_targets(
         self,
         internal_validity_criteria: str,
@@ -1657,6 +1697,10 @@ class Orchestrator:
         action_profiles = self.agent_profiles
         action_perf_counts = self._performer_counts
         speaking_agent_names = {a.name for a in agents if a.name != self.state.user_name}
+        addressed_agent, pending_human_msg = self._pending_participant_target(
+            recent_action,
+            speaking_agent_names,
+        )
         capped_speaker, capped_streak = self._trailing_speaker_streak(recent_action, speaking_agent_names)
         disallowed_speaker = capped_speaker if capped_streak >= 2 else None
         base_allowed_real = (
@@ -1664,7 +1708,11 @@ class Orchestrator:
             if allowed_performers is not None
             else {a.name for a in agents if a.name != self.state.user_name}
         )
-        if disallowed_speaker:
+        if addressed_agent:
+            # A direct reply or mention is stronger than treatment balancing:
+            # only the addressed agent is eligible for this response.
+            base_allowed_real = {addressed_agent}
+        if disallowed_speaker and not addressed_agent:
             base_allowed_real.discard(disallowed_speaker)
         filtered_allowed_real = self._filter_candidate_agents_for_targets(
             internal_validity_criteria,
@@ -1677,7 +1725,7 @@ class Orchestrator:
         action_perf_counts = {k: v for k, v in self._performer_counts.items() if k in allowed_anon}
 
         # Probabilistic like: resolve locally before calling the LLM.
-        auto_like = self._try_auto_like(base_allowed_real, self._rng)
+        auto_like = None if addressed_agent else self._try_auto_like(base_allowed_real, self._rng)
         if auto_like is not None:
             return auto_like
 
@@ -1720,33 +1768,7 @@ class Orchestrator:
         #     that agent to reply.  We scan backwards through the window to find
         #     the latest participant message, then check whether any agent has
         #     already responded after it â€” if so, the obligation is discharged.
-        addressed_agent = None
-        pending_human_msg = None
-        agent_names = {a.name for a in agents if a.name != self.state.user_name}
-
-        for msg in reversed(recent_action):
-            if msg.sender == self.state.user_name:
-                pending_human_msg = msg
-                break
-            # An agent replied after the participant's message â€” obligation discharged.
-            if msg.sender in agent_names:
-                break
-
-        if pending_human_msg:
-            # Check explicit @mentions first
-            if pending_human_msg.mentions:
-                for m in pending_human_msg.mentions:
-                    if m in agent_names:
-                        addressed_agent = m
-                        break
-
-            # Fallback: message starts with or contains @agentname
-            if addressed_agent is None:
-                content_lower = (pending_human_msg.content or "").lower()
-                for name in agent_names:
-                    if content_lower.startswith(name.lower()) or f"@{name.lower()}" in content_lower:
-                        addressed_agent = name
-                        break
+        agent_names = speaking_agent_names
 
         if addressed_agent and addressed_agent != agent_name:
             self.logger.log_error(

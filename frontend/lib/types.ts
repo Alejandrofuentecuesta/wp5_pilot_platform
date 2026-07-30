@@ -70,6 +70,12 @@ export type ParticipantStance =
   | "pro_topic"
   | "anti_topic"
 
+export interface AgentImpression {
+  agent_name: string
+  rating: 1 | 2 | 3 | 4 | 5
+  comment: string | null
+}
+
 export interface QueueJoinResponse {
   position: number
   estimated_wait_minutes: number

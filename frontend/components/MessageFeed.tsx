@@ -86,7 +86,9 @@ export default function MessageFeed({
         <Fragment key={group.dateKey}>
           <DateSeparator label={group.label} />
           {group.messages.map((msg, idx) => {
-            const isSelf = msg.sender === PARTICIPANT_SENDER
+            const isSelf =
+              msg.sender === PARTICIPANT_SENDER ||
+              (displayName.length > 0 && msg.sender === displayName)
 
             if (msg.msg_type === "news_article") {
               return (
@@ -125,8 +127,8 @@ export default function MessageFeed({
       {typingCount > 0 && (
         <div className="px-4 py-2 text-xs text-secondary italic">
           {typingCount === 1
-            ? "Someone is writing a message"
-            : `${typingCount} people are writing a message`}
+            ? "Alguien está escribiendo un mensaje"
+            : `${typingCount} personas están escribiendo un mensaje`}
           <TypingDots />
         </div>
       )}

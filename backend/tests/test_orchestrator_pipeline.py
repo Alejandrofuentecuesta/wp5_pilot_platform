@@ -782,6 +782,69 @@ class TestExecuteTurnLike:
 
 class TestExecuteTurnReply:
 
+    def test_participant_quote_reply_targets_original_agent(self):
+        state = _make_state()
+        agent_message = Message.create(sender="Alice", content="Mi opinión")
+        state.add_message(agent_message)
+        participant_reply = Message.create(
+            sender="participant",
+            content="No estoy de acuerdo",
+            reply_to=agent_message.message_id,
+            quoted_text=agent_message.content,
+        )
+        state.add_message(participant_reply)
+        orch, _ = _make_orchestrator(state=state)
+
+        target, pending_message = orch._pending_participant_target(
+            state.messages,
+            {"Alice", "Bob"},
+        )
+
+        assert target == "Alice"
+        assert pending_message is participant_reply
+
+    @pytest.mark.asyncio
+    async def test_participant_quote_reply_forces_same_agent_to_answer(self):
+        state = _make_state()
+        agent_message = Message.create(sender="Alice", content="Mi opinión")
+        state.add_message(agent_message)
+        participant_reply = Message.create(
+            sender="participant",
+            content="No estoy de acuerdo",
+            reply_to=agent_message.message_id,
+            quoted_text=agent_message.content,
+        )
+        state.add_message(participant_reply)
+        orch, _ = _make_orchestrator(state=state)
+        anon_bob = orch._name_map["Bob"]
+        orch._director_evaluate = AsyncMock()
+        orch._director_action = AsyncMock(return_value={
+            "next_performer": anon_bob,
+            "action_type": "message",
+            "priority": "test",
+            "performer_rationale": "test",
+            "action_rationale": "test",
+            "performer_instruction": {
+                "objective": "Engage",
+                "motivation": "Respond",
+                "directive": "Be direct",
+            },
+        })
+        orch.performer_llm.generate_response = AsyncMock(
+            return_value="Te respondo directamente.",
+        )
+        orch.moderator_llm.generate_response = AsyncMock(
+            return_value="Te respondo directamente.",
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.agent_name == "Alice"
+        # The immediate reply is normalized to a plain conversational
+        # continuation, but the responding identity must remain Alice.
+        assert result.action_type == "message"
+
     @pytest.mark.asyncio
     async def test_reply_sets_reply_to_and_quoted_text(self):
         state = _make_state()
@@ -1977,8 +2040,3 @@ class TestDowngradePrecedingTarget:
             "downgrade_immediate_targeted_message",
             "Removing target_user for 'Alice' because it targets the sender of the immediately preceding message 'Bob'"
         )
-
-
-
-
-

@@ -208,7 +208,7 @@ export default function LoginScreen({
               <div>
                 <h2 className="text-4xl font-semibold text-primary">Antes de empezar</h2>
                 <p className="mt-2 max-w-3xl text-base font-semibold leading-7 text-secondary">
-                  A continuación introducirás tu nombre, leerás la noticia, escribirás tu opinión y debatirás con el resto de usuarios en el chat.
+                  En este experimento introducirás tu nombre, leerás una noticia, escribirás tu opinión y debatirás con el resto de usuarios en el chat.
                 </p>
               </div>
 
@@ -244,6 +244,17 @@ export default function LoginScreen({
                         Reply
                       </span>
                       cuando estés de acuerdo, en desacuerdo o quieras reaccionar a un comentario.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span className="inline-flex items-center flex-wrap gap-1.5">
+                      <strong>Mencionar a otro usuario</strong>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-accent-soft text-accent font-medium">
+                        <span aria-hidden="true">@</span>
+                        Mention
+                      </span>
+                      si quieres usar el avatar de otro usuario para ampliar su respuesta o hacer mención a algún punto que desees destacar.
                     </span>
                   </li>
                   <li className="flex gap-3 items-start">
@@ -286,7 +297,7 @@ export default function LoginScreen({
                       <span className="px-2 py-0.5 text-xs border border-danger/35 bg-danger/5 text-danger font-medium rounded-lg">
                         Salir
                       </span>
-                      si normalmente dejarías de participar.
+                      si no quieres participar o deseas abandonar la sala de discusión antes de tiempo.
                     </span>
                   </li>
                 </ul>
@@ -302,18 +313,18 @@ export default function LoginScreen({
                 <div className="mt-3 space-y-2 text-sm leading-6">
                   <p className="rounded-lg bg-[#4d3f00]/10 px-3 py-2 text-base font-bold">
                     El experimento dura aproximadamente 20 minutos y{" "}
-                    <span className="underline decoration-2 underline-offset-2">debe hacerse de seguido, en una sola sesión y sin pausas</span>.
+                    <span className="underline decoration-2 underline-offset-2">debe completarse en una única sesión sin pausas ni interrupciones</span>.
                     Una vez que empieces, <span className="underline decoration-2 underline-offset-2">no podrás pararlo ni continuar más tarde</span>.
                   </p>
                   <p className="font-semibold">Si no tienes tiempo para completarlo ahora, por favor entra en otro momento.</p>
                   <p>
-                    No escribas nombres reales, datos de contacto ni información personal tuya o de otras personas en tus
+                    No escribas nombres reales, datos de contacto ni información personal tuya o de otras personas particulares en tus
                     comentarios. Para proteger la privacidad de todos, participa sin incluir datos que puedan identificar
                     a alguien.
                   </p>
                   <p>
                     Si pierdes la conexión o cierras la pestaña por accidente, puedes volver a entrar con el mismo enlace
-                    dentro de una hora y continuar donde lo dejaste. Si usas el botón «Salir», tu participación termina de
+                    hasta una hora después de haber empezado y continuar donde lo dejaste. Si usas el botón «Salir», tu participación termina de
                     forma definitiva.
                   </p>
                 </div>

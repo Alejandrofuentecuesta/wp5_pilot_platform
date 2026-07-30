@@ -9,6 +9,7 @@ import {
   joinQueue as apiJoinQueue,
   likeMessage as apiLikeMessage,
   reportMessage as apiReportMessage,
+  submitAgentImpressions as apiSubmitAgentImpressions,
   AtCapacityError,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
@@ -21,6 +22,7 @@ import type {
   BlockEvent,
   ParticipantStance,
   SessionIntakeResponse,
+  AgentImpression,
 } from "@/lib/types"
 
 export function useChat() {
@@ -43,6 +45,10 @@ export function useChat() {
   // Session end state
   const [sessionEnded, setSessionEnded] = useState(false)
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null)
+  const [sessionAgentNames, setSessionAgentNames] = useState<string[]>([])
+  const [agentImpressionSurveyOpen, setAgentImpressionSurveyOpen] = useState(false)
+  const [agentImpressionsSubmitting, setAgentImpressionsSubmitting] = useState(false)
+  const [agentImpressionsError, setAgentImpressionsError] = useState<string | null>(null)
 
   // Queue state (not persisted — refresh re-enters token which restores position)
   const [queueToken, setQueueToken] = useState<string | null>(null)
@@ -74,6 +80,8 @@ export function useChat() {
   const [newsArticleModalOpen, setNewsArticleModalOpen] = useState(false)
   const [emotionsCheckupOpen, setEmotionsCheckupOpen] = useState(false)
   const [exitModalOpen, setExitModalOpen] = useState(false)
+  const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
+  const [initialMessageDone, setInitialMessageDone] = useState(false)
 
   // Derived: participants list from observed senders
   const participants = useMemo(() => {
@@ -121,10 +129,28 @@ export function useChat() {
       setTypingCount((prev) => Math.max(0, prev - 1))
     } else if (obj && obj.event_type === "session_end") {
       const url = (obj as Record<string, unknown>).redirect_url as string | undefined
+      const reason = typeof obj.reason === "string" ? obj.reason : "ended"
+      const eventAgentNames = Array.isArray(obj.agent_names)
+        ? obj.agent_names.filter(
+            (name): name is string =>
+              typeof name === "string" && name.trim().length > 0,
+          )
+        : []
+      const feedbackAlreadySubmitted = Boolean(obj.agent_feedback_submitted)
       setSessionEnded(true)
       setRedirectUrl(url || null)
-      // Clear session so user can't refresh back into the chatroom
-      setSessionId(null)
+      if (
+        reason === "duration_expired" &&
+        sessionId &&
+        eventAgentNames.length > 0 &&
+        !feedbackAlreadySubmitted
+      ) {
+        setSessionAgentNames(eventAgentNames)
+        setAgentImpressionSurveyOpen(true)
+      } else {
+        // Clear session so user can't refresh back into the chatroom.
+        setSessionId(null)
+      }
     } else if (obj && obj.event_type === "user_block") {
       const evt = obj as unknown as BlockEvent
       if (evt.blocked && typeof evt.blocked === "object") {
@@ -150,7 +176,7 @@ export function useChat() {
         return [...prev, message]
       })
     }
-  }, [setBlockedSenders, setSessionId])
+  }, [sessionId, setBlockedSenders, setSessionId])
 
   const handleSessionInvalid = useCallback(() => {
     setSessionId(null)
@@ -172,6 +198,7 @@ export function useChat() {
       trackingEnabled: behaviorConfig.behaviorTrackingEnabled,
       idleEnabled: behaviorConfig.idlePromptEnabled,
       idleSeconds: behaviorConfig.idlePromptSeconds,
+      idleActive: initialMessageDone,
     })
 
   // Per-message composition metrics (time spent typing, edit effort).
@@ -196,9 +223,6 @@ export function useChat() {
     },
     [inputValue],
   )
-
-  const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
-  const [initialMessageDone, setInitialMessageDone] = useState(false)
 
   useEffect(() => {
     if (!sessionId || !newsArticle || typeof window === "undefined") return
@@ -235,6 +259,10 @@ export function useChat() {
       if (name) setUsername(name)
       setParticipantStance(stance)
       setQueueToken(null)
+      setSessionEnded(false)
+      setRedirectUrl(null)
+      setAgentImpressionSurveyOpen(false)
+      setSessionAgentNames([])
     } catch (err) {
       const isCapacity = err instanceof AtCapacityError ||
         (err instanceof Error && err.message === "at_capacity")
@@ -328,6 +356,7 @@ export function useChat() {
       // actually went out — a send during a reconnect gap is dropped, and
       // the session cannot start without this first message.
       if (!sendMessage(initialMessage)) return
+      setInitialMessageDone(true)
       if (typeof window !== "undefined") {
         window.sessionStorage.setItem(`news_article_seen:${sessionId}`, "1")
       }
@@ -367,6 +396,26 @@ export function useChat() {
     } as any)
     setExitModalOpen(false)
   }, [send])
+
+  const submitAgentImpressions = useCallback(
+    async (ratings: AgentImpression[]) => {
+      if (!sessionId) return
+      setAgentImpressionsSubmitting(true)
+      setAgentImpressionsError(null)
+      try {
+        await apiSubmitAgentImpressions(sessionId, ratings)
+        setAgentImpressionSurveyOpen(false)
+        setSessionId(null)
+      } catch {
+        setAgentImpressionsError(
+          "No se ha podido guardar la valoración. Inténtalo de nuevo.",
+        )
+      } finally {
+        setAgentImpressionsSubmitting(false)
+      }
+    },
+    [sessionId, setSessionId],
+  )
 
   // Like message (with optimistic update + rollback)
   const toggleLike = async (msg: Message) => {
@@ -436,7 +485,7 @@ export function useChat() {
     const sender = reportTarget.sender
 
     // Prevent reporting yourself
-    if (sender === uid) {
+    if (sender === uid || sender === username) {
       setReporting(false)
       setReportModalOpen(false)
       setReportTarget(null)
@@ -558,6 +607,11 @@ export function useChat() {
     // Session end
     sessionEnded,
     redirectUrl,
+    sessionAgentNames,
+    agentImpressionSurveyOpen,
+    agentImpressionsSubmitting,
+    agentImpressionsError,
+    submitAgentImpressions,
     // Emotions Checkup
     emotionsCheckupOpen,
     submitEmotionsCheckup,

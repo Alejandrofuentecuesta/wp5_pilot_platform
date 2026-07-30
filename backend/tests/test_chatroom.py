@@ -517,6 +517,89 @@ class TestHandleUserMessage:
 class TestBlockedAgentFiltering:
 
     @pytest.mark.asyncio
+    async def test_pool_block_renames_agent_with_same_treatment_traits(self):
+        pool_config = {
+            "simulation": {
+                **MINIMAL_SIM_CONFIG,
+                "agent_mode": "pool",
+                "num_agents": 1,
+            },
+            "experimental": {
+                "chatroom_context": "A test chatroom about science",
+                "groups": {
+                    "control": {
+                        "internal_validity_criteria": "INCIVILITY_TARGET = 0\nLIKEMINDED_TARGET = 100",
+                        "features": [],
+                        "pool_agent_ids": ["a1", "a2", "a3"],
+                    },
+                },
+                "agent_pool": [
+                    {
+                        "id": "a1",
+                        "name": "Lucia",
+                        "alignment_cell": "pro_policy_pro_topic",
+                        "incivility": "civil",
+                        "persona": "First civil supporter.",
+                    },
+                    {
+                        "id": "a2",
+                        "name": "Elena",
+                        "alignment_cell": "pro_policy_pro_topic",
+                        "incivility": "civil",
+                        "persona": "Replacement civil supporter.",
+                    },
+                    {
+                        "id": "a3",
+                        "name": "Carlos",
+                        "alignment_cell": "anti_policy_anti_topic",
+                        "incivility": "uncivil",
+                        "persona": "Opposed and uncivil.",
+                    },
+                ],
+            },
+        }
+
+        with _patch_externals():
+            session, _ = _create_session(
+                config=pool_config,
+                participant_stance_hint="favor",
+            )
+            blocked_name = session._agent_names[0]
+            blocked_traits = dict(session._agent_traits[blocked_name])
+            session.state.block_agent(
+                blocked_name,
+                datetime.now(timezone.utc).isoformat(),
+            )
+
+            replacement = await session.replace_blocked_agent(blocked_name)
+
+            assert replacement is not None
+            assert replacement != blocked_name
+            assert blocked_name not in session._agent_names
+            assert session._agent_traits[replacement]["alignment_cell"] == blocked_traits["alignment_cell"]
+            assert session._agent_traits[replacement]["incivility"] == blocked_traits["incivility"]
+
+    @pytest.mark.asyncio
+    async def test_every_blocked_identity_is_replaced_without_changing_roster_size(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            original_size = len(session._agent_names)
+
+            first_name = session._agent_names[0]
+            session.state.block_agent(first_name, datetime.now(timezone.utc).isoformat())
+            first_replacement = await session.replace_blocked_agent(first_name)
+
+            second_name = session._agent_names[1]
+            session.state.block_agent(second_name, datetime.now(timezone.utc).isoformat())
+            second_replacement = await session.replace_blocked_agent(second_name)
+
+            assert first_replacement not in {None, first_name}
+            assert second_replacement not in {None, second_name, first_replacement}
+            assert len(session._agent_names) == original_size
+            assert first_name not in session._agent_names
+            assert second_name not in session._agent_names
+
+    @pytest.mark.asyncio
     async def test_blocked_agent_messages_filtered(self):
         with _patch_externals():
             session, _ = _create_session()

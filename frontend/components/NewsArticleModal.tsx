@@ -28,9 +28,15 @@ export default function NewsArticleModal({
 
   if (!open) return null
 
-  const title = message.headline || "News article"
-  const source = message.source || "Source not specified"
+  const title = message.headline || "Noticia"
+  const source = message.source || "Fuente no especificada"
   const body = message.body || message.content
+  const paragraphs = body
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+  const lead = paragraphs[0] || ""
+  const articleParagraphs = paragraphs.slice(1)
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,7 +61,7 @@ export default function NewsArticleModal({
           <div className="flex items-start justify-between gap-4">
             <div className="space-y-1">
               <p className="text-[11px] uppercase tracking-[0.18em] text-secondary font-semibold">
-                News article
+                Noticia
               </p>
               <h2 id="news-article-title" className="text-2xl font-semibold text-primary leading-tight">
                 {title}
@@ -76,9 +82,33 @@ export default function NewsArticleModal({
           </div>
 
           <div className="rounded-xl bg-bg-feed border border-border/70 p-4 sm:p-5 overflow-y-auto flex-1 min-h-0">
-            <p className="text-[15px] leading-7 text-primary whitespace-pre-wrap pr-1">
-              {body}
-            </p>
+            {lead && (
+              <p className="border-b border-border/70 pb-4 text-base font-medium leading-7 text-primary">
+                {lead}
+              </p>
+            )}
+            <div className="space-y-4 pt-4">
+              {articleParagraphs.map((paragraph, index) => {
+                const isHeading =
+                  paragraph.length < 90 &&
+                  paragraph === paragraph.toLocaleUpperCase("es")
+                return isHeading ? (
+                  <h3
+                    key={`${index}-${paragraph}`}
+                    className="pt-2 text-sm font-bold uppercase tracking-wide text-primary"
+                  >
+                    {paragraph}
+                  </h3>
+                ) : (
+                  <p
+                    key={`${index}-${paragraph.slice(0, 30)}`}
+                    className="text-[15px] leading-7 text-primary"
+                  >
+                    {paragraph}
+                  </p>
+                )
+              })}
+            </div>
           </div>
 
           {isInitialRead && (
@@ -116,4 +146,3 @@ export default function NewsArticleModal({
     </div>
   )
 }
-

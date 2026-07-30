@@ -28,6 +28,8 @@ interface Options {
   // Show the "please write in the chat" reminder after inactivity.
   idleEnabled: boolean
   idleSeconds: number
+  // The idle countdown starts only after the participant's first message.
+  idleActive: boolean
 }
 
 const HEARTBEAT_MS = 15_000
@@ -39,6 +41,7 @@ export function useBehaviorTracking({
   trackingEnabled,
   idleEnabled,
   idleSeconds,
+  idleActive,
 }: Options) {
   const [idlePromptVisible, setIdlePromptVisible] = useState(false)
 
@@ -153,7 +156,10 @@ export function useBehaviorTracking({
   // `idleSeconds`. Re-arms on each fire, so it keeps reminding (and logging)
   // every idle window until they post.
   useEffect(() => {
-    if (!sessionId || !idleEnabled) return
+    if (!sessionId || !idleEnabled || !idleActive) {
+      setIdlePromptVisible(false)
+      return
+    }
     lastMessageRef.current = Date.now()
     const tick = setInterval(() => {
       if (Date.now() - lastMessageRef.current >= idleSeconds * 1000) {
@@ -163,7 +169,7 @@ export function useBehaviorTracking({
       }
     }, IDLE_CHECK_MS)
     return () => clearInterval(tick)
-  }, [sessionId, idleEnabled, idleSeconds, enqueue])
+  }, [sessionId, idleEnabled, idleSeconds, idleActive, enqueue])
 
   // Flusher: periodically ship queued telemetry.
   useEffect(() => {

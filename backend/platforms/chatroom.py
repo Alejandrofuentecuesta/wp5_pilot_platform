@@ -6,7 +6,7 @@ import time
 
 import httpx
 from datetime import datetime, timezone
-from typing import Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from models import Message, Agent, SessionState
 from utils import Logger
@@ -22,6 +22,23 @@ from cache import redis_client
 # How long a disconnected participant has to rejoin before their session is
 # ended as non-complete. Takes effect on container recreate.
 REJOIN_WINDOW_MINUTES = int(os.getenv("REJOIN_WINDOW_MINUTES", "60"))
+
+_REPLACEMENT_AGENT_NAMES = [
+    "Alba", "Inés", "Nerea", "Marina", "Raúl", "Sergio", "Irene", "Hugo",
+    "Marta", "Álex", "Noelia", "Iván", "Clara", "Rubén", "Aitana", "Óscar",
+    "Vega", "Adrián", "Lola", "Bruno", "Eva", "Mario", "Sara", "Daniel",
+]
+
+
+def _next_replacement_agent_name(used_names: set[str]) -> str:
+    """Choose a fresh, human-looking alias for a blocked agent identity."""
+    for name in _REPLACEMENT_AGENT_NAMES:
+        if name not in used_names:
+            return name
+    suffix = 2
+    while f"Usuario {suffix}" in used_names:
+        suffix += 1
+    return f"Usuario {suffix}"
 
 
 def build_return_url(redirect_url: str, token: str, reason: str) -> str:
@@ -231,6 +248,7 @@ class SimulationSession:
         # Unpack DB-backed config
         self.simulation_config = _config["simulation"]
         experimental_full = _config["experimental"]
+        self._experimental_full = experimental_full
 
         if not (isinstance(experimental_full, dict) and "groups" in experimental_full):
             raise RuntimeError("Experimental config must define a 'groups' table")
@@ -285,6 +303,25 @@ class SimulationSession:
         else:
             agent_names = self.simulation_config["agent_names"]
             agent_personas = self.simulation_config.get("agent_personas", [""] * len(agent_names))
+
+        # Reconstruct identity changes deterministically from persisted blocks.
+        # Each blocked agent keeps the same persona/traits but receives a fresh
+        # alias, including when every visible identity has been blocked.
+        if _preloaded_blocks:
+            used_names = set(agent_names) | set(_preloaded_blocks) | {user_name}
+            ordered_blocks = sorted(
+                _preloaded_blocks,
+                key=lambda name: _preloaded_blocks[name],
+            )
+            for blocked_name in ordered_blocks:
+                if blocked_name not in agent_names:
+                    continue
+                replacement_name = _next_replacement_agent_name(used_names)
+                used_names.add(replacement_name)
+                replace_index = agent_names.index(blocked_name)
+                agent_names[replace_index] = replacement_name
+                if blocked_name in self._agent_traits:
+                    self._agent_traits[replacement_name] = self._agent_traits.pop(blocked_name)
 
         self._agent_names = agent_names
 
@@ -594,17 +631,53 @@ class SimulationSession:
         agent_personas = [a.get("persona", "") for a in pool_agents]
         traits: Dict[str, Dict[str, str]] = {}
         for a in pool_agents:
-            traits[a["name"]] = {
-                "stance": a.get("stance", ""),
-                "incivility": a.get("incivility", "civil"),
-                "ideology": a.get("ideology") or ("right" if _agent_alignment_cell(a) == "anti_topic" else "left"),
-                "policy_stance": a.get("policy_stance", ""),
-                "topic_stance": a.get("topic_stance", ""),
-                "alignment_cell": a.get("alignment_cell", ""),
-                "message_length_min": a.get("message_length_min"),
-                "message_length_max": a.get("message_length_max"),
-            }
+            traits[a["name"]] = self._pool_agent_traits(a)
         return agent_names, agent_personas, traits
+
+    @staticmethod
+    def _pool_agent_traits(agent: dict) -> Dict[str, Any]:
+        """Normalize the treatment traits needed by the orchestrator."""
+        return {
+            "stance": agent.get("stance", ""),
+            "incivility": agent.get("incivility", "civil"),
+            "ideology": agent.get("ideology") or (
+                "right" if _agent_alignment_cell(agent) == "anti_topic" else "left"
+            ),
+            "policy_stance": agent.get("policy_stance", ""),
+            "topic_stance": agent.get("topic_stance", ""),
+            "alignment_cell": agent.get("alignment_cell") or _agent_alignment_cell(agent),
+            "message_length_min": agent.get("message_length_min"),
+            "message_length_max": agent.get("message_length_max"),
+        }
+
+    async def replace_blocked_agent(self, blocked_name: str) -> Optional[str]:
+        """Give a blocked agent a new identity while preserving its exact profile."""
+        if blocked_name not in self._agent_names:
+            return None
+
+        async with self._turn_lock:
+            used_names = (
+                set(self._agent_names)
+                | set(self.state.blocked_agents)
+                | {self.state.user_name}
+            )
+            replacement_name = _next_replacement_agent_name(used_names)
+            replace_index = self._agent_names.index(blocked_name)
+            agent_names = list(self._agent_names)
+            agent_personas = [agent.persona for agent in self.state.agents]
+            agent_names[replace_index] = replacement_name
+            agent_traits = dict(self._agent_traits)
+            blocked_traits = agent_traits.pop(blocked_name, None)
+            if blocked_traits is not None:
+                agent_traits[replacement_name] = blocked_traits
+
+            self._apply_agent_roster(agent_names, agent_personas, agent_traits)
+            self.logger.log_event("agent_replacement", {
+                "blocked_agent": blocked_name,
+                "replacement_agent": replacement_name,
+                "same_profile": True,
+            })
+            return replacement_name
 
     def _apply_agent_roster(
         self,
@@ -924,6 +997,30 @@ class SimulationSession:
             finally:
                 await self._publish_typing(started=False)
 
+    def _latest_participant_target(self) -> Optional[str]:
+        """Resolve the agent targeted by the participant's latest message, if any."""
+        if not self.state.messages:
+            return None
+        latest = self.state.messages[-1]
+        if latest.sender != self.state.user_name:
+            return None
+        agent_names = set(self._agent_names)
+        if latest.reply_to:
+            target = next(
+                (
+                    message.sender
+                    for message in self.state.messages
+                    if message.message_id == latest.reply_to
+                ),
+                None,
+            )
+            if target in agent_names:
+                return target
+        for mentioned_name in latest.mentions or []:
+            if mentioned_name in agent_names:
+                return mentioned_name
+        return None
+
     async def _parallel_turn(self, pid: int, allowed_agents: List[str], stagger_delay: float = 0.0) -> None:
         """Execute a single agent turn in parallel-friendly mode.
 
@@ -941,6 +1038,10 @@ class SimulationSession:
         pipeline_id_var.set(pid)
         orchestrator = self._pipeline_orchestrators[pid - 1]
         try:
+            participant_target = self._latest_participant_target()
+            if participant_target and participant_target not in allowed_agents:
+                return
+
             if stagger_delay > 0:
                 await asyncio.sleep(stagger_delay)
 
@@ -989,16 +1090,46 @@ class SimulationSession:
 
     async def _publish_session_end(self, reason: str) -> None:
         """Publish a session_end event via Redis pub/sub so the frontend can redirect."""
+        appeared_agent_names = self._appeared_agent_names()
+        if reason == "duration_expired":
+            try:
+                await event_repo.insert_event_strict(
+                    db_conn.get_pool(),
+                    session_id=self.session_id,
+                    experiment_id=self.experiment_id,
+                    event_type="agent_impressions_open",
+                    data={"agent_names": appeared_agent_names},
+                )
+            except Exception as exc:
+                self.logger.log_error("persist_agent_impressions_open", str(exc))
         event = {
             "event_type": "session_end",
             "reason": reason,
             "redirect_url": await self._build_return_url(reason),
+            "agent_names": appeared_agent_names,
         }
         try:
             r = redis_client.get_redis()
             await redis_client.publish_event(r, self.session_id, event)
         except Exception as exc:
             self.logger.log_error("publish_session_end", str(exc))
+
+    def _appeared_agent_names(self) -> List[str]:
+        """Return agent senders that actually posted, preserving first-seen order."""
+        known_agent_names = (
+            set(self._agent_names)
+            | set(self.state.blocked_agents)
+            | {
+                str(agent.get("name"))
+                for agent in self._experimental_full.get("agent_pool", [])
+                if agent.get("name")
+            }
+        )
+        appeared: List[str] = []
+        for message in self.state.messages:
+            if message.sender in known_agent_names and message.sender not in appeared:
+                appeared.append(message.sender)
+        return appeared
 
     async def _build_return_url(self, reason: str) -> str:
         """Append the panel hand-back parameters to the configured redirect URL.

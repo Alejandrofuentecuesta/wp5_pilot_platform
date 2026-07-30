@@ -53,13 +53,18 @@ export default function MessageBubble({
   onMention,
   onReport,
 }: MessageBubbleProps) {
-  // For display: show the user's local display name instead of "participant"
-  const senderLabel = isSelf ? displayName : message.sender
+  // The backend stores the participant's chosen display name as sender, while
+  // older sessions may still use the canonical "participant" value.
+  const messageIsSelf =
+    isSelf ||
+    message.sender === PARTICIPANT_SENDER ||
+    (displayName.length > 0 && message.sender === displayName)
+  const senderLabel = messageIsSelf ? displayName : message.sender
 
   // Replace "participant" in agent message content with the user's local
   // display name so references to the participant read naturally.
   const renderedContent =
-    !isSelf && displayName
+    !messageIsSelf && displayName
       ? message.content.replace(/\bparticipant\b/g, displayName)
       : message.content
   const senderColor = getSenderColor(senderLabel)
@@ -150,7 +155,7 @@ export default function MessageBubble({
             {likesCount > 0 ? likesCount : "Like"}
           </button>
 
-          {!isSelf && (
+          {!messageIsSelf && (
             <button
               onClick={() => onMention(message.sender)}
               className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] text-secondary hover:bg-accent-soft hover:text-accent transition-colors"
@@ -164,7 +169,7 @@ export default function MessageBubble({
             </button>
           )}
 
-          {!isSelf && (
+          {!messageIsSelf && (
             <button
               onClick={() => onReport(message)}
               className={`inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${

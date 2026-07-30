@@ -222,9 +222,12 @@ are UTC ISO-8601 unless noted. Files:
 
 `event_type` values include server events (`session_start`, `session_end`,
 `message`, `message_like`, `message_report`, `user_block`,
-`emotions_checkup_trigger`, `emotions_checkup_response`, `exit_survey`
+`emotions_checkup_trigger`, `emotions_checkup_response`, `exit_survey`,
+`agent_impressions_open`, `agent_impressions`
 (open-ended reason the participant gave when leaving early; payload key
-`reason`), `websocket_attach`, `websocket_detach`, …) and **client
+`reason`; optional final agent ratings use `ratings`, each with
+`agent_name`, a 1–5 `rating`, and an optional `comment`),
+`websocket_attach`, `websocket_detach`, …) and **client
 behavioural telemetry** (prefixed `client_`):
 
 | event_type | meaning | key payload fields |

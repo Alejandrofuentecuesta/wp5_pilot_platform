@@ -379,6 +379,16 @@ class ReportRequest(BaseModel):
     reason: Optional[str] = None
 
 
+class AgentImpressionRequest(BaseModel):
+    agent_name: str
+    rating: Literal[1, 2, 3, 4, 5]
+    comment: Optional[str] = None
+
+
+class AgentImpressionsRequest(BaseModel):
+    ratings: List[AgentImpressionRequest]
+
+
 class ManualEvaluationRowRequest(BaseModel):
     message_id: str
     incivility: bool = False
@@ -681,6 +691,89 @@ async def ingest_telemetry(session_id: str, request: Request):
     return Response(status_code=204)
 
 
+@app.post("/session/{session_id}/agent-impressions", status_code=204)
+async def submit_agent_impressions(session_id: str, payload: AgentImpressionsRequest):
+    """Persist optional final ratings for agents who actually posted in the session."""
+    if len(payload.ratings) > 20:
+        raise HTTPException(status_code=422, detail="Too many agent ratings")
+
+    normalized = []
+    seen_names = set()
+    for item in payload.ratings:
+        name = item.agent_name.strip()
+        comment = (item.comment or "").strip()
+        if not name or len(name) > 100:
+            raise HTTPException(status_code=422, detail="Invalid agent name")
+        if name in seen_names:
+            raise HTTPException(status_code=422, detail="Duplicate agent name")
+        if len(comment) > 1000:
+            raise HTTPException(status_code=422, detail="Comment is too long")
+        seen_names.add(name)
+        normalized.append({
+            "agent_name": name,
+            "rating": item.rating,
+            "comment": comment or None,
+        })
+
+    pool = _get_pool()
+    session_row = await session_repo.get_session(pool, session_id)
+    if not session_row:
+        raise HTTPException(status_code=404, detail="Session not found")
+    completed = (
+        session_row.get("status") == "ended"
+        and session_row.get("end_reason") == "duration_expired"
+    )
+    if not completed:
+        survey_open = await event_repo.get_session_events(
+            pool,
+            session_id,
+            ["agent_impressions_open"],
+        )
+        if not survey_open:
+            raise HTTPException(
+                status_code=409,
+                detail="Ratings are available only after a completed session",
+            )
+
+    messages = await message_repo.get_session_messages(pool, session_id)
+    participant_name = session_row["user_name"]
+    appeared_agents = {
+        message["sender"]
+        for message in messages
+        if message["sender"] != participant_name
+        and not message["sender"].startswith("[")
+        and message.get("msg_type") != "news_article"
+    }
+    unknown_names = seen_names - appeared_agents
+    if unknown_names:
+        raise HTTPException(
+            status_code=422,
+            detail="Ratings may only reference agents who posted in the session",
+        )
+
+    existing = await event_repo.get_session_events(
+        pool,
+        session_id,
+        ["agent_impressions"],
+    )
+    if existing:
+        return Response(status_code=204)
+
+    await event_repo.insert_event_strict(
+        pool,
+        session_id=session_id,
+        experiment_id=session_row["experiment_id"],
+        event_type="agent_impressions",
+        data={
+            "ratings": normalized,
+            "skipped": len(normalized) == 0,
+            "scale_min": 1,
+            "scale_max": 5,
+        },
+    )
+    return Response(status_code=204)
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok"}
@@ -739,10 +832,32 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 redirect = build_return_url(base, row.get("token", ""), row.get("end_reason") or "")
         except Exception as exc:
             print(f"Return-URL build failed for ended session {session_id}: {exc}")
+        appeared_agent_names = []
+        feedback_events = []
+        try:
+            messages = await message_repo.get_session_messages(pool, session_id)
+            for message in messages:
+                sender = message["sender"]
+                if (
+                    sender != row["user_name"]
+                    and not sender.startswith("[")
+                    and message.get("msg_type") != "news_article"
+                    and sender not in appeared_agent_names
+                ):
+                    appeared_agent_names.append(sender)
+            feedback_events = await event_repo.get_session_events(
+                pool,
+                session_id,
+                ["agent_impressions"],
+            )
+        except Exception as exc:
+            print(f"Agent-impression recovery failed for ended session {session_id}: {exc}")
         await websocket.send_json({
             "event_type": "session_end",
             "reason": row.get("end_reason") or "ended",
             "redirect_url": redirect,
+            "agent_names": appeared_agent_names,
+            "agent_feedback_submitted": bool(feedback_events),
         })
         await websocket.close(code=1000, reason="session_ended")
         return True
@@ -877,7 +992,6 @@ async def like_message(session_id: str, message_id: str, payload: LikeRequest):
     message = next((m for m in session.state.messages if m.message_id == message_id), None)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-
     user_id = payload.user
     result = message.toggle_like(user_id)
 
@@ -926,6 +1040,8 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
     message = next((m for m in session.state.messages if m.message_id == message_id), None)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
+    if message.sender == session.state.user_name:
+        raise HTTPException(status_code=400, detail="Participants cannot report their own messages")
 
     user_id = payload.user
     result = message.toggle_report()
@@ -938,6 +1054,7 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
         session.logger.log_error("persist_report", str(exc))
 
     blocked = None
+    replacement_agent = None
     target_sender = message.sender
     if payload.block and target_sender and target_sender != session.state.user_name:
         when_iso = datetime.now(timezone.utc).isoformat()
@@ -956,10 +1073,12 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
         except Exception as exc:
             session.logger.log_error("persist_agent_block", str(exc))
 
+        replacement_agent = await session.replace_blocked_agent(target_sender)
         session.logger.log_event("user_block", {
             "agent_name": target_sender,
             "blocked_at": when_iso,
             "by": user_id,
+            "replacement_agent": replacement_agent,
         })
         blocked = dict(session.state.blocked_agents)
 
@@ -968,6 +1087,7 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
         "user": user_id,
         "action": result,
         "blocked": blocked,
+        "replacement_agent": replacement_agent,
         "reason": payload.reason,
     })
 
@@ -989,12 +1109,17 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
                 "session_id": session_id,
                 "user": user_id,
                 "blocked": blocked,
+                "replacement_agent": replacement_agent,
                 "timestamp": datetime.now(timezone.utc).isoformat(),
             })
     except Exception as exc:
         session.logger.log_error("publish_report", str(exc))
 
-    return {"message": message.to_dict(), "blocked": blocked}
+    return {
+        "message": message.to_dict(),
+        "blocked": blocked,
+        "replacement_agent": replacement_agent,
+    }
 
 
 # ── HTML report endpoint ──────────────────────────────────────────────────────

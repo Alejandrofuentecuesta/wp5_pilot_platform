@@ -61,7 +61,8 @@ export default function AgentImpressionSurvey({
           <p className="mt-2 text-sm leading-6 text-secondary">
             Si quieres, selecciona uno o varios usuarios, puntúalos del 1 (muy
             mal) al 5 (muy bien) y explica brevemente el motivo. Solo aparecen
-            usuarios que han escrito durante la sesión.
+            usuarios que han escrito durante la sesión. Tu respuesta es anónima
+            y ningún otro participante sabrá qué opinión has dado.
           </p>
         </div>
 

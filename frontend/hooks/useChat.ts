@@ -508,6 +508,13 @@ export function useChat() {
       })
     }
 
+    // The server may briefly wait for an in-flight agent turn before replacing
+    // a blocked identity. The report and block are already reflected
+    // optimistically, so close the modal now instead of leaving it disabled
+    // until that background work finishes.
+    setReportModalOpen(false)
+    setReportTarget(null)
+
     try {
       const data = await apiReportMessage(sessionId, messageId, uid, block)
       const serverMsg = data.message
@@ -539,8 +546,6 @@ export function useChat() {
       }
     } finally {
       setReporting(false)
-      setReportModalOpen(false)
-      setReportTarget(null)
     }
   }
 

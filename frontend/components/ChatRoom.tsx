@@ -96,6 +96,7 @@ export default function ChatRoom({
         onLike={(msg) => toggleLike(msg)}
         onMention={(sender) => setInputValue(inputValue + `@${sender} `)}
         onReport={(msg) => {
+          if (reporting) return
           setReportTarget(msg)
           setReportModalOpen(true)
         }}

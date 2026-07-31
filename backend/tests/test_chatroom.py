@@ -157,6 +157,25 @@ class TestSimulationSessionInit:
             assert session.internal_validity_criteria == "Be helpful and friendly."
             assert session.running is False
 
+    @pytest.mark.asyncio
+    async def test_user_exit_opens_agent_impression_survey(self):
+        with _patch_externals() as mocks, \
+             patch("platforms.chatroom.event_repo") as mock_event_repo:
+            mock_event_repo.insert_event_strict = AsyncMock()
+            session, _ = _create_session()
+            session.state.add_message(Message.create(sender="Alice", content="Hola"))
+
+            await session._publish_session_end("user_exit")
+
+            mock_event_repo.insert_event_strict.assert_awaited_once()
+            assert (
+                mock_event_repo.insert_event_strict.await_args.kwargs["event_type"]
+                == "agent_impressions_open"
+            )
+            published = mocks["redis"].publish_event.await_args.args[2]
+            assert published["reason"] == "user_exit"
+            assert published["agent_names"] == ["Alice"]
+
     def test_no_config_raises(self):
         from platforms.chatroom import SimulationSession
 

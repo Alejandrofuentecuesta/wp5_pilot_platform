@@ -140,7 +140,7 @@ export function useChat() {
       setSessionEnded(true)
       setRedirectUrl(url || null)
       if (
-        reason === "duration_expired" &&
+        (reason === "duration_expired" || reason === "user_exit") &&
         sessionId &&
         eventAgentNames.length > 0 &&
         !feedbackAlreadySubmitted

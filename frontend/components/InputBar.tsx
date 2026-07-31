@@ -1,9 +1,11 @@
 "use client"
 
-import { useRef, useCallback } from "react"
+import { useRef, useCallback, useEffect } from "react"
 import type { Message } from "@/lib/types"
 import { getSenderColor } from "@/lib/constants"
 import SendIcon from "./SendIcon"
+
+const MAX_INPUT_HEIGHT_PX = 128
 
 interface InputBarProps {
   inputValue: string
@@ -20,7 +22,18 @@ export default function InputBar({
   onCancelReply,
   onSend,
 }: InputBarProps) {
-  const inputRef = useRef<HTMLInputElement>(null)
+  const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+
+    input.style.height = "auto"
+    const nextHeight = Math.min(input.scrollHeight, MAX_INPUT_HEIGHT_PX)
+    input.style.height = `${nextHeight}px`
+    input.style.overflowY =
+      input.scrollHeight > MAX_INPUT_HEIGHT_PX ? "auto" : "hidden"
+  }, [inputValue])
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
@@ -73,15 +86,15 @@ export default function InputBar({
 
       {/* Input row */}
       <div className="flex items-end gap-2 px-3 py-2.5">
-        <div className="flex-1 bg-bg-feed border border-border rounded-lg px-3.5 py-2.5 flex items-center focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/20 transition-all">
-          <input
+        <div className="flex min-h-[42px] flex-1 items-center rounded-lg border border-border bg-bg-feed px-3.5 py-2.5 transition-all focus-within:border-accent focus-within:ring-1 focus-within:ring-accent/20">
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Write a message..."
-            className="flex-1 text-sm bg-transparent outline-none text-primary placeholder:text-tertiary"
+            className="max-h-32 flex-1 resize-none overflow-y-hidden bg-transparent text-sm leading-5 text-primary outline-none placeholder:text-tertiary"
             aria-label="Message input"
           />
         </div>

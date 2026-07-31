@@ -1070,7 +1070,7 @@ class SimulationSession:
     async def _publish_session_end(self, reason: str) -> None:
         """Publish a session_end event via Redis pub/sub so the frontend can redirect."""
         appeared_agent_names = self._appeared_agent_names()
-        if reason == "duration_expired":
+        if reason in {"duration_expired", "user_exit"}:
             try:
                 await event_repo.insert_event_strict(
                     db_conn.get_pool(),

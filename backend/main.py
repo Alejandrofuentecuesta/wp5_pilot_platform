@@ -453,6 +453,11 @@ async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str
     truncated or mistyped URLs — and g must name one of the agreed
     conditions. Returns the minted token row, or None if any check fails
     (caller then 401s as usual).
+
+    A well-formed arrival at an experiment that is paused or outside its
+    participation window raises 403 rather than returning None, so the
+    participant is told the study is closed instead of being told their
+    link is invalid. Nothing is minted in that case.
     """
     if not (_experiment_id and hkey and g):
         return None
@@ -470,6 +475,12 @@ async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str
     if not group or group not in (experimental.get("groups") or {}):
         print(f"[PANEL_MINT] rejected token={token[:12]}... (bad g={g!r})")
         return None
+    # Checked before seeding: a closed experiment must not accumulate token
+    # rows for arrivals it is going to turn away.
+    unavailable = await config_repo.check_experiment_availability(pool, _experiment_id)
+    if unavailable:
+        print(f"[PANEL_MINT] refused token={token[:12]}... (experiment unavailable: {unavailable})")
+        raise HTTPException(status_code=403, detail=unavailable)
     # Idempotent — a concurrent duplicate arrival is skipped, not duplicated.
     await token_manager.seed_tokens(pool, _experiment_id, {group: [token]})
     print(f"[PANEL_MINT] minted token={token} group={group} experiment={_experiment_id}")

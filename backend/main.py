@@ -890,7 +890,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         return True
 
     # Existing session check — handles reconnects (same worker).
-    session = await session_manager.get_or_reconstruct(session_id, send_to_frontend)
+    try:
+        session = await session_manager.get_or_reconstruct(session_id, send_to_frontend)
+    except RuntimeError as e:
+        # Failed start/resume was already torn down cleanly. 1013 (try again
+        # later) keeps the client's reconnect loop alive — 1011 would show
+        # the fatal "session invalid" screen for what may be a DB hiccup.
+        print(f"WebSocket reconstruction failed for {session_id}: {e}")
+        await websocket.close(code=1013)
+        return
 
     if session and not session.running:
         # Ended but not yet evicted from the registry (reaper grace period):
@@ -932,8 +940,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 participant_stance=participant_stance,
             )
         except RuntimeError as e:
+            # Registry was cleaned up; 1013 lets the client retry (the DB row
+            # is still 'pending' and recoverable) instead of dead-ending.
             print(f"WebSocket session creation failed for {session_id}: {e}")
-            await websocket.close(code=1011)
+            await websocket.close(code=1013)
             return
         # Attach so the pub/sub loop starts delivering messages to this WebSocket.
         await session.attach_websocket(send_to_frontend)

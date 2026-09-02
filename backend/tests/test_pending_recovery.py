@@ -145,6 +145,40 @@ async def test_persisted_pause_credit_keeps_the_session_alive():
 
 
 @pytest.mark.asyncio
+async def test_failed_start_leaves_no_zombie_in_the_registry():
+    """A seed failure used to leave a registered running-but-clockless
+    session that held a cap slot forever and blocked the retry."""
+    manager = SessionManager()
+    session_cls, instance = _fake_session_cls()
+    instance.start = AsyncMock(side_effect=OSError("db hiccup during seed"))
+    instance.clock_task = None
+    with _patched(None, session_cls):
+        with pytest.raises(RuntimeError):
+            await manager.create_session(
+                SESSION_ID,
+                AsyncMock(),
+                treatment_group="civil_support",
+                experiment_id="exp",
+            )
+
+    assert await manager.get_session(SESSION_ID) is None
+    assert instance.running is False
+
+
+@pytest.mark.asyncio
+async def test_failed_reconstruction_leaves_no_zombie_in_the_registry():
+    manager = SessionManager()
+    session_cls, instance = _fake_session_cls()
+    instance.start = AsyncMock(side_effect=OSError("seed failed"))
+    instance.clock_task = None
+    with _patched(_pending_row(age_minutes=1), session_cls):
+        with pytest.raises(RuntimeError):
+            await manager.get_or_reconstruct(SESSION_ID, AsyncMock())
+
+    assert await manager.get_session(SESSION_ID) is None
+
+
+@pytest.mark.asyncio
 async def test_expired_beyond_pause_credit_ends_as_recovery_expiry():
     manager = SessionManager()
     session_cls, _ = _fake_session_cls()

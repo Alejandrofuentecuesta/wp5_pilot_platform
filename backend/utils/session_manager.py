@@ -142,7 +142,15 @@ class SessionManager:
             self._sessions[session_id] = session
 
         # start() is awaited outside the lock (it spawns background tasks).
-        await session.start()
+        # A failure here (e.g. the scenario seed) must not leave a zombie in
+        # the registry: it would hold a cap slot forever and block the
+        # participant's retry. Deregister and re-raise; the DB row stays
+        # 'pending', which the reconnect path can recover.
+        try:
+            await session.start()
+        except Exception as exc:
+            await self._discard_failed_session(session_id, session)
+            raise RuntimeError(f"Session start failed for {session_id}: {exc}") from exc
 
         # Cache metadata in Redis for other workers.
         r = redis_client.get_redis()
@@ -155,6 +163,22 @@ class SessionManager:
         })
 
         return session
+
+    async def _discard_failed_session(
+        self, session_id: str, session: SimulationSession
+    ) -> None:
+        """Best-effort teardown of a session whose start/resume failed."""
+        session.running = False
+        if session.clock_task:
+            session.clock_task.cancel()
+        async with self._lock:
+            if self._sessions.get(session_id) is session:
+                del self._sessions[session_id]
+        try:
+            r = redis_client.get_redis()
+            await redis_client.invalidate_session(r, session_id)
+        except Exception:
+            pass
 
     async def get_session(self, session_id: str) -> Optional[SimulationSession]:
         """Return a session if it lives in this worker's process.
@@ -315,12 +339,20 @@ class SessionManager:
             )
             self._sessions[session_id] = session
 
-        if fresh:
-            # Never went live: seed the scenario and start from scratch.
-            await session.start()
-        else:
-            # Resume the clock loop (but don't re-seed the scenario).
-            await session.resume()
+        # Same zombie guard as create_session: a failed start/resume must
+        # not leave a registered, running-but-clockless session behind.
+        try:
+            if fresh:
+                # Never went live: seed the scenario and start from scratch.
+                await session.start()
+            else:
+                # Resume the clock loop (but don't re-seed the scenario).
+                await session.resume()
+        except Exception as exc:
+            await self._discard_failed_session(session_id, session)
+            raise RuntimeError(
+                f"Session reconstruction failed for {session_id}: {exc}"
+            ) from exc
 
         r = redis_client.get_redis()
         await redis_client.cache_session(r, session_id, {

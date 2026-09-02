@@ -471,6 +471,7 @@ class SimulationSession:
         # After wrapping, replace with Redis pub/sub delivery.
         self._ws_send_fn: Optional[Callable] = None
         self._subscriber_task: Optional[asyncio.Task] = None
+        self._on_subscriber_dead: Optional[Callable] = None
 
         self.features = load_features(self.experimental_config)
 
@@ -1349,12 +1350,22 @@ class SimulationSession:
         print(f"Session {self.session_id} resumed after {paused_for:.0f}s away")
         return paused_for
 
-    async def attach_websocket(self, websocket_send: Callable) -> None:
+    async def attach_websocket(
+        self,
+        websocket_send: Callable,
+        on_subscriber_dead: Optional[Callable] = None,
+    ) -> None:
         """Attach (or re-attach) a WebSocket and replay missed messages.
 
         Messages are replayed from the DB so reconnects to a different worker
         (or after a crash) get the full history.
+
+        ``on_subscriber_dead`` is awaited if the pub/sub subscriber exits
+        abnormally (e.g. a Redis blip); the caller uses it to close the
+        WebSocket so the client reconnects instead of staring at a frozen
+        screen that never receives another message.
         """
+        self._on_subscriber_dead = on_subscriber_dead
         credited = self.resume_from_pause()
         if credited:
             # Persist the credit so a restart does not count disconnected
@@ -1452,7 +1463,13 @@ class SimulationSession:
     # ── Pub/sub loop ──────────────────────────────────────────────────────────
 
     async def _pubsub_loop(self, send_fn: Callable) -> None:
-        """Subscribe to the session Redis channel and forward events to the WebSocket."""
+        """Subscribe to the session Redis channel and forward events to the WebSocket.
+
+        Any exit other than cancellation (the normal detach path) is
+        abnormal: without a live subscriber the participant receives nothing
+        more, so the attach-time callback closes the WebSocket and lets the
+        client's reconnect loop rebuild the pipeline.
+        """
         try:
             r = redis_client.get_redis()
             async for event in redis_client.subscribe_session(r, self.session_id):
@@ -1462,9 +1479,16 @@ class SimulationSession:
                     self.logger.log_error("pubsub_send", str(exc))
                     break  # WebSocket has gone away; stop subscribing.
         except asyncio.CancelledError:
-            pass
+            return
         except Exception as exc:
             self.logger.log_error("pubsub_loop", str(exc))
+
+        callback = getattr(self, "_on_subscriber_dead", None)
+        if callback is not None:
+            try:
+                await callback()
+            except Exception as exc:
+                self.logger.log_error("subscriber_dead_callback", str(exc))
 
     # ── Internal helpers ──────────────────────────────────────────────────────
 

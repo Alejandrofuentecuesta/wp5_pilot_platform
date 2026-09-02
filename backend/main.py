@@ -835,6 +835,14 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
     async def send_to_frontend(message_dict: dict):
         await websocket.send_json(message_dict)
 
+    async def close_for_retry():
+        """Close so the client's reconnect loop rebuilds the pipeline
+        (used when the session's pub/sub subscriber dies underneath it)."""
+        try:
+            await websocket.close(code=1013)
+        except Exception:
+            pass
+
     async def send_ended_and_close() -> bool:
         """Late return to an already-ended session: deliver the session_end
         event (with the panel return URL) instead of a bare rejection, so the
@@ -909,7 +917,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
     if session:
         # Reconnect: attach new WebSocket (replays history + subscribes pub/sub).
-        await session.attach_websocket(send_to_frontend)
+        await session.attach_websocket(send_to_frontend, on_subscriber_dead=close_for_retry)
     else:
         # New connection: pop pending metadata and create session.
         pending = await session_manager.pop_pending(session_id)
@@ -946,7 +954,7 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             await websocket.close(code=1013)
             return
         # Attach so the pub/sub loop starts delivering messages to this WebSocket.
-        await session.attach_websocket(send_to_frontend)
+        await session.attach_websocket(send_to_frontend, on_subscriber_dead=close_for_retry)
 
     # Background heartbeat: send a ping every 30 seconds to detect stale connections.
     # Also closes the WebSocket when the session ends.

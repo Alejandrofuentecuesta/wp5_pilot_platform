@@ -138,6 +138,23 @@ export async function updateConfig(
   return res.json()
 }
 
+/** Raised when sessions are still running, so switching is refused. */
+export class ActivationBlockedError extends Error {
+  liveSessions: { experiment_id: string; count: number }[]
+  total: number
+
+  constructor(
+    message: string,
+    liveSessions: { experiment_id: string; count: number }[],
+    total: number,
+  ) {
+    super(message)
+    this.name = "ActivationBlockedError"
+    this.liveSessions = liveSessions
+    this.total = total
+  }
+}
+
 export async function activateExperiment(
   key: string,
   experimentId: string,
@@ -147,7 +164,15 @@ export async function activateExperiment(
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Activation failed" }))
-    throw new Error(err.detail || "Activation failed")
+    const detail = err.detail
+    if (res.status === 409 && detail && typeof detail === "object") {
+      throw new ActivationBlockedError(
+        detail.message || "Sessions are still in progress.",
+        Array.isArray(detail.live_sessions) ? detail.live_sessions : [],
+        typeof detail.total === "number" ? detail.total : 0,
+      )
+    }
+    throw new Error(typeof detail === "string" ? detail : "Activation failed")
   }
   return res.json()
 }

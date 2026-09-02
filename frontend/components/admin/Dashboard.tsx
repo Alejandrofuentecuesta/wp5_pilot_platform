@@ -9,6 +9,7 @@ import {
   resetSessions,
   deleteExperiment,
   activateExperiment,
+  ActivationBlockedError,
   getExperimentConfig,
   getEvents,
   pauseExperiment,
@@ -1745,6 +1746,9 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
   const [loading, setLoading] = useState(true)
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>("overview")
+  const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null)
+  const [switching, setSwitching] = useState(false)
+  const [switchError, setSwitchError] = useState<string | null>(null)
 
   const checkHealth = useCallback(async () => {
     try {
@@ -1806,9 +1810,38 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
     return () => clearInterval(interval)
   }, [refreshSessionData])
 
-  const handleSelect = async (id: string) => {
-    setSelectedExperimentId(id)
-    try { await activateExperiment(adminKey, id) } catch { /* ignore */ }
+  // Selecting an experiment makes it the live one, which pauses the current
+  // one. The selection therefore only moves once the switch has succeeded.
+  const handleSelect = (id: string) => {
+    if (id === selectedExperimentId) return
+    setSwitchError(null)
+    setPendingSwitchId(id)
+  }
+
+  const confirmSwitch = async () => {
+    if (!pendingSwitchId) return
+    setSwitching(true)
+    setSwitchError(null)
+    try {
+      await activateExperiment(adminKey, pendingSwitchId)
+      setSelectedExperimentId(pendingSwitchId)
+      setPendingSwitchId(null)
+      refresh()
+    } catch (err) {
+      if (err instanceof ActivationBlockedError) {
+        const where = err.liveSessions
+          .map((s) => `${s.experiment_id} (${s.count})`)
+          .join(", ")
+        setSwitchError(
+          `${err.message} ${err.total} session(s) still running: ${where}. ` +
+          `Wait for them to finish, or stop them from the Sessions tab.`,
+        )
+      } else {
+        setSwitchError(err instanceof Error ? err.message : "Activation failed")
+      }
+    } finally {
+      setSwitching(false)
+    }
   }
 
   const noExperiments = experiments.length === 0 && !loading
@@ -1914,6 +1947,51 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
             )}
           </div>
         </>
+      )}
+
+      {/* Switching the live experiment */}
+      {pendingSwitchId && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-admin-surface rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden border border-admin-border">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-sm font-semibold text-admin-text">
+                Switch the live experiment?
+              </h3>
+              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
+                <strong>{selectedExperimentId || "None"}</strong> will be paused and
+                will stop accepting new participants.
+              </p>
+              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
+                <strong>{pendingSwitchId}</strong> will become the live experiment
+                and will receive all incoming panel participants.
+              </p>
+              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
+                Only one experiment accepts participants at a time.
+              </p>
+              {switchError && (
+                <p className="text-xs text-admin-danger-text mt-3 leading-relaxed" role="alert">
+                  {switchError}
+                </p>
+              )}
+            </div>
+            <div className="flex border-t border-admin-border">
+              <button
+                onClick={() => { setPendingSwitchId(null); setSwitchError(null) }}
+                disabled={switching}
+                className="flex-1 py-2.5 text-xs font-medium text-admin-muted hover:bg-admin-raised transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmSwitch}
+                disabled={switching}
+                className="flex-1 py-2.5 text-xs font-medium text-admin-pastel-amber-text hover:bg-admin-pastel-amber transition-colors border-l border-admin-border disabled:opacity-50"
+              >
+                {switching ? "Switching…" : "Yes, switch"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

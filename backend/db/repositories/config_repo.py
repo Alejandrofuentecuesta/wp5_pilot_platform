@@ -369,6 +369,29 @@ async def set_paused(
             raise ValueError(f"Experiment '{experiment_id}' not found")
 
 
+async def activate_exclusively(
+    pool: asyncpg.Pool,
+    experiment_id: str,
+) -> None:
+    """Make one experiment the only unpaused one, in a single transaction.
+
+    'Active' and 'not paused' are therefore the same fact, so a restart can
+    only ever resume the experiment that was last activated.
+    """
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            updated = await conn.execute(
+                "UPDATE experiments SET paused = FALSE WHERE experiment_id = $1",
+                experiment_id,
+            )
+            if updated == "UPDATE 0":
+                raise ValueError(f"Experiment '{experiment_id}' not found")
+            await conn.execute(
+                "UPDATE experiments SET paused = TRUE WHERE experiment_id <> $1",
+                experiment_id,
+            )
+
+
 async def update_experiment_config(
     pool: asyncpg.Pool,
     experiment_id: str,

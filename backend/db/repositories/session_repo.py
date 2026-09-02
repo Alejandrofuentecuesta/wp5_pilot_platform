@@ -126,6 +126,27 @@ async def list_active_sessions(
     return [dict(r) for r in rows]
 
 
+async def count_live_sessions_by_experiment(pool: asyncpg.Pool) -> List[dict]:
+    """Count sessions still owed a conclusion, per experiment.
+
+    'pending' rows are included: the participant has consumed a token and is
+    on their way to the websocket. 'active' covers both connected
+    participants and those disconnected but still inside their rejoin
+    window, who would otherwise come back to a paused experiment.
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT experiment_id, count(*) AS live
+            FROM sessions
+            WHERE status IN ('active', 'pending')
+            GROUP BY experiment_id
+            ORDER BY experiment_id
+            """
+        )
+    return [dict(r) for r in rows]
+
+
 # ── Agent blocks ──────────────────────────────────────────────────────────────
 
 async def upsert_agent_block(

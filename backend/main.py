@@ -215,8 +215,10 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
     await redis_client.init_redis(REDIS_URL)
     print(f"Redis ready ({REDIS_URL})")
 
-    # Auto-activate the most recently created non-paused experiment so
-    # participants can join without the researcher re-activating after restart.
+    # Restore the live experiment so participants can join without the
+    # researcher re-activating after a restart. Activation pauses every other
+    # experiment, so at most one row qualifies; the ordering only matters for
+    # databases predating that rule.
     global _experiment_id
     async with pool.acquire() as conn:
         row = await conn.fetchval(
@@ -1556,7 +1558,6 @@ async def admin_save_config(body: dict, x_admin_key: str = Header(None)):
     must be created for different settings.
     """
     _require_admin(x_admin_key)
-    global _experiment_id
 
     new_experiment_id = (body.get("experiment_id") or "").strip()
     if not new_experiment_id:
@@ -1624,8 +1625,10 @@ async def admin_save_config(body: dict, x_admin_key: str = Header(None)):
     # Seed tokens into the DB for this experiment.
     await token_manager.seed_tokens(pool, new_experiment_id, token_groups)
 
-    # Activate this experiment.
-    _experiment_id = new_experiment_id
+    # Saving does not activate: a new experiment starts paused, and going live
+    # is a separate deliberate step, so creating one cannot pause a running
+    # study as a side effect.
+    await config_repo.set_paused(pool, new_experiment_id, True)
 
     return {"status": "saved", "experiment_id": new_experiment_id}
 
@@ -1751,7 +1754,13 @@ async def admin_clone_experiment(experiment_id: str, body: dict, x_admin_key: st
 
 @app.post("/admin/experiment/{experiment_id}/activate")
 async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Header(None)):
-    """Set the active experiment (for dashboard context and session routing)."""
+    """Make one experiment the live one, pausing every other.
+
+    Exactly one experiment accepts participants at a time, so an unknown
+    panel token has only one possible destination. Switching is refused
+    outright while any session is still running, because pausing an
+    experiment freezes its participants mid-conversation.
+    """
     _require_admin(x_admin_key)
     global _experiment_id
 
@@ -1759,6 +1768,33 @@ async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Heade
     exists = await config_repo.get_experiment_config(pool, experiment_id)
     if not exists:
         raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
+
+    # Re-selecting the current experiment changes nothing, so it must not be
+    # blocked by that experiment's own participants.
+    if experiment_id != _experiment_id:
+        live = await session_repo.count_live_sessions_by_experiment(pool)
+        if live:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "reason": "sessions_in_progress",
+                    "message": (
+                        "Cannot switch experiments while sessions are in progress. "
+                        "Switching pauses the current experiment, which freezes "
+                        "participants mid-session."
+                    ),
+                    "live_sessions": [
+                        {"experiment_id": row["experiment_id"], "count": row["live"]}
+                        for row in live
+                    ],
+                    "total": sum(row["live"] for row in live),
+                },
+            )
+
+    try:
+        await config_repo.activate_exclusively(pool, experiment_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
 
     _experiment_id = experiment_id
     return {"status": "activated", "experiment_id": experiment_id}

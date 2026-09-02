@@ -511,7 +511,7 @@ export function useChat() {
     )
 
     try {
-      const data = await apiLikeMessage(sessionId, msg.message_id, uid)
+      const data = await apiLikeMessage(sessionId, msg.message_id)
       const serverMsg = data.message
       // Reconcile with server
       setMessages((prev) =>
@@ -586,7 +586,7 @@ export function useChat() {
     setReportTarget(null)
 
     try {
-      const data = await apiReportMessage(sessionId, messageId, uid, block)
+      const data = await apiReportMessage(sessionId, messageId, block)
       const serverMsg = data.message
       setMessages((prev) =>
         prev.map((mm) =>

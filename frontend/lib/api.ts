@@ -100,17 +100,15 @@ export function sendTelemetry(
   })
 }
 
-export async function likeMessage(
-  sessionId: string,
-  messageId: string,
-  user: string,
-) {
+// The backend stamps likes/reports with the participant identity itself;
+// the `user` field is legacy and no longer sent.
+export async function likeMessage(sessionId: string, messageId: string) {
   const res = await fetch(
     `${API_BASE}/session/${sessionId}/message/${messageId}/like`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user }),
+      body: JSON.stringify({}),
     },
   )
   if (!res.ok) throw new Error("Network error")
@@ -120,7 +118,6 @@ export async function likeMessage(
 export async function reportMessage(
   sessionId: string,
   messageId: string,
-  user: string,
   block: boolean,
 ) {
   const res = await fetch(
@@ -128,7 +125,7 @@ export async function reportMessage(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user, block }),
+      body: JSON.stringify({ block }),
     },
   )
   if (!res.ok) throw new Error("Network error")

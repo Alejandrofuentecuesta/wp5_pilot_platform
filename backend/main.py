@@ -401,11 +401,13 @@ class ParticipantStanceUpdateRequest(BaseModel):
 
 
 class LikeRequest(BaseModel):
-    user: str
+    # Legacy field, accepted from older frontends but ignored — the backend
+    # stamps the participant identity itself.
+    user: Optional[str] = None
 
 
 class ReportRequest(BaseModel):
-    user: str
+    user: Optional[str] = None  # legacy, ignored (see LikeRequest)
     block: Optional[bool] = False
     reason: Optional[str] = None
 
@@ -1031,9 +1033,16 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
 
 # ── Like / report endpoints ───────────────────────────────────────────────────
 
+# The only human in a session. Likes, reports, and blocks are stamped with
+# this fixed identity server-side; the client-supplied `user` field is
+# accepted for older frontends but never trusted — it could otherwise forge
+# agent likes or blocks under arbitrary names.
+PARTICIPANT_IDENTITY = "participant"
+
+
 @app.post("/session/{session_id}/message/{message_id}/like")
 async def like_message(session_id: str, message_id: str, payload: LikeRequest):
-    """Toggle a like on a message and persist the change."""
+    """Toggle the participant's like on a message and persist the change."""
     session = await session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1041,7 +1050,7 @@ async def like_message(session_id: str, message_id: str, payload: LikeRequest):
     message = next((m for m in session.state.messages if m.message_id == message_id), None)
     if not message:
         raise HTTPException(status_code=404, detail="Message not found")
-    user_id = payload.user
+    user_id = PARTICIPANT_IDENTITY
     result = message.toggle_like(user_id)
 
     # Persist likes update to DB.
@@ -1081,7 +1090,11 @@ async def like_message(session_id: str, message_id: str, payload: LikeRequest):
 
 @app.post("/session/{session_id}/message/{message_id}/report")
 async def report_message(session_id: str, message_id: str, payload: ReportRequest):
-    """Report a message and optionally block the sender."""
+    """Report a message and optionally block the sender.
+
+    Reporting is one-way: a message once reported stays reported, so the
+    record of what the participant flagged cannot be erased by a second call.
+    """
     session = await session_manager.get_session(session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
@@ -1092,8 +1105,11 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
     if message.sender == session.state.user_name:
         raise HTTPException(status_code=400, detail="Participants cannot report their own messages")
 
-    user_id = payload.user
-    result = message.toggle_report()
+    user_id = PARTICIPANT_IDENTITY
+    if message.reported:
+        result = "reported"
+    else:
+        result = message.toggle_report()
 
     # Persist reported flag.
     try:

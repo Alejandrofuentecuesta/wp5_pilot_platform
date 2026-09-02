@@ -751,14 +751,20 @@ class TestHandleEmotionsCheckupResponse:
             session.running = True
             with patch.object(session.logger, "log_event") as mock_log:
                 await session.handle_emotions_checkup_response({
-                    "emotion": "Otra: frustrado/a",
+                    "emotions": [
+                        {"emotion": "Otra: frustrado/a", "intensity": 4},
+                        {"emotion": "Enfado", "intensity": 2},
+                    ],
                     "tempted_to_report": True,
                     "reported_users": ["Carlos", "Lucia"],
                 })
                 mock_log.assert_called_once_with(
                     "emotions_checkup_response",
                     {
-                        "emotion": "Otra: frustrado/a",
+                        "emotions": [
+                            {"emotion": "Otra: frustrado/a", "intensity": 4},
+                            {"emotion": "Enfado", "intensity": 2},
+                        ],
                         "tempted_to_report": True,
                         "reported_users": ["Carlos", "Lucia"],
                     }

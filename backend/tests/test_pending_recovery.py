@@ -120,3 +120,45 @@ async def test_active_row_is_resumed_with_history():
     assert session is instance
     instance.resume.assert_awaited_once()
     instance.start.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_persisted_pause_credit_keeps_the_session_alive():
+    """20 wall-clock minutes on a 15-minute session, but 10 of them were
+    disconnected time — the session must resume, not end as expired."""
+    manager = SessionManager()
+    session_cls, instance = _fake_session_cls()
+    row = {
+        **_pending_row(),
+        "status": "active",
+        "started_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+        "paused_seconds": 600.0,
+        "simulation_config": {"session_duration_minutes": 15},
+    }
+    with _patched(row, session_cls):
+        session = await manager.get_or_reconstruct(SESSION_ID, AsyncMock())
+
+    assert session is instance
+    instance.resume.assert_awaited_once()
+    # The credit is restored into the rebuilt session's clock.
+    assert session_cls.call_args.kwargs["_paused_seconds"] == 600.0
+
+
+@pytest.mark.asyncio
+async def test_expired_beyond_pause_credit_ends_as_recovery_expiry():
+    manager = SessionManager()
+    session_cls, _ = _fake_session_cls()
+    row = {
+        **_pending_row(),
+        "status": "active",
+        "started_at": datetime.now(timezone.utc) - timedelta(minutes=20),
+        "paused_seconds": 60.0,
+        "simulation_config": {"session_duration_minutes": 15},
+    }
+    with _patched(row, session_cls):
+        session = await manager.get_or_reconstruct(SESSION_ID, AsyncMock())
+        end_call = sm_module.session_repo.end_session.await_args
+
+    assert session is None
+    session_cls.assert_not_called()
+    assert end_call.kwargs["reason"] == "duration_expired_on_recovery"

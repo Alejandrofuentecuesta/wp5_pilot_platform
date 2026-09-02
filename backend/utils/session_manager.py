@@ -227,14 +227,20 @@ class SessionManager:
                 session_id, websocket_send, meta, fresh=True,
             )
 
-        # Check if the session already expired during downtime.
+        # Check if the session already expired during downtime. Persisted
+        # pause credit (disconnected time) is subtracted first, so a
+        # participant who was away during a restart is not billed for it.
         started_at = row.get("started_at")
+        paused_seconds = float(row.get("paused_seconds") or 0.0)
         if started_at:
             sim_cfg = row.get("simulation_config")
             if isinstance(sim_cfg, str):
                 sim_cfg = _json.loads(sim_cfg)
             duration = (sim_cfg or {}).get("session_duration_minutes", 15)
-            elapsed = (datetime.now(timezone.utc) - started_at).total_seconds() / 60
+            elapsed = (
+                (datetime.now(timezone.utc) - started_at).total_seconds()
+                - paused_seconds
+            ) / 60
             if elapsed >= duration:
                 await session_repo.end_session(
                     pool,
@@ -254,6 +260,7 @@ class SessionManager:
             "experiment_id": row["experiment_id"],
             "status": row["status"],
             "started_at": started_at,
+            "paused_seconds": paused_seconds,
         }
         return await self._reconstruct_session(session_id, websocket_send, meta)
 
@@ -304,6 +311,7 @@ class SessionManager:
                 _preloaded_blocks=block_rows,
                 _config=config,
                 _started_at=meta.get("started_at"),
+                _paused_seconds=float(meta.get("paused_seconds") or 0.0),
             )
             self._sessions[session_id] = session
 

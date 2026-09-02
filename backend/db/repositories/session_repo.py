@@ -44,7 +44,12 @@ async def activate_session(
     simulation_config: dict,
     experimental_config: dict,
 ) -> None:
-    """Transition session status to 'active' and store config snapshots."""
+    """Transition session status to 'active' and store config snapshots.
+
+    Also zeroes paused_seconds: the timer starts at the first message, and
+    pause credit accrued before that (mirroring the in-memory reset) must
+    not extend the live session.
+    """
     async with pool.acquire() as conn:
         await conn.execute(
             """
@@ -53,13 +58,32 @@ async def activate_session(
                    started_at = $1,
                    random_seed = $2,
                    simulation_config = $3,
-                   experimental_config = $4
+                   experimental_config = $4,
+                   paused_seconds = 0
             WHERE  session_id = $5
             """,
             started_at,
             random_seed,
             json.dumps(simulation_config),
             json.dumps(experimental_config),
+            session_id,
+        )
+
+
+async def add_paused_seconds(
+    pool: asyncpg.Pool,
+    session_id: str,
+    seconds: float,
+) -> None:
+    """Accumulate pause credit (participant disconnected time) on the row."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE sessions
+            SET    paused_seconds = COALESCE(paused_seconds, 0) + $1
+            WHERE  session_id = $2
+            """,
+            seconds,
             session_id,
         )
 

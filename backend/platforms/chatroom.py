@@ -103,7 +103,13 @@ def build_return_url(redirect_url: str, token: str, reason: str) -> str:
     if not token:
         return redirect_url
     reason = reason or ""
-    if reason.startswith("duration_expired"):
+    # duration_expired_on_recovery is NOT a completion: the session ran out
+    # of wall-clock time while nobody was watching (restart + disconnected
+    # participant), so the participant may have received only a fraction of
+    # the exposure. When in doubt, under-claim completion.
+    if reason.startswith("duration_expired") and not reason.startswith(
+        "duration_expired_on_recovery"
+    ):
         r_code = "1"
     elif reason.startswith("user_exit"):
         r_code = "3"
@@ -282,6 +288,7 @@ class SimulationSession:
         _preloaded_blocks: Optional[dict] = None,
         _config: Optional[Dict] = None,
         _started_at: Optional[datetime] = None,
+        _paused_seconds: float = 0.0,
     ):
         self.session_id = session_id
         self.experiment_id = experiment_id
@@ -424,6 +431,10 @@ class SimulationSession:
         # Restore original start time on reconstruction so the timer is accurate.
         if _started_at is not None:
             self.state.start_time = _started_at
+        # Restore accumulated pause credit so a restart does not shorten the
+        # participant's remaining exposure time.
+        if _paused_seconds:
+            self.state.paused_seconds = float(_paused_seconds)
 
         # Preload persisted messages into in-memory state (crash recovery / reconstruction).
         if _preloaded_messages:
@@ -1324,15 +1335,19 @@ class SimulationSession:
         self.logger.log_event("session_paused", {"trigger": "disconnected"})
         print(f"Session {self.session_id} paused (participant disconnected)")
 
-    def resume_from_pause(self) -> None:
-        """Unfreeze after a rejoin; paused time is credited back to the session."""
+    def resume_from_pause(self) -> float:
+        """Unfreeze after a rejoin; paused time is credited back to the session.
+
+        Returns the seconds credited by this call (0.0 if not paused).
+        """
         if self._pause_started_monotonic is None:
-            return
+            return 0.0
         paused_for = time.monotonic() - self._pause_started_monotonic
         self.state.paused_seconds += paused_for
         self._pause_started_monotonic = None
         self.logger.log_event("session_resumed", {"paused_for_seconds": round(paused_for, 1)})
         print(f"Session {self.session_id} resumed after {paused_for:.0f}s away")
+        return paused_for
 
     async def attach_websocket(self, websocket_send: Callable) -> None:
         """Attach (or re-attach) a WebSocket and replay missed messages.
@@ -1340,7 +1355,16 @@ class SimulationSession:
         Messages are replayed from the DB so reconnects to a different worker
         (or after a crash) get the full history.
         """
-        self.resume_from_pause()
+        credited = self.resume_from_pause()
+        if credited:
+            # Persist the credit so a restart does not count disconnected
+            # time against the session clock during recovery.
+            try:
+                await session_repo.add_paused_seconds(
+                    db_conn.get_pool(), self.session_id, credited
+                )
+            except Exception as exc:
+                self.logger.log_error("persist_paused_seconds", str(exc))
         self._raw_ws_send = websocket_send
         self.websocket_send = self._wrap_send(websocket_send)
 

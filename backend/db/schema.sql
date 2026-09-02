@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS sessions (
     end_reason          TEXT,
     simulation_config   JSONB,
     experimental_config JSONB,
+    -- Accumulated disconnected time credited back to the session clock.
+    paused_seconds      DOUBLE PRECISION DEFAULT 0,
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -112,6 +114,10 @@ EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
 DO $$ BEGIN
     ALTER TABLE sessions ADD COLUMN participant_stance TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE sessions ADD COLUMN paused_seconds DOUBLE PRECISION DEFAULT 0;
 EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
 

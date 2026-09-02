@@ -17,6 +17,7 @@ import {
   downloadExperimentBundle,
   downloadSessionBundle,
   stopSession,
+  viewSessionReport,
   getComplianceStats,
   getProviderKeys,
   setProviderKey,
@@ -1498,6 +1499,15 @@ function SessionTable({
     }
   }
 
+  const handleViewReport = async (sessionId: string) => {
+    setDownloadError("")
+    try {
+      await viewSessionReport(adminKey, sessionId)
+    } catch (err) {
+      setDownloadError(err instanceof Error ? err.message : "Report failed")
+    }
+  }
+
   const handleStopSession = async (sessionId: string) => {
     if (!confirm(`Stop session ${sessionId.slice(0, 8)}…? This cannot be undone.`)) return
     setStoppingSessionId(sessionId)
@@ -1552,14 +1562,12 @@ function SessionTable({
                     >
                       {downloadingSessionId === s.session_id ? "JSON..." : "JSON"}
                     </button>
-                    <a
-                      href={`${API_BASE}/session/${s.session_id}/report`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => handleViewReport(s.session_id)}
                       className="text-admin-accent hover:text-admin-accent-hover font-medium"
                     >
                       View
-                    </a>
+                    </button>
                     {!showEndReason && (
                       <button
                         onClick={() => handleStopSession(s.session_id)}

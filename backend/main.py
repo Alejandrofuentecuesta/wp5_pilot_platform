@@ -1174,8 +1174,13 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
 # ── HTML report endpoint ──────────────────────────────────────────────────────
 
 @app.get("/session/{session_id}/report", response_class=HTMLResponse)
-async def session_report(session_id: str):
-    """Generate and return an HTML session report from the DB."""
+async def session_report(session_id: str, x_admin_key: str = Header(None)):
+    """Generate and return an HTML session report from the DB.
+
+    Admin-only: the report contains the treatment group and every LLM
+    prompt, so a participant reaching it would unblind themselves.
+    """
+    _require_admin(x_admin_key)
     pool = _get_pool()
 
     row = await session_repo.get_session(pool, session_id)
@@ -1227,8 +1232,9 @@ async def session_report(session_id: str):
 
 
 @app.get("/session/{session_id}/messages-csv")
-async def session_messages_csv(session_id: str):
-    """Download a single-session annotation template CSV."""
+async def session_messages_csv(session_id: str, x_admin_key: str = Header(None)):
+    """Download a single-session annotation template CSV. Admin-only."""
+    _require_admin(x_admin_key)
     pool = _get_pool()
 
     row = await session_repo.get_session(pool, session_id)

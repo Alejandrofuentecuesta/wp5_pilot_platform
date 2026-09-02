@@ -362,6 +362,21 @@ export async function downloadSessionBundle(
   window.setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
+export async function viewSessionReport(
+  key: string,
+  sessionId: string,
+): Promise<void> {
+  const res = await adminFetch(`/session/${encodeURIComponent(sessionId)}/report`, key)
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Report failed" }))
+    throw new Error(err.detail || "Report failed")
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  window.open(url, "_blank", "noopener")
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
 export async function saveSessionEvaluation(
   key: string,
   sessionId: string,

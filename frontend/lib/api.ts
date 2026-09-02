@@ -26,13 +26,15 @@ export class AtCapacityError extends Error {
 
 export async function startSession(
   token: string,
-  participantName?: string,
+  participantGender?: "m" | "f" | null,
   participantStance?: ParticipantStance,
 ): Promise<SessionStartResponse> {
+  // The typed name is never sent — only how it reads (m/f), so the backend
+  // can assign a gender-matched alias.
   const res = await fetch(`${API_BASE}/session/start`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, participant_name: participantName || null, participant_stance: participantStance }),
+    body: JSON.stringify({ token, participant_gender: participantGender || null, participant_stance: participantStance }),
   })
   if (res.status === 503) {
     const body = await res.json().catch(() => ({}))
@@ -46,13 +48,13 @@ export async function startSession(
 
 export async function joinQueue(
   token: string,
-  participantName?: string,
+  participantGender?: "m" | "f" | null,
   participantStance?: ParticipantStance,
 ): Promise<QueueJoinResponse> {
   const res = await fetch(`${API_BASE}/queue/join`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ token, participant_name: participantName || null, participant_stance: participantStance }),
+    body: JSON.stringify({ token, participant_gender: participantGender || null, participant_stance: participantStance }),
   })
   if (!res.ok) throw new Error(`Queue join failed: ${res.status}`)
   return res.json()

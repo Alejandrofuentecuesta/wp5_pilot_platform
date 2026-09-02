@@ -10,6 +10,7 @@ from typing import Any, Callable, Dict, List, Optional
 
 from models import Message, Agent, SessionState
 from utils import Logger
+from utils import name_scrub
 from utils.llm.llm_manager import LLMManager
 from agents.agent_manager import AgentManager
 from agents.STAGE.classifier import DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
@@ -29,6 +30,15 @@ _REPLACEMENT_AGENT_NAMES = [
     "Mario", "Aitana", "Daniel", "Vega", "Pablo", "Lola", "Javier", "Eva",
 ]
 
+# Genders of the current pool agents, for picking a like-for-like alias when
+# an agent must be renamed (the personas are written around a gendered name).
+# _REPLACEMENT_AGENT_NAMES alternates male/female by index parity. Names
+# missing here just get the first free alias of either gender.
+_AGENT_NAME_GENDERS = {
+    "lucia": "f", "cristina": "f", "irene": "f", "nuria": "f",
+    "diego": "m", "carlos": "m", "oscar": "m", "sergio": "m",
+}
+
 
 def _next_replacement_agent_name(used_names: set[str]) -> str:
     """Choose a fresh, human-looking alias for a blocked agent identity."""
@@ -37,6 +47,48 @@ def _next_replacement_agent_name(used_names: set[str]) -> str:
             return name
     suffix = 2
     while f"Usuario {suffix}" in used_names:
+        suffix += 1
+    return f"Usuario {suffix}"
+
+
+def pick_participant_alias(gender: Optional[str], rng: Optional[random.Random] = None) -> str:
+    """Random alias for the participant, gender-matched when known.
+
+    Drawn from the same UB-curated list used for blocked-agent renames (it
+    alternates male/female by index), so participant identities are scoped
+    exactly like agent identities. Roster collisions are handled at session
+    construction — the colliding agent is renamed — so no roster knowledge
+    is needed at assignment time.
+    """
+    chooser = rng or random
+    parity = {"m": 0, "f": 1}.get(gender or "")
+    candidates = [
+        name
+        for index, name in enumerate(_REPLACEMENT_AGENT_NAMES)
+        if parity is None or index % 2 == parity
+    ]
+    return chooser.choice(candidates)
+
+
+def _next_replacement_agent_name_like(old_name: str, used_names: set[str]) -> str:
+    """Choose a fresh alias matching the renamed agent's gender when known.
+
+    Comparison is accent-insensitive: an alias like "Óscar" must not be
+    handed out while an agent named "Oscar" is in the room.
+    """
+    folded_used = {name_scrub.fold(n) for n in used_names}
+    gender = _AGENT_NAME_GENDERS.get(name_scrub.fold(old_name))
+    parity = {"m": 0, "f": 1}.get(gender)
+    passes = [parity, None] if parity is not None else [None]
+    for wanted_parity in passes:
+        for index, name in enumerate(_REPLACEMENT_AGENT_NAMES):
+            if wanted_parity is not None and index % 2 != wanted_parity:
+                continue
+            if name_scrub.fold(name) in folded_used:
+                continue
+            return name
+    suffix = 2
+    while name_scrub.fold(f"Usuario {suffix}") in folded_used:
         suffix += 1
     return f"Usuario {suffix}"
 
@@ -301,8 +353,10 @@ class SimulationSession:
                 participant_stance_hint=participant_stance_hint,
             )
         else:
-            agent_names = self.simulation_config["agent_names"]
-            agent_personas = self.simulation_config.get("agent_personas", [""] * len(agent_names))
+            # Copies: the roster is mutated below (blocks, name collisions)
+            # and must not write through into the shared config dict.
+            agent_names = list(self.simulation_config["agent_names"])
+            agent_personas = list(self.simulation_config.get("agent_personas", [""] * len(agent_names)))
 
         # Reconstruct identity changes deterministically from persisted blocks.
         # Each blocked agent keeps the same persona/traits but receives a fresh
@@ -322,6 +376,32 @@ class SimulationSession:
                 agent_names[replace_index] = replacement_name
                 if blocked_name in self._agent_traits:
                     self._agent_traits[replacement_name] = self._agent_traits.pop(blocked_name)
+
+        # The participant keeps their real name, so it must be unique in the
+        # room: with common Spanish names in the pool, a participant will
+        # regularly share a name with an agent, which breaks the frontend's
+        # self-detection and would let the end-of-session name scrub rewrite
+        # an agent's identity. The colliding agent is renamed instead — same
+        # persona and traits, gender-matched alias, name swapped inside the
+        # persona text so the agent doesn't call itself by the old name.
+        folded_user = name_scrub.fold(user_name)
+        for index, existing_name in enumerate(agent_names):
+            if name_scrub.fold(existing_name) != folded_user:
+                continue
+            collision_used = set(agent_names) | set(_preloaded_blocks or {}) | {user_name}
+            replacement_name = _next_replacement_agent_name_like(existing_name, collision_used)
+            if index < len(agent_personas) and agent_personas[index]:
+                agent_personas[index] = name_scrub.scrub_text(
+                    agent_personas[index], existing_name, replacement=replacement_name,
+                )[0]
+            agent_names[index] = replacement_name
+            if existing_name in self._agent_traits:
+                self._agent_traits[replacement_name] = self._agent_traits.pop(existing_name)
+            print(
+                f"[Session {session_id}] agent '{existing_name}' renamed to "
+                f"'{replacement_name}' — participant shares the name"
+            )
+            break  # roster names are unique; at most one can collide
 
         self._agent_names = agent_names
 
@@ -1325,6 +1405,10 @@ class SimulationSession:
                 # Server-authoritative: lets a rejoin from a fresh tab/device
                 # skip the initial-message news form.
                 "initial_message_done": self._first_user_message_received,
+                # The participant's alias — the identity the backend and the
+                # transcript use. A rejoining device needs it to anchor
+                # self-detection and the alias→name display mapping.
+                "user_name": self.state.user_name,
             })
         except Exception as exc:
             self.logger.log_error("send_session_config", str(exc))

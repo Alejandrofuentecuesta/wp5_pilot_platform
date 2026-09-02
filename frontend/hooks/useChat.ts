@@ -13,6 +13,7 @@ import {
   AtCapacityError,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
+import { apparentGender, makeNameMapper, sanitizeName, type NameMapper } from "@/lib/name"
 import type {
   Message,
   BlockedSenders,
@@ -42,6 +43,10 @@ export function useChat() {
     blockedKey,
     {},
   )
+  // The backend-assigned alias this session runs under. The typed name never
+  // leaves the browser; the mapper below swaps the two at the boundary.
+  const aliasKey = sessionId ? `alias:${sessionId}` : "alias"
+  const [alias, setAlias] = useLocalStorage<string>(aliasKey, "")
 
   // Session end state
   const [sessionEnded, setSessionEnded] = useState(false)
@@ -102,6 +107,18 @@ export function useChat() {
     () => detectMentions(inputValue, participants),
     [inputValue, participants],
   )
+
+  const usernameRef = useRef(username)
+  useEffect(() => {
+    usernameRef.current = username
+  }, [username])
+
+  // Boundary name mapper: inbound alias->typed name, outbound typed
+  // name->alias. Held in a ref so the WS handler never goes stale.
+  const mapperRef = useRef<NameMapper>(makeNameMapper("", ""))
+  useEffect(() => {
+    mapperRef.current = makeNameMapper(alias, username || alias)
+  }, [alias, username])
 
   // WebSocket message handler
   const handleWSMessage = useCallback((data: unknown) => {
@@ -168,8 +185,27 @@ export function useChat() {
       // Server-authoritative flag: on a rejoin from a fresh tab or device the
       // initial message was already posted, so the news form must not reappear.
       setInitialMessageDone(Boolean(obj.initial_message_done))
+      // The alias anchors self-detection and the name mapping; on a fresh
+      // device (no stored pairing) it also becomes the display name.
+      if (typeof obj.user_name === "string" && obj.user_name) {
+        setAlias(obj.user_name)
+        setUsername((prev) => prev || (obj.user_name as string))
+      }
     } else {
-      const message = obj as unknown as Message
+      const raw = obj as unknown as Message
+      // Single ingress point for transcript content: the alias is rewritten
+      // to the typed name here, so every component downstream renders the
+      // participant's own name without further substitution.
+      const mapper = mapperRef.current
+      const message: Message = {
+        ...raw,
+        sender: mapper.isAlias(raw.sender) ? (usernameRef.current || raw.sender) : raw.sender,
+        content: mapper.inbound(raw.content ?? ""),
+        quoted_text: raw.quoted_text ? mapper.inbound(raw.quoted_text) : raw.quoted_text,
+        mentions: Array.isArray(raw.mentions)
+          ? raw.mentions.map((m) => (mapper.isAlias(m) ? (usernameRef.current || m) : m))
+          : raw.mentions,
+      }
       setMessages((prev) => {
         if (prev.some((m) => m.message_id === message.message_id)) {
           return prev
@@ -177,7 +213,7 @@ export function useChat() {
         return [...prev, message]
       })
     }
-  }, [sessionId, setBlockedSenders, setSessionId])
+  }, [sessionId, setBlockedSenders, setSessionId, setAlias, setUsername])
 
   const handleSessionInvalid = useCallback(() => {
     setSessionId(null)
@@ -245,7 +281,7 @@ export function useChat() {
     }
   }, [sessionId, newsArticle, initialMessageDone, isInitialNewsRead])
 
-  // Start session — sends participant name to backend so agents can infer gender.
+  // Session intake preview (token validation + topic survey).
   const previewSessionIntake = async (
     token: string,
     panel?: { hkey?: string | null; g?: string | null },
@@ -254,10 +290,29 @@ export function useChat() {
   }
 
   const startSession = async (token: string, name: string, stance: ParticipantStance) => {
+    const cleanName = sanitizeName(name)
+    // Best effort only: a failure to load the gender map must never block
+    // starting the session — the backend then picks an alias of either gender.
+    let gender: "m" | "f" | null = null
+    if (cleanName) {
+      try {
+        gender = await apparentGender(cleanName)
+      } catch {
+        gender = null
+      }
+    }
     try {
-      const data = await apiStartSession(token, name || undefined, stance)
+      const data = await apiStartSession(token, gender, stance)
+      if (typeof window !== "undefined" && data.user_name) {
+        // Persist under the new session's key before state catches up.
+        window.localStorage.setItem(
+          `alias:${data.session_id}`,
+          JSON.stringify(data.user_name),
+        )
+      }
       setSessionId(data.session_id)
-      if (name) setUsername(name)
+      setAlias(data.user_name || "")
+      if (cleanName) setUsername(cleanName)
       setParticipantStance(stance)
       setQueueToken(null)
       setSessionEnded(false)
@@ -269,7 +324,7 @@ export function useChat() {
         (err instanceof Error && err.message === "at_capacity")
       if (isCapacity) {
         try {
-          const q = await apiJoinQueue(token, name || undefined, stance)
+          const q = await apiJoinQueue(token, gender, stance)
           setQueueToken(token)
           setQueueName(name)
           setQueueStance(stance)
@@ -323,11 +378,14 @@ export function useChat() {
   const sendMessage = useCallback((customContent?: string): boolean => {
     const text = typeof customContent === "string" ? customContent.trim() : inputValue.trim()
     if (!text) return false
-    const content = text
+    // Self-typed occurrences of the participant's own name travel as the
+    // alias; the quoted text was inbound-mapped on arrival, so it is mapped
+    // back before leaving.
+    const content = mapperRef.current.outbound(text)
     const payload: UserMessagePayload = { type: "user_message", content }
     if (replyTo) {
       payload.reply_to = replyTo.message_id
-      payload.quoted_text = replyTo.content
+      payload.quoted_text = mapperRef.current.outbound(replyTo.content)
     }
     if (detectedMentions.length > 0) payload.mentions = detectedMentions
 
@@ -383,7 +441,12 @@ export function useChat() {
   const submitEmotionsCheckup = useCallback((emotions: EmotionRating[], temptedToReport: boolean, reportedUsers?: string[]) => {
     send({
       type: "emotions_checkup_response",
-      emotions,
+      // The free-text "other" emotion can contain the participant's own
+      // name; predefined labels pass through the mapper unchanged.
+      emotions: emotions.map((e) => ({
+        ...e,
+        emotion: mapperRef.current.outbound(e.emotion),
+      })),
       tempted_to_report: temptedToReport,
       reported_users: reportedUsers,
     } as any)
@@ -393,7 +456,7 @@ export function useChat() {
   const exitSession = useCallback((reason: string) => {
     send({
       type: "user_exit",
-      exit_reason: reason,
+      exit_reason: mapperRef.current.outbound(reason),
     } as any)
     setExitModalOpen(false)
   }, [send])
@@ -404,7 +467,13 @@ export function useChat() {
       setAgentImpressionsSubmitting(true)
       setAgentImpressionsError(null)
       try {
-        await apiSubmitAgentImpressions(sessionId, ratings)
+        await apiSubmitAgentImpressions(
+          sessionId,
+          ratings.map((r) => ({
+            ...r,
+            comment: r.comment ? mapperRef.current.outbound(r.comment) : r.comment,
+          })),
+        )
         setAgentImpressionSurveyOpen(false)
         setSessionId(null)
       } catch {

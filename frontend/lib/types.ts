@@ -61,6 +61,8 @@ export type UserMessagePayload =
 export interface SessionStartResponse {
   session_id: string
   message: string
+  // Backend-assigned alias the session runs under.
+  user_name?: string
 }
 
 export interface SessionIntakeResponse {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { getPreChatSurvey } from "@/lib/pre-chat-surveys"
+import { loadGenderMap, sanitizeName } from "@/lib/name"
 import type { ParticipantStance, SessionIntakeResponse } from "@/lib/types"
 
 // Panel hand-off: participants arrive with ?token=XXXX-XXXX&s=1|2 in the URL.
@@ -55,6 +56,12 @@ export default function LoginScreen({
     () => (intake ? getPreChatSurvey(intake.topic_template_id) : null),
     [intake],
   )
+
+  // Prefetch the name→gender map (a code-split chunk) so apparent-gender
+  // inference at submit time is instant.
+  useEffect(() => {
+    loadGenderMap()
+  }, [])
 
   // Handoff arrivals: validate the link before showing anything. A used
   // token whose session is still alive (paused awaiting rejoin) reconnects
@@ -120,7 +127,7 @@ export default function LoginScreen({
     setLoading(true)
     setError("")
     try {
-      await onStart(handoff.token, username.trim(), handoff.stance)
+      await onStart(handoff.token, sanitizeName(username), handoff.stance)
     } catch {
       setError("No se ha podido iniciar la sesión. Inténtalo de nuevo.")
       setLoading(false)
@@ -135,7 +142,7 @@ export default function LoginScreen({
     setLoading(true)
     setError("")
     try {
-      await onStart(token.trim(), username.trim(), selectedStance)
+      await onStart(token.trim(), sanitizeName(username), selectedStance)
     } catch {
       setError("No se ha podido iniciar la sesión. Inténtalo de nuevo.")
       setLoading(false)

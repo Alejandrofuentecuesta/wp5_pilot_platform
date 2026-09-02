@@ -28,6 +28,7 @@ from datetime import datetime, timezone
 from typing import Callable, Dict, Optional
 
 from platforms import SimulationSession
+from platforms.chatroom import REJOIN_WINDOW_MINUTES
 from db import connection as db_conn
 from db.repositories import session_repo, message_repo, config_repo
 from cache import redis_client
@@ -190,8 +191,41 @@ class SessionManager:
         # restore the original start time.
         pool = db_conn.get_pool()
         row = await session_repo.get_session(pool, session_id)
-        if not row or row["status"] != "active":
+        if not row or row["status"] not in ("active", "pending"):
             return None
+
+        # A 'pending' row means the token was consumed at /session/start but
+        # the worker restarted before the WebSocket arrived. Without recovery
+        # the participant is locked out forever on a burned token, so rebuild
+        # the session as if the WebSocket had reached the original worker —
+        # unless the row is stale, in which case the participant never showed
+        # up and the session is closed out as a non-complete instead.
+        if row["status"] == "pending":
+            created_at = row.get("created_at")
+            age_minutes = (
+                (datetime.now(timezone.utc) - created_at).total_seconds() / 60
+                if created_at else None
+            )
+            if age_minutes is not None and age_minutes >= REJOIN_WINDOW_MINUTES:
+                await session_repo.end_session(
+                    pool,
+                    session_id=session_id,
+                    reason="no_first_message",
+                    ended_at=datetime.now(timezone.utc),
+                )
+                print(f"Stale pending session {session_id} closed instead of revived")
+                return None
+            meta = {
+                "treatment_group": row["treatment_group"],
+                "user_name": row["user_name"],
+                "participant_stance": row.get("participant_stance"),
+                "experiment_id": row["experiment_id"],
+                "status": "pending",
+                "started_at": None,
+            }
+            return await self._reconstruct_session(
+                session_id, websocket_send, meta, fresh=True,
+            )
 
         # Check if the session already expired during downtime.
         started_at = row.get("started_at")
@@ -228,8 +262,15 @@ class SessionManager:
         session_id: str,
         websocket_send: Callable,
         meta: Dict,
+        *,
+        fresh: bool = False,
     ) -> SimulationSession:
-        """Rebuild a SimulationSession from persisted state and resume it."""
+        """Rebuild a SimulationSession from persisted state and resume it.
+
+        ``fresh=True`` rebuilds a pending session that never went live: it is
+        started like a brand-new session (scenario seeded, timer waiting for
+        the first message) instead of resumed.
+        """
         experiment_id = meta.get("experiment_id", "default")
         treatment_group = meta["treatment_group"]
         user_name = meta.get("user_name", "participant")
@@ -242,9 +283,10 @@ class SessionManager:
         if not config:
             raise RuntimeError(f"No config found for experiment '{experiment_id}' during reconstruction")
 
-        # Load persisted messages and agent blocks so in-memory state is consistent.
-        msg_rows = await message_repo.get_session_messages(pool, session_id)
-        block_rows = await session_repo.get_agent_blocks(pool, session_id)
+        # Load persisted messages and agent blocks so in-memory state is
+        # consistent (both empty for a fresh pending rebuild).
+        msg_rows = [] if fresh else await message_repo.get_session_messages(pool, session_id)
+        block_rows = {} if fresh else await session_repo.get_agent_blocks(pool, session_id)
 
         async with self._lock:
             # Double-check — another coroutine may have reconstructed first.
@@ -265,8 +307,12 @@ class SessionManager:
             )
             self._sessions[session_id] = session
 
-        # Resume the clock loop (but don't re-seed the scenario).
-        await session.resume()
+        if fresh:
+            # Never went live: seed the scenario and start from scratch.
+            await session.start()
+        else:
+            # Resume the clock loop (but don't re-seed the scenario).
+            await session.resume()
 
         r = redis_client.get_redis()
         await redis_client.cache_session(r, session_id, {

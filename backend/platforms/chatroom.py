@@ -785,25 +785,6 @@ class SimulationSession:
         self._pipeline_orchestrators = self._build_pipeline_orchestrators()
         self.agent_manager.orchestrator = self._pipeline_orchestrators[0]
 
-    async def set_participant_stance_hint(self, participant_stance_hint: Optional[str]) -> None:
-        """Update the participant self-report and, in pool mode, refresh the roster."""
-        self.participant_stance_hint = participant_stance_hint
-        self.state.participant_stance_hint = participant_stance_hint
-        for orc in self._pipeline_orchestrators:
-            orc.set_participant_stance_hint(participant_stance_hint)
-
-        if self._agent_mode == "pool":
-            pool = db_conn.get_pool()
-            config = await config_repo.get_experiment_config(pool, self.experiment_id)
-            if not config:
-                return
-            experimental_full = config.get("experimental", {})
-            agent_names, agent_personas, agent_traits = self._select_pool_agents(
-                experimental_full=experimental_full,
-                participant_stance_hint=participant_stance_hint,
-            )
-            self._apply_agent_roster(agent_names, agent_personas, agent_traits)
-
     # ── Lifecycle ─────────────────────────────────────────────────────────────
 
     async def start(self) -> None:

@@ -155,39 +155,6 @@ class SessionManager:
 
         return session
 
-    async def update_participant_stance(
-        self,
-        session_id: str,
-        participant_stance: Optional[str],
-    ) -> bool:
-        """Persist a participant self-report and refresh the live session if present."""
-        async with self._lock:
-            pending = self._pending.get(session_id)
-            if pending is not None:
-                pending["participant_stance"] = participant_stance
-
-        pool = db_conn.get_pool()
-        updated = await session_repo.update_participant_stance(
-            pool,
-            session_id=session_id,
-            participant_stance=participant_stance,
-        )
-
-        session = await self.get_session(session_id)
-        if session:
-            await session.set_participant_stance_hint(participant_stance)
-            session.logger.log_event("participant_stance_update", {
-                "participant_stance": participant_stance or "",
-            })
-
-        r = redis_client.get_redis()
-        await redis_client.cache_session(r, session_id, {
-            "participant_stance": participant_stance or "",
-            "status": "active",
-        })
-
-        return updated
-
     async def get_session(self, session_id: str) -> Optional[SimulationSession]:
         """Return a session if it lives in this worker's process.
 

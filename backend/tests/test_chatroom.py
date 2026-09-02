@@ -309,22 +309,6 @@ class TestSimulationSessionInit:
             assert sum(1 for trait in traits if trait["stance"] == "agree") == 4
             assert sum(1 for trait in traits if trait["incivility"] == "uncivil") == 4
 
-    @pytest.mark.asyncio
-    async def test_pool_mode_updates_participant_hint_after_creation(self):
-        pool_config = {
-            "simulation": {
-                **MINIMAL_SIM_CONFIG,
-                "agent_mode": "pool",
-                "num_agents": 2,
-            },
-            "experimental": MINIMAL_EXP_CONFIG,
-        }
-        with _patch_externals():
-            session, _ = _create_session(config=pool_config, participant_stance_hint="favor")
-            await session.set_participant_stance_hint("against")
-            assert session.participant_stance_hint == "against"
-            assert session.state.participant_stance_hint == "against"
-
 
 # ── Preloaded messages (crash recovery) ──────────────────────────────────────
 

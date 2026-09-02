@@ -38,25 +38,6 @@ async def test_create_session_pending(db_pool, experiment_id):
     assert row["participant_stance"] == "favor"
 
 
-async def test_update_participant_stance(db_pool, experiment_id):
-    await session_repo.create_session(
-        db_pool,
-        session_id=SESSION_ID,
-        token=TOKEN,
-        experiment_id=experiment_id,
-        treatment_group="civil_support",
-        user_name="alice",
-    )
-    updated = await session_repo.update_participant_stance(
-        db_pool,
-        session_id=SESSION_ID,
-        participant_stance="against",
-    )
-    row = await session_repo.get_session(db_pool, SESSION_ID)
-    assert updated is True
-    assert row["participant_stance"] == "against"
-
-
 async def test_activate_session(db_pool, experiment_id):
     await session_repo.create_session(
         db_pool,

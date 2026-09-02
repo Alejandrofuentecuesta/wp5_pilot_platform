@@ -60,19 +60,6 @@ export async function joinQueue(
   return res.json()
 }
 
-export async function updateParticipantStance(
-  sessionId: string,
-  participantStance: ParticipantStance,
-): Promise<{ session_id: string; participant_stance: ParticipantStance }> {
-  const res = await fetch(`${API_BASE}/session/${sessionId}/participant-stance`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ participant_stance: participantStance }),
-  })
-  if (!res.ok) throw new Error("Failed to update participant stance")
-  return res.json()
-}
-
 export function sendTelemetry(
   sessionId: string,
   events: Array<{ kind: string; at: string; data?: Record<string, unknown> }>,

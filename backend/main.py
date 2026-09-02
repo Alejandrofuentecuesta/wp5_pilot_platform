@@ -388,18 +388,6 @@ class SessionIntakeResponse(BaseModel):
     rejoin_session_id: Optional[str] = None
 
 
-class ParticipantStanceUpdateRequest(BaseModel):
-    participant_stance: Literal[
-        "pro_topic",
-        "anti_topic",
-        "favor",
-        "against",
-        "qualified_favor",
-        "qualified_against",
-        "skeptical",
-    ]
-
-
 class LikeRequest(BaseModel):
     # Legacy field, accepted from older frontends but ignored — the backend
     # stamps the participant identity itself.
@@ -671,18 +659,6 @@ async def queue_join(request: QueueJoinRequest):
         raise HTTPException(status_code=404, detail="Queue entry not found")
 
     return QueueJoinResponse(**status)
-
-
-@app.post("/session/{session_id}/participant-stance")
-async def update_participant_stance(session_id: str, request: ParticipantStanceUpdateRequest):
-    """Update the participant self-report for compatibility with existing sessions."""
-    updated = await session_manager.update_participant_stance(session_id, request.participant_stance)
-    if not updated:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return {
-        "session_id": session_id,
-        "participant_stance": request.participant_stance,
-    }
 
 
 # Allowlist of client-emitted behavioural telemetry event kinds. Stored in the

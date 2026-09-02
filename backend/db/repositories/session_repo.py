@@ -35,26 +35,6 @@ async def create_session(
         )
 
 
-async def update_participant_stance(
-    pool: asyncpg.Pool,
-    *,
-    session_id: str,
-    participant_stance: Optional[str],
-) -> bool:
-    """Update the participant self-report on an existing session row."""
-    async with pool.acquire() as conn:
-        result = await conn.execute(
-            """
-            UPDATE sessions
-            SET participant_stance = $1
-            WHERE session_id = $2
-            """,
-            participant_stance,
-            session_id,
-        )
-    return result.endswith("1")
-
-
 async def activate_session(
     pool: asyncpg.Pool,
     *,

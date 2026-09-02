@@ -18,12 +18,15 @@ async function adminFetch(
   })
 }
 
-export async function verifyPassphrase(key: string): Promise<boolean> {
+export type PassphraseVerdict = "ok" | "invalid" | "throttled"
+
+export async function verifyPassphrase(key: string): Promise<PassphraseVerdict> {
   try {
     const res = await adminFetch("/admin/verify", key)
-    return res.ok
+    if (res.ok) return "ok"
+    return res.status === 429 ? "throttled" : "invalid"
   } catch {
-    return false
+    return "invalid"
   }
 }
 

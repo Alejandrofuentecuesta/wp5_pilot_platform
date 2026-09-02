@@ -20,6 +20,13 @@ def client():
     return TestClient(main.app, raise_server_exceptions=False)
 
 
+@pytest.fixture(autouse=True)
+def reset_admin_throttle():
+    main._admin_failures.update(count=0, last_at=0.0)
+    yield
+    main._admin_failures.update(count=0, last_at=0.0)
+
+
 @pytest.mark.parametrize("path", [
     "/session/some-session-id/report",
     "/session/some-session-id/messages-csv",

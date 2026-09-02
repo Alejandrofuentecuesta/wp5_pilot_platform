@@ -22,11 +22,15 @@ export default function PassphraseGate({ onAuthenticated, theme, onToggleTheme }
     }
     setLoading(true)
     setError("")
-    const ok = await verifyPassphrase(passphrase.trim())
-    if (ok) {
+    const verdict = await verifyPassphrase(passphrase.trim())
+    if (verdict === "ok") {
       onAuthenticated(passphrase.trim())
     } else {
-      setError("Invalid passphrase")
+      setError(
+        verdict === "throttled"
+          ? "Too many failed attempts — wait 30 seconds and try again"
+          : "Invalid passphrase",
+      )
       setLoading(false)
     }
   }, [passphrase, onAuthenticated])

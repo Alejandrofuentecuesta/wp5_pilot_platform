@@ -1290,10 +1290,37 @@ async def session_messages_csv(session_id: str, x_admin_key: str = Header(None))
 
 # ── Admin endpoints (guarded by ADMIN_PASSPHRASE env var) ────────────────────
 
+# Brute-force throttle: after _ADMIN_FAILURE_THRESHOLD consecutive wrong
+# passphrases, further attempts are refused for _ADMIN_FAILURE_DELAY_SECONDS.
+# Global rather than per-IP — there is one passphrase and a handful of
+# legitimate users, so a 30-second pause is harmless to them and removes
+# unlimited-speed guessing. Single worker, so plain module state suffices.
+_ADMIN_FAILURE_THRESHOLD = 3
+_ADMIN_FAILURE_DELAY_SECONDS = 30
+_admin_failures = {"count": 0, "last_at": 0.0}
+
+
 def _require_admin(x_admin_key: str = Header(None)):
-    """Raise 401 if the admin passphrase is wrong."""
-    if x_admin_key != ADMIN_PASSPHRASE:
+    """Raise 401 if the admin passphrase is wrong, 429 while throttled."""
+    now = time.monotonic()
+    if (
+        _admin_failures["count"] >= _ADMIN_FAILURE_THRESHOLD
+        and now - _admin_failures["last_at"] < _ADMIN_FAILURE_DELAY_SECONDS
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many failed attempts. Wait 30 seconds and try again.",
+        )
+    # Constant-time comparison so response timing leaks nothing about the
+    # passphrase contents.
+    valid = bool(ADMIN_PASSPHRASE) and secrets.compare_digest(
+        (x_admin_key or "").encode("utf-8"), ADMIN_PASSPHRASE.encode("utf-8")
+    )
+    if not valid:
+        _admin_failures["count"] += 1
+        _admin_failures["last_at"] = now
         raise HTTPException(status_code=401, detail="Invalid admin key")
+    _admin_failures["count"] = 0
 
 
 def _generate_token() -> str:

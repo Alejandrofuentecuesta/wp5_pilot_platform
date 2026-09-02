@@ -824,7 +824,16 @@ def _render_director_parsed(parsed: dict) -> str:
 def render_emotions_checkup_response(ev: dict) -> str:
     data = ev["data"]
     ts = _format_time(ev["timestamp"])
-    emotion = _esc(data.get("emotion", "?"))
+    emotions = data.get("emotions")
+    if isinstance(emotions, list) and emotions:
+        emotion = ", ".join(
+            f"{_esc(str(e.get('emotion', '?')))} ({_esc(str(e.get('intensity', '?')))}/5)"
+            if isinstance(e, dict) else _esc(str(e))
+            for e in emotions
+        )
+    else:
+        # Legacy single-emotion format from before multi-select + intensity was added.
+        emotion = _esc(data.get("emotion", "?"))
     tempted = "Sí" if data.get("tempted_to_report") else "No"
     reported_users = data.get("reported_users")
     

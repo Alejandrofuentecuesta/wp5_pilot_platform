@@ -1147,12 +1147,12 @@ class SimulationSession:
         """Handle an incoming emotions checkup response — log as an event."""
         if not self.running:
             return
-        emotion = data.get("emotion")
+        emotions = data.get("emotions")
         tempted = bool(data.get("tempted_to_report", False))
         reported_users = data.get("reported_users")
 
         self.logger.log_event("emotions_checkup_response", {
-            "emotion": emotion,
+            "emotions": emotions,
             "tempted_to_report": tempted,
             "reported_users": reported_users,
         })

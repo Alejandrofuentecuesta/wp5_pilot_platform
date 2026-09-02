@@ -4,17 +4,31 @@ import { useState, useEffect, useRef } from "react"
 
 const MAX_CUSTOM_EMOTION_LENGTH = 300
 
+interface EmotionRating {
+  emotion: string
+  intensity: number
+}
+
 interface EmotionsCheckupModalProps {
-  onSubmit: (emotion: string, temptedToReport: boolean, reportedUsers?: string[]) => void
+  onSubmit: (emotions: EmotionRating[], temptedToReport: boolean, reportedUsers?: string[]) => void
   participants: string[]
 }
 
+const INTENSITY_SCALE = [1, 2, 3, 4, 5]
+
 export default function EmotionsCheckupModal({ onSubmit, participants }: EmotionsCheckupModalProps) {
-  const [selectedEmotion, setSelectedEmotion] = useState<string | null>(null)
+  const [selectedEmotions, setSelectedEmotions] = useState<string[]>([])
+  const [intensities, setIntensities] = useState<Record<string, number>>({})
   const [selectedTempted, setSelectedTempted] = useState<boolean | null>(null)
   const [customEmotion, setCustomEmotion] = useState<string>("")
   const [selectedReportedUsers, setSelectedReportedUsers] = useState<string[]>([])
   const modalRef = useRef<HTMLDivElement>(null)
+
+  const toggleEmotion = (value: string) => {
+    setSelectedEmotions((prev) =>
+      prev.includes(value) ? prev.filter((e) => e !== value) : [...prev, value]
+    )
+  }
 
   // Focus management
   useEffect(() => {
@@ -32,9 +46,12 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
 
   const handleSubmit = () => {
     if (isFormValid) {
-      const finalEmotion = selectedEmotion === "Otra" ? `Otra: ${customEmotion.trim()}` : selectedEmotion!
+      const finalEmotions: EmotionRating[] = selectedEmotions.map((value) => ({
+        emotion: value === "Otra" ? `Otra: ${customEmotion.trim()}` : value,
+        intensity: intensities[value],
+      }))
       onSubmit(
-        finalEmotion,
+        finalEmotions,
         selectedTempted!,
         selectedTempted ? selectedReportedUsers : undefined
       )
@@ -42,8 +59,9 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
   }
 
   const isFormValid =
-    selectedEmotion !== null &&
-    (selectedEmotion !== "Otra" || customEmotion.trim().length > 0) &&
+    selectedEmotions.length > 0 &&
+    selectedEmotions.every((value) => intensities[value] !== undefined) &&
+    (!selectedEmotions.includes("Otra") || customEmotion.trim().length > 0) &&
     selectedTempted !== null &&
     (selectedTempted === false || selectedReportedUsers.length > 0 || participants.length === 0)
 
@@ -74,16 +92,17 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
           {/* Question 1: How do you feel? */}
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-primary">
-              1. ¿Cómo te sientes en este momento?
+              1. ¿Cómo te sientes en este momento? <span className="font-normal text-secondary">(puedes elegir varias)</span>
             </label>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {emotions.map((emotion) => {
-                const isSelected = selectedEmotion === emotion.value
+                const isSelected = selectedEmotions.includes(emotion.value)
                 return (
                   <button
                     key={emotion.value}
                     type="button"
-                    onClick={() => setSelectedEmotion(emotion.value)}
+                    onClick={() => toggleEmotion(emotion.value)}
+                    aria-pressed={isSelected}
                     className={`flex flex-col items-center justify-center p-3 rounded-xl border text-sm font-medium transition-all ${
                       isSelected
                         ? "border-accent bg-accent-soft text-accent ring-2 ring-accent/30"
@@ -99,7 +118,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
               })}
             </div>
 
-            {selectedEmotion === "Otra" && (
+            {selectedEmotions.includes("Otra") && (
               <div className="mt-3 space-y-1.5 animate-in fade-in slide-in-from-top-1 duration-150">
                 <label className="block text-xs font-semibold text-secondary">
                   Especifica otra emoción:
@@ -115,6 +134,45 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
                 <p className="text-right text-xs text-secondary" aria-live="polite">
                   {customEmotion.length}/{MAX_CUSTOM_EMOTION_LENGTH} caracteres
                 </p>
+              </div>
+            )}
+
+            {selectedEmotions.length > 0 && (
+              <div className="mt-3 space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
+                {selectedEmotions.map((value) => {
+                  const label = emotions.find((e) => e.value === value)?.label ?? value
+                  return (
+                    <div key={value} className="space-y-1.5">
+                      <p className="text-xs font-semibold text-secondary">
+                        Intensidad de &quot;{label}&quot;
+                      </p>
+                      <div className="grid grid-cols-5 gap-1.5">
+                        {INTENSITY_SCALE.map((level) => {
+                          const isChosen = intensities[value] === level
+                          return (
+                            <button
+                              key={level}
+                              type="button"
+                              onClick={() => setIntensities((prev) => ({ ...prev, [value]: level }))}
+                              aria-pressed={isChosen}
+                              className={`py-2 rounded-lg border text-sm font-semibold transition-all ${
+                                isChosen
+                                  ? "border-accent bg-accent-soft text-accent ring-2 ring-accent/30"
+                                  : "border-border text-secondary hover:border-accent-hover hover:bg-bg-feed"
+                              }`}
+                            >
+                              {level}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="flex justify-between text-[10px] text-secondary px-0.5">
+                        <span>Poco intenso</span>
+                        <span>Muy intenso</span>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </div>

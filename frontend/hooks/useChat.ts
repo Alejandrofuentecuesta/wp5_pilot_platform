@@ -23,6 +23,7 @@ import type {
   ParticipantStance,
   SessionIntakeResponse,
   AgentImpression,
+  EmotionRating,
 } from "@/lib/types"
 
 export function useChat() {
@@ -379,10 +380,10 @@ export function useChat() {
     setNewsArticleModalOpen(true)
   }, [])
 
-  const submitEmotionsCheckup = useCallback((emotion: string, temptedToReport: boolean, reportedUsers?: string[]) => {
+  const submitEmotionsCheckup = useCallback((emotions: EmotionRating[], temptedToReport: boolean, reportedUsers?: string[]) => {
     send({
       type: "emotions_checkup_response",
-      emotion,
+      emotions,
       tempted_to_report: temptedToReport,
       reported_users: reportedUsers,
     } as any)

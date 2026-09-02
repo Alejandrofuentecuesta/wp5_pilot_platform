@@ -36,10 +36,16 @@ export interface BlockEvent {
 
 export type WSIncoming = Message | LikeEvent | ReportEvent | BlockEvent
 
+export interface EmotionRating {
+  emotion: string
+  intensity: number
+}
+
 export interface EmotionsCheckupResponsePayload {
   type: "emotions_checkup_response"
-  emotion: string
+  emotions: EmotionRating[]
   tempted_to_report: boolean
+  reported_users?: string[]
 }
 
 export type UserMessagePayload =

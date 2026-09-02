@@ -1,6 +1,6 @@
 "use client"
 
-import type { Message } from "@/lib/types"
+import type { Message, EmotionRating } from "@/lib/types"
 import ChatHeader from "./ChatHeader"
 import MessageFeed from "./MessageFeed"
 import InputBar from "./InputBar"
@@ -43,7 +43,7 @@ interface ChatRoomProps {
   submitInitialNewsMessage?: (initialMessage: string) => void
   participantStance: ParticipantStance | null
   emotionsCheckupOpen: boolean
-  onSubmitEmotionsCheckup: (emotion: string, tempted: boolean, reportedUsers?: string[]) => void
+  onSubmitEmotionsCheckup: (emotions: EmotionRating[], tempted: boolean, reportedUsers?: string[]) => void
   exitModalOpen: boolean
   setExitModalOpen: (open: boolean) => void
   exitSession: (reason: string) => void

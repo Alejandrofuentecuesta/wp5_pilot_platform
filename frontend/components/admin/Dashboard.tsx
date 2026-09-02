@@ -13,7 +13,6 @@ import {
   getExperimentConfig,
   getEvents,
   pauseExperiment,
-  resumeExperiment,
   downloadSessionsCSV,
   downloadExperimentBundle,
   downloadSessionBundle,
@@ -1124,15 +1123,22 @@ function SettingsTab({
     setPauseFeedback(null)
     try {
       if (selectedExperiment.paused) {
-        await resumeExperiment(adminKey, selectedExperiment.experiment_id)
-        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" resumed — participants can join again.`, ok: true })
+        // Resuming makes this the live experiment, pausing any other — the
+        // same guarded operation as the dropdown switch.
+        await activateExperiment(adminKey, selectedExperiment.experiment_id)
+        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" is now live — participants can join again. Any other experiment is paused.`, ok: true })
       } else {
         await pauseExperiment(adminKey, selectedExperiment.experiment_id)
         setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" paused — new participants will be turned away.`, ok: true })
       }
       onRefresh()
     } catch (e) {
-      setPauseFeedback({ msg: e instanceof Error ? e.message : "Action failed", ok: false })
+      if (e instanceof ActivationBlockedError) {
+        const where = e.liveSessions.map((s) => `${s.experiment_id} (${s.count})`).join(", ")
+        setPauseFeedback({ msg: `${e.message} ${e.total} session(s) still running: ${where}.`, ok: false })
+      } else {
+        setPauseFeedback({ msg: e instanceof Error ? e.message : "Action failed", ok: false })
+      }
     }
     setPauseLoading(false)
     setTimeout(() => setPauseFeedback(null), 5000)
@@ -1812,8 +1818,12 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
 
   // Selecting an experiment makes it the live one, which pauses the current
   // one. The selection therefore only moves once the switch has succeeded.
+  // Re-selecting a paused experiment still prompts: when nothing is live,
+  // the selection falls back to a paused experiment, and the dropdown must
+  // still be able to activate it.
   const handleSelect = (id: string) => {
-    if (id === selectedExperimentId) return
+    const target = experiments.find((e) => e.experiment_id === id)
+    if (id === selectedExperimentId && target && !target.paused) return
     setSwitchError(null)
     setPendingSwitchId(id)
   }
@@ -1949,18 +1959,28 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
         </>
       )}
 
-      {/* Switching the live experiment */}
-      {pendingSwitchId && (
+      {/* Switching the live experiment. What gets paused is derived from the
+          server's paused flags, not from the local view selection, which can
+          point at a paused experiment when nothing is live. */}
+      {pendingSwitchId && (() => {
+        const liveExperiment = experiments.find((e) => !e.paused)
+        return (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-admin-surface rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden border border-admin-border">
             <div className="px-5 pt-5 pb-3">
               <h3 className="text-sm font-semibold text-admin-text">
-                Switch the live experiment?
+                {liveExperiment ? "Switch the live experiment?" : "Make this experiment live?"}
               </h3>
-              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
-                <strong>{selectedExperimentId || "None"}</strong> will be paused and
-                will stop accepting new participants.
-              </p>
+              {liveExperiment && liveExperiment.experiment_id !== pendingSwitchId ? (
+                <p className="text-xs text-admin-muted mt-2 leading-relaxed">
+                  <strong>{liveExperiment.experiment_id}</strong> will be paused and
+                  will stop accepting new participants.
+                </p>
+              ) : !liveExperiment ? (
+                <p className="text-xs text-admin-muted mt-2 leading-relaxed">
+                  No experiment is currently live.
+                </p>
+              ) : null}
               <p className="text-xs text-admin-muted mt-2 leading-relaxed">
                 <strong>{pendingSwitchId}</strong> will become the live experiment
                 and will receive all incoming panel participants.
@@ -1992,7 +2012,8 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
             </div>
           </div>
         </div>
-      )}
+        )
+      })()}
     </div>
   )
 }

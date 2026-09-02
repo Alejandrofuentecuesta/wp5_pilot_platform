@@ -1752,16 +1752,23 @@ async def admin_clone_experiment(experiment_id: str, body: dict, x_admin_key: st
     }
 
 
-@app.post("/admin/experiment/{experiment_id}/activate")
-async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Header(None)):
-    """Make one experiment the live one, pausing every other.
+# Serialises activation: with a single worker process this rules out two
+# concurrent switches interleaving their DB updates and pointer writes.
+_activation_lock = asyncio.Lock()
+
+
+async def _make_experiment_live(experiment_id: str) -> int:
+    """Guarded, exclusive activation shared by activate and resume.
 
     Exactly one experiment accepts participants at a time, so an unknown
-    panel token has only one possible destination. Switching is refused
-    outright while any session is still running, because pausing an
-    experiment freezes its participants mid-conversation.
+    panel token has only one possible destination. The switch is refused
+    while another experiment still has sessions running, because pausing
+    an experiment freezes its participants mid-conversation. The target's
+    own sessions never block it — activation can only help them — and any
+    of them frozen by an earlier pause are unfrozen here.
+
+    Returns the number of in-memory sessions unfrozen.
     """
-    _require_admin(x_admin_key)
     global _experiment_id
 
     pool = _get_pool()
@@ -1769,10 +1776,10 @@ async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Heade
     if not exists:
         raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
 
-    # Re-selecting the current experiment changes nothing, so it must not be
-    # blocked by that experiment's own participants.
-    if experiment_id != _experiment_id:
-        live = await session_repo.count_live_sessions_by_experiment(pool)
+    async with _activation_lock:
+        live = await session_repo.count_live_sessions_by_experiment(
+            pool, excluding_experiment_id=experiment_id,
+        )
         if live:
             raise HTTPException(
                 status_code=409,
@@ -1791,13 +1798,21 @@ async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Heade
                 },
             )
 
-    try:
-        await config_repo.activate_exclusively(pool, experiment_id)
-    except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
+        try:
+            await config_repo.activate_exclusively(pool, experiment_id)
+        except ValueError as exc:
+            raise HTTPException(status_code=404, detail=str(exc))
 
-    _experiment_id = experiment_id
-    return {"status": "activated", "experiment_id": experiment_id}
+        _experiment_id = experiment_id
+        return session_manager.set_experiment_paused(experiment_id, False)
+
+
+@app.post("/admin/experiment/{experiment_id}/activate")
+async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Header(None)):
+    """Make one experiment the live one, pausing every other."""
+    _require_admin(x_admin_key)
+    resumed = await _make_experiment_live(experiment_id)
+    return {"status": "activated", "experiment_id": experiment_id, "sessions_resumed": resumed}
 
 
 @app.post("/admin/experiment/{experiment_id}/pause")
@@ -1815,15 +1830,15 @@ async def admin_pause_experiment(experiment_id: str, x_admin_key: str = Header(N
 
 @app.post("/admin/experiment/{experiment_id}/resume")
 async def admin_resume_experiment(experiment_id: str, x_admin_key: str = Header(None)):
-    """Resume a paused experiment."""
+    """Resume a paused experiment by making it the live one.
+
+    Same rules as activation: resuming pauses everything else, and is
+    refused while another experiment has sessions running. Without this,
+    resume was a side door that could leave two experiments unpaused.
+    """
     _require_admin(x_admin_key)
-    pool = _get_pool()
-    try:
-        await config_repo.set_paused(pool, experiment_id, False)
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    affected = session_manager.set_experiment_paused(experiment_id, False)
-    return {"status": "resumed", "experiment_id": experiment_id, "sessions_resumed": affected}
+    resumed = await _make_experiment_live(experiment_id)
+    return {"status": "resumed", "experiment_id": experiment_id, "sessions_resumed": resumed}
 
 
 @app.post("/admin/tokens/generate")

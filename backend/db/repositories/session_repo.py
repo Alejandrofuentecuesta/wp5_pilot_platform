@@ -126,23 +126,43 @@ async def list_active_sessions(
     return [dict(r) for r in rows]
 
 
-async def count_live_sessions_by_experiment(pool: asyncpg.Pool) -> List[dict]:
+async def count_live_sessions_by_experiment(
+    pool: asyncpg.Pool,
+    *,
+    excluding_experiment_id: Optional[str] = None,
+    active_within_hours: int = 3,
+    pending_within_minutes: int = 15,
+) -> List[dict]:
     """Count sessions still owed a conclusion, per experiment.
 
-    'pending' rows are included: the participant has consumed a token and is
-    on their way to the websocket. 'active' covers both connected
-    participants and those disconnected but still inside their rejoin
-    window, who would otherwise come back to a paused experiment.
+    'pending' rows count only briefly: the gap between /session/start and the
+    websocket attaching is seconds, and abandoned pending rows are never
+    cleaned up, so without a cutoff one stale row would block experiment
+    switching forever. 'active' rows get a generous cutoff instead — a real
+    session lasts at most its duration plus the rejoin window (~90 minutes),
+    so anything older is a leftover from a crash, not a participant.
+
+    ``excluding_experiment_id`` omits the experiment being made live: its own
+    sessions are helped by activation (unpaused, unfrozen), never harmed.
     """
     async with pool.acquire() as conn:
         rows = await conn.fetch(
             """
             SELECT experiment_id, count(*) AS live
             FROM sessions
-            WHERE status IN ('active', 'pending')
+            WHERE ($1::text IS NULL OR experiment_id <> $1)
+              AND (
+                    (status = 'active'
+                     AND created_at > NOW() - make_interval(hours => $2))
+                 OR (status = 'pending'
+                     AND created_at > NOW() - make_interval(mins => $3))
+              )
             GROUP BY experiment_id
             ORDER BY experiment_id
-            """
+            """,
+            excluding_experiment_id,
+            active_within_hours,
+            pending_within_minutes,
         )
     return [dict(r) for r in rows]
 

@@ -188,3 +188,5 @@ $RECYCLE.BIN/
 dades_proves_alex.sql
 *.csv
 /results/
+# Root-level runtime logs (backend/logs is covered above)
+/logs/

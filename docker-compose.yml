@@ -20,7 +20,7 @@ services:
     environment:
       POSTGRES_DB: wp5
       POSTGRES_USER: wp5user
-      POSTGRES_PASSWORD: wp5pass
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-wp5pass}
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/db/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
@@ -78,7 +78,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      TEST_DATABASE_URL: postgresql://wp5user:wp5pass@db:5432/postgres
+      TEST_DATABASE_URL: postgresql://wp5user:${DB_PASSWORD:-wp5pass}@db:5432/postgres
       REDIS_URL: redis://redis:6379/1
     depends_on:
       db:

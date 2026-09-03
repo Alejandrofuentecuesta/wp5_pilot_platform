@@ -83,6 +83,15 @@ async def get_token_status(pool: asyncpg.Pool, token: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+async def count_tokens(pool: asyncpg.Pool, experiment_id: str) -> int:
+    """Return the number of tokens seeded for an experiment."""
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "SELECT COUNT(*) FROM tokens WHERE experiment_id = $1",
+            experiment_id,
+        )
+
+
 async def list_tokens(
     pool: asyncpg.Pool,
     experiment_id: str,

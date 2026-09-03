@@ -197,6 +197,55 @@ PANEL_GROUP_MAP = {
 
 _PANEL_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 
+# Backstop ceiling on panel-minted tokens per experiment. The hkey scheme is
+# public knowledge (sha256 of the token, visible in this repo), so minting
+# must be bounded even when the config does not set panel_mint_limit —
+# otherwise fabricated links can burn LLM budget without limit.
+_PANEL_MINT_DEFAULT_LIMIT = 5000
+
+
+def _panel_mint_limit(experimental: dict) -> int:
+    raw = experimental.get("panel_mint_limit")
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError):
+        return _PANEL_MINT_DEFAULT_LIMIT
+    return limit if limit > 0 else _PANEL_MINT_DEFAULT_LIMIT
+
+
+# Per-IP rate limit on the participant entry endpoints (intake + start). A
+# real participant makes a handful of these requests; scripted arrivals make
+# thousands. Fixed one-minute windows in plain module state (single worker).
+_ENTRY_RATE_LIMIT_PER_MINUTE = 10
+_entry_rate_counters: Dict[str, tuple] = {}
+
+
+def _client_ip(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _enforce_entry_rate_limit(request: Request) -> None:
+    now = time.monotonic()
+    ip = _client_ip(request)
+    window_start, count = _entry_rate_counters.get(ip, (now, 0))
+    if now - window_start >= 60:
+        window_start, count = now, 0
+    count += 1
+    _entry_rate_counters[ip] = (window_start, count)
+    # Keep the table bounded: prune expired windows once it grows large.
+    if len(_entry_rate_counters) > 10_000:
+        cutoff = now - 60
+        for key in [k for k, v in _entry_rate_counters.items() if v[0] < cutoff]:
+            del _entry_rate_counters[key]
+    if count > _ENTRY_RATE_LIMIT_PER_MINUTE:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many requests. Please wait a minute and try again.",
+        )
+
 
 # ── Lifespan (startup / shutdown) ─────────────────────────────────────────────
 
@@ -502,6 +551,16 @@ async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str
     if unavailable:
         print(f"[PANEL_MINT] refused token={token[:12]}... (experiment unavailable: {unavailable})")
         raise HTTPException(status_code=403, detail=unavailable)
+    # Mint ceiling: fabricated-but-well-formed links must not grow the token
+    # table (and the LLM bill) without bound.
+    limit = _panel_mint_limit(experimental)
+    existing = await token_repo.count_tokens(pool, _experiment_id)
+    if existing >= limit:
+        print(f"[PANEL_MINT] refused token={token[:12]}... (mint limit {limit} reached)")
+        raise HTTPException(
+            status_code=403,
+            detail="This study has ended and is no longer accepting participants.",
+        )
     # Idempotent — a concurrent duplicate arrival is skipped, not duplicated.
     await token_manager.seed_tokens(pool, _experiment_id, {group: [token]})
     print(f"[PANEL_MINT] minted token={token} group={group} experiment={_experiment_id}")
@@ -509,8 +568,9 @@ async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str
 
 
 @app.post("/session/intake", response_model=SessionIntakeResponse)
-async def preview_session_intake(request: SessionIntakeRequest):
+async def preview_session_intake(request: SessionIntakeRequest, http_request: Request):
     """Validate an unused token and return the topic survey shown before joining."""
+    _enforce_entry_rate_limit(http_request)
     pool = _get_pool()
     token_row = await token_repo.get_token_status(pool, request.token)
     if not token_row:
@@ -550,7 +610,7 @@ async def preview_session_intake(request: SessionIntakeRequest):
 
 
 @app.post("/session/start", response_model=SessionStartResponse)
-async def start_session(request: SessionStartRequest):
+async def start_session(request: SessionStartRequest, http_request: Request):
     """Start a new simulation session.
 
     Validates the token, checks experiment availability and session cap,
@@ -558,6 +618,7 @@ async def start_session(request: SessionStartRequest):
     token is not at the front of the queue, returns 503 with a structured
     body so the frontend can transition to the queue screen.
     """
+    _enforce_entry_rate_limit(http_request)
     pool = _get_pool()
 
     token_row = await token_repo.get_token_status(pool, request.token)

@@ -39,6 +39,7 @@ class TestPanelMintAvailability:
                           AsyncMock(return_value=_config())), \
              patch.object(main.config_repo, "check_experiment_availability",
                           AsyncMock(return_value=None)), \
+             patch.object(main.token_repo, "count_tokens", AsyncMock(return_value=0)), \
              patch.object(main.token_manager, "seed_tokens", AsyncMock()) as seed, \
              patch.object(main.token_repo, "get_token_status",
                           AsyncMock(return_value={"token": TOKEN,
@@ -98,3 +99,59 @@ class TestPanelMintAvailability:
             assert row is None
             seed.assert_not_awaited()
             avail.assert_not_awaited()
+
+
+class TestPanelMintCeiling:
+    @pytest.mark.asyncio
+    async def test_limit_reached_refuses_with_study_closed(self):
+        config = _config()
+        config["experimental"]["panel_mint_limit"] = 100
+        with patch.object(main, "_experiment_id", EXPERIMENT), \
+             patch.object(main.config_repo, "get_experiment_config",
+                          AsyncMock(return_value=config)), \
+             patch.object(main.config_repo, "check_experiment_availability",
+                          AsyncMock(return_value=None)), \
+             patch.object(main.token_repo, "count_tokens",
+                          AsyncMock(return_value=100)), \
+             patch.object(main.token_manager, "seed_tokens", AsyncMock()) as seed:
+            with pytest.raises(HTTPException) as exc:
+                await main._try_panel_mint(None, TOKEN, _hkey(), G_PARAM)
+
+            assert exc.value.status_code == 403
+            seed.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_backstop_limit_applies_when_config_is_silent(self):
+        """No panel_mint_limit in the config must still mean bounded minting."""
+        with patch.object(main, "_experiment_id", EXPERIMENT), \
+             patch.object(main.config_repo, "get_experiment_config",
+                          AsyncMock(return_value=_config())), \
+             patch.object(main.config_repo, "check_experiment_availability",
+                          AsyncMock(return_value=None)), \
+             patch.object(main.token_repo, "count_tokens",
+                          AsyncMock(return_value=main._PANEL_MINT_DEFAULT_LIMIT)), \
+             patch.object(main.token_manager, "seed_tokens", AsyncMock()) as seed:
+            with pytest.raises(HTTPException) as exc:
+                await main._try_panel_mint(None, TOKEN, _hkey(), G_PARAM)
+
+            assert exc.value.status_code == 403
+            seed.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_below_limit_still_mints(self):
+        config = _config()
+        config["experimental"]["panel_mint_limit"] = 100
+        with patch.object(main, "_experiment_id", EXPERIMENT), \
+             patch.object(main.config_repo, "get_experiment_config",
+                          AsyncMock(return_value=config)), \
+             patch.object(main.config_repo, "check_experiment_availability",
+                          AsyncMock(return_value=None)), \
+             patch.object(main.token_repo, "count_tokens",
+                          AsyncMock(return_value=99)), \
+             patch.object(main.token_manager, "seed_tokens", AsyncMock()) as seed, \
+             patch.object(main.token_repo, "get_token_status",
+                          AsyncMock(return_value={"token": TOKEN})):
+            row = await main._try_panel_mint(None, TOKEN, _hkey(), G_PARAM)
+
+            seed.assert_awaited_once()
+            assert row["token"] == TOKEN

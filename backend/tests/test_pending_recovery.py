@@ -179,6 +179,52 @@ async def test_failed_reconstruction_leaves_no_zombie_in_the_registry():
 
 
 @pytest.mark.asyncio
+async def test_stale_pending_reservations_are_reaped():
+    """Reservations older than the rejoin window are dropped from memory
+    and their DB rows closed as no_first_message; fresh ones survive."""
+    import time as time_module
+
+    manager = SessionManager()
+    now = time_module.monotonic()
+    manager._pending["stale-id"] = {
+        "treatment_group": "g", "_reserved_at": now - 90 * 60,
+    }
+    manager._pending["fresh-id"] = {
+        "treatment_group": "g", "_reserved_at": now - 60,
+    }
+    session_cls, _ = _fake_session_cls()
+    with _patched(_pending_row(), session_cls):
+        reaped = await manager.reap_stale_pending()
+        end_call = sm_module.session_repo.end_session.await_args
+
+    assert reaped == 1
+    assert "stale-id" not in manager._pending
+    assert "fresh-id" in manager._pending
+    assert end_call.kwargs["session_id"] == "stale-id"
+    assert end_call.kwargs["reason"] == "no_first_message"
+
+
+@pytest.mark.asyncio
+async def test_reaper_leaves_already_progressed_rows_alone():
+    """If the row moved past 'pending' (e.g. the WebSocket arrived late),
+    the reaper drops the memory entry but does not end the session."""
+    import time as time_module
+
+    manager = SessionManager()
+    manager._pending["stale-id"] = {
+        "treatment_group": "g", "_reserved_at": time_module.monotonic() - 90 * 60,
+    }
+    session_cls, _ = _fake_session_cls()
+    active_row = {**_pending_row(), "status": "active"}
+    with _patched(active_row, session_cls):
+        reaped = await manager.reap_stale_pending()
+        assert sm_module.session_repo.end_session.await_args is None
+
+    assert reaped == 1
+    assert manager._pending == {}
+
+
+@pytest.mark.asyncio
 async def test_expired_beyond_pause_credit_ends_as_recovery_expiry():
     manager = SessionManager()
     session_cls, _ = _fake_session_cls()

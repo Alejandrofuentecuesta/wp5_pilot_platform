@@ -420,8 +420,45 @@ class SessionManager:
 
         return len(evicted)
 
+    async def reap_stale_pending(self) -> int:
+        """Close out pending reservations whose participant never connected.
+
+        A reservation older than the rejoin window is dropped from the
+        in-memory dict and its DB row ended as 'no_first_message' — the same
+        outcome the reconnect path applies when a stale pending row is
+        touched, just proactive. Returns the number of entries reaped.
+        """
+        now = time.monotonic()
+        cutoff_seconds = REJOIN_WINDOW_MINUTES * 60
+        stale: list[str] = []
+        async with self._lock:
+            for session_id, info in list(self._pending.items()):
+                reserved_at = info.get("_reserved_at")
+                if reserved_at is None or now - reserved_at >= cutoff_seconds:
+                    del self._pending[session_id]
+                    stale.append(session_id)
+
+        pool = db_conn.get_pool()
+        for session_id in stale:
+            try:
+                row = await session_repo.get_session(pool, session_id)
+                if row and row.get("status") == "pending":
+                    await session_repo.end_session(
+                        pool,
+                        session_id=session_id,
+                        reason="no_first_message",
+                        ended_at=datetime.now(timezone.utc),
+                    )
+            except Exception as exc:
+                print(f"[SessionManager] Failed to close stale pending {session_id}: {exc}")
+
+        return len(stale)
+
     async def reap_loop(self) -> None:
-        """Periodically evict ended sessions. Started once at app startup."""
+        """Periodically evict ended sessions and stale pending reservations.
+
+        Started once at app startup.
+        """
         while True:
             await asyncio.sleep(REAP_INTERVAL_SECONDS)
             try:
@@ -430,6 +467,12 @@ class SessionManager:
                     print(f"[SessionManager] Evicted {evicted} ended session(s) from registry")
             except Exception as exc:
                 print(f"[SessionManager] Reaper error: {exc}")
+            try:
+                reaped = await self.reap_stale_pending()
+                if reaped:
+                    print(f"[SessionManager] Closed {reaped} stale pending reservation(s)")
+            except Exception as exc:
+                print(f"[SessionManager] Pending reaper error: {exc}")
 
     async def list_sessions(self) -> Dict[str, SimulationSession]:
         async with self._lock:

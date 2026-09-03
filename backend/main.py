@@ -377,16 +377,18 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
 
 app = FastAPI(title="Simulcra: Backend", lifespan=lifespan)
 
-# Build CORS allowed origins: always allow localhost for development,
-# plus any additional origins from CORS_ORIGINS env var.
-_cors_origins = [
-    "http://localhost:3000",
-    "http://localhost:8000",
-    "http://127.0.0.1:3000",
-    "http://127.0.0.1:8000",
-]
+# CORS allowed origins: the configured origins in production; localhost
+# defaults only when nothing is configured (local development without the
+# reverse proxy).
 if CORS_ORIGINS:
-    _cors_origins.extend(o.strip() for o in CORS_ORIGINS.split(",") if o.strip())
+    _cors_origins = [o.strip() for o in CORS_ORIGINS.split(",") if o.strip()]
+else:
+    _cors_origins = [
+        "http://localhost:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:8000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,

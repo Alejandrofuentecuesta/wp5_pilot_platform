@@ -5,6 +5,7 @@ import io
 import json
 import os
 import re
+from pathlib import Path
 import secrets
 import string
 import time
@@ -2197,6 +2198,105 @@ async def admin_reset_sessions(
         await redis_client.invalidate_session(r, sid)
 
     return {"status": "sessions_reset", "experiment_id": target_id, "sessions_deleted": len(session_ids)}
+
+
+class EraseParticipantRequest(BaseModel):
+    token: str
+    # Safety: deletion only happens when confirm repeats the token exactly.
+    # Without it the endpoint returns a preview of what would be deleted.
+    confirm: Optional[str] = None
+
+
+@app.post("/admin/erase-participant")
+async def admin_erase_participant(
+    body: EraseParticipantRequest,
+    x_admin_key: str = Header(None),
+):
+    """Erase one participant's data by token (GDPR art. 17).
+
+    Two-step by design: a call without ``confirm`` previews the blast radius
+    (row counts per table, export files found) and deletes nothing. Only a
+    call with ``confirm`` equal to the token executes — inside a single
+    transaction, so a mid-way failure rolls back rather than leaving a
+    half-erased participant. The token row itself is deleted too.
+    """
+    _require_admin(x_admin_key)
+    token = body.token.strip()
+    if not token:
+        raise HTTPException(status_code=422, detail="token is required")
+
+    pool = _get_pool()
+    token_row = await token_repo.get_token_status(pool, token)
+    if not token_row:
+        raise HTTPException(status_code=404, detail="Token not found")
+
+    async with pool.acquire() as conn:
+        session_ids = [
+            r["session_id"] for r in await conn.fetch(
+                "SELECT session_id FROM sessions WHERE token = $1", token
+            )
+        ]
+        counts = {"sessions": len(session_ids), "tokens": 1}
+        for table in ("manual_message_evaluations", "events", "agent_blocks", "messages"):
+            counts[table] = await conn.fetchval(
+                f"SELECT COUNT(*) FROM {table} WHERE session_id = ANY($1)",
+                session_ids,
+            ) if session_ids else 0
+
+    export_dir = Path(os.environ.get(
+        "SESSION_CSV_EXPORT_DIR",
+        str(Path(__file__).resolve().parent / "exports" / "session_csv"),
+    ))
+    export_files = [
+        export_dir / f"{sid}.csv" for sid in session_ids
+        if (export_dir / f"{sid}.csv").is_file()
+    ]
+
+    preview = {
+        "token": token,
+        "rows": counts,
+        "export_files": [f.name for f in export_files],
+    }
+
+    if body.confirm != token:
+        return {
+            "status": "preview",
+            "message": "Nothing deleted. Repeat the token in 'confirm' to erase.",
+            **preview,
+        }
+
+    # Stop any live in-memory session first so nothing rewrites rows mid-erase.
+    for sid in session_ids:
+        session = await session_manager.get_session(str(sid))
+        if session:
+            await session.stop(reason="admin_erased")
+
+    async with pool.acquire() as conn:
+        async with conn.transaction():
+            if session_ids:
+                for table in ("manual_message_evaluations", "events",
+                              "agent_blocks", "messages"):
+                    await conn.execute(
+                        f"DELETE FROM {table} WHERE session_id = ANY($1)",
+                        session_ids,
+                    )
+                await conn.execute(
+                    "DELETE FROM sessions WHERE session_id = ANY($1)", session_ids
+                )
+            await conn.execute("DELETE FROM tokens WHERE token = $1", token)
+
+    for path in export_files:
+        try:
+            path.unlink()
+        except OSError as exc:
+            print(f"[ERASE] could not remove export file {path}: {exc}")
+
+    r = redis_client.get_redis()
+    for sid in session_ids:
+        await redis_client.invalidate_session(r, str(sid))
+
+    print(f"[ERASE] participant erased: token={token} rows={counts}")
+    return {"status": "erased", **preview}
 
 
 @app.post("/admin/reset-db")

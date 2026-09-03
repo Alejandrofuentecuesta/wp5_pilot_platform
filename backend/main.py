@@ -32,7 +32,7 @@ from platforms.chatroom import pick_participant_alias
 from utils import name_scrub
 from utils import token_manager
 from utils.log_viewer import generate_html_from_lines
-from utils.session_csv_exporter import export_session_messages_csv
+from utils.session_csv_exporter import render_session_messages_csv
 from db import connection as db_conn
 from cache import redis_client
 from db.repositories import message_repo, session_repo, event_repo, config_repo, token_repo
@@ -1402,15 +1402,10 @@ async def session_messages_csv(session_id: str, x_admin_key: str = Header(None))
         for msg in raw_messages
     ]
 
-    def _export() -> bytes:
-        csv_path = export_session_messages_csv(session_id, messages)
-        with open(csv_path, "rb") as handle:
-            return handle.read()
-
-    csv_bytes = await asyncio.to_thread(_export)
+    csv_text = render_session_messages_csv(messages)
 
     return StreamingResponse(
-        io.BytesIO(csv_bytes),
+        io.BytesIO(csv_text.encode("utf-8")),
         media_type="text/csv",
         headers={"Content-Disposition": f'attachment; filename="{session_id}.csv"'},
     )
@@ -2245,19 +2240,9 @@ async def admin_erase_participant(
                 session_ids,
             ) if session_ids else 0
 
-    export_dir = Path(os.environ.get(
-        "SESSION_CSV_EXPORT_DIR",
-        str(Path(__file__).resolve().parent / "exports" / "session_csv"),
-    ))
-    export_files = [
-        export_dir / f"{sid}.csv" for sid in session_ids
-        if (export_dir / f"{sid}.csv").is_file()
-    ]
-
     preview = {
         "token": token,
         "rows": counts,
-        "export_files": [f.name for f in export_files],
     }
 
     if body.confirm != token:
@@ -2286,12 +2271,6 @@ async def admin_erase_participant(
                     "DELETE FROM sessions WHERE session_id = ANY($1)", session_ids
                 )
             await conn.execute("DELETE FROM tokens WHERE token = $1", token)
-
-    for path in export_files:
-        try:
-            path.unlink()
-        except OSError as exc:
-            print(f"[ERASE] could not remove export file {path}: {exc}")
 
     r = redis_client.get_redis()
     for sid in session_ids:

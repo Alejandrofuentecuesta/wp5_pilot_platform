@@ -101,13 +101,9 @@ def test_mismatched_confirm_deletes_nothing(client):
     assert conn.executed == []
 
 
-def test_confirmed_erase_deletes_all_tables_and_token(client, tmp_path):
-    csv_file = tmp_path / f"{SESSION_ID}.csv"
-    csv_file.write_text("message\nhola\n")
+def test_confirmed_erase_deletes_all_tables_and_token(client):
     conn = _FakeConn()
-    with _patched(conn), patch.dict(
-        "os.environ", {"SESSION_CSV_EXPORT_DIR": str(tmp_path)}
-    ):
+    with _patched(conn):
         response = _post(client, {"token": TOKEN, "confirm": TOKEN})
 
     assert response.status_code == 200
@@ -117,8 +113,6 @@ def test_confirmed_erase_deletes_all_tables_and_token(client, tmp_path):
     for table in ("manual_message_evaluations", "events", "agent_blocks",
                   "messages", "sessions", "tokens"):
         assert any(table in q for q in deleted_tables), table
-    assert not csv_file.exists()
-    assert payload["export_files"] == [csv_file.name]
 
 
 def test_erase_requires_admin(client):

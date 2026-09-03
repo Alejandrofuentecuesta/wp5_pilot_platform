@@ -924,6 +924,11 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
 
   const renameGroup = (oldName: string, newName: string) => {
     if (newName === oldName) return
+    // Refuse a rename onto an existing group: the keys would collapse into
+    // one object entry and silently destroy one group's whole config. The
+    // name field edits per keystroke, so intermediate collisions simply
+    // don't take effect.
+    if (newName in config.groups) return
     const entries = Object.entries(config.groups)
     const newGroups: Record<string, TreatmentGroup> = {}
     for (const [k, v] of entries) {

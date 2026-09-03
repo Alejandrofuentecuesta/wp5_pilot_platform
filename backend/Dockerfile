@@ -5,9 +5,10 @@ WORKDIR /app
 # Install build deps for asyncpg
 RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev && rm -rf /var/lib/apt/lists/*
 
+# All runtime dependencies (including the LLM SDKs) are declared and pinned
+# in pyproject.toml — do not add ad-hoc installs here.
 COPY pyproject.toml .
-RUN pip install --no-cache-dir -e ".[dev]" \
-    anthropic google-genai huggingface_hub mistralai openai
+RUN pip install --no-cache-dir -e ".[dev]"
 
 COPY . .
 

@@ -3,23 +3,32 @@ name = "stagelab-backend"
 version = "0.1.0"
 description = "Backend for STAGElab: a platform for agent-generated experiments"
 requires-python = ">=3.12"
+# Versions use compatible-release bounds (~=) pinned to the versions running
+# in production, so a redeploy installs the same libraries every time (patch
+# updates allowed; minor/major bumps are a deliberate edit here).
 dependencies = [
-    "fastapi",           # FastAPI framework
-    "uvicorn[standard]", # ASGI server to run FastAPI
-    "pydantic",          # Data validation (used directly in API models)
-    "python-dotenv",     # to load API keys from .env
-    "asyncpg",           # Async PostgreSQL driver
-    "redis[asyncio]",    # Async Redis client (includes hiredis speedups)
+    "fastapi~=0.139.0",          # FastAPI framework
+    "uvicorn[standard]~=0.51.0", # ASGI server to run FastAPI
+    "pydantic~=2.13",            # Data validation (used directly in API models)
+    "python-dotenv~=1.2",        # to load API keys from .env
+    "asyncpg~=0.31.0",           # Async PostgreSQL driver
+    "redis[asyncio]~=8.0",       # Async Redis client (includes hiredis speedups)
+    "httpx~=0.28",               # Panel return pings (platforms/chatroom.py)
+    # LLM provider SDKs (loaded lazily per configured provider)
+    "anthropic~=0.116.0",
+    "google-genai~=2.10",
+    "huggingface_hub~=1.22",
+    "mistralai~=2.6",
+    "openai~=2.44",
 ]
 
 [project.optional-dependencies]
 dev = [
-    "pytest",              # Testing framework
-    "pytest-asyncio>=0.23", # Async test support (>=0.23 for session-scoped fixtures)
-    "fakeredis[aioredis]", # In-memory Redis mock for tests
-    "httpx",               # Async HTTP client for FastAPI test client
-    "black",               # Code formatter
-    "ruff",                # Linter
+    "pytest~=9.1",               # Testing framework
+    "pytest-asyncio~=1.4",       # Async test support
+    "fakeredis[aioredis]~=2.36", # In-memory Redis mock for tests
+    "black~=26.5",               # Code formatter
+    "ruff~=0.15.20",             # Linter
 ]
 
 [build-system]

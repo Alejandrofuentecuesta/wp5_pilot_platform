@@ -52,6 +52,37 @@ async def insert_event_strict(
         )
 
 
+async def insert_events(
+    pool: asyncpg.Pool,
+    *,
+    session_id: str,
+    experiment_id: str,
+    events: List[Dict[str, Any]],
+) -> None:
+    """Append a batch of events in one round-trip.
+
+    Each item needs 'event_type' and 'data'. Swallows exceptions like
+    ``insert_event`` — telemetry writes must never crash callers.
+    """
+    if not events:
+        return
+    try:
+        async with pool.acquire() as conn:
+            await conn.executemany(
+                """
+                INSERT INTO events(session_id, experiment_id, event_type, data)
+                VALUES($1, $2, $3, $4)
+                """,
+                [
+                    (session_id, experiment_id, item["event_type"], json.dumps(item["data"]))
+                    for item in events
+                ],
+            )
+    except Exception as exc:
+        import sys
+        print(f"[event_repo] Failed to insert event batch: {exc}", file=sys.stderr)
+
+
 async def get_session_events(
     pool: asyncpg.Pool,
     session_id: str,

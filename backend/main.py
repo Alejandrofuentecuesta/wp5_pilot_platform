@@ -730,6 +730,42 @@ _TELEMETRY_KINDS = {
 }
 
 
+# Telemetry bounds: the client flushes every 10 s plus event-driven beacons,
+# so 30 requests/minute per IP is generous headroom. A short grace window
+# after session end lets the final page_unload beacon land.
+_TELEMETRY_RATE_LIMIT_PER_MINUTE = 30
+_TELEMETRY_END_GRACE_SECONDS = 300
+_telemetry_rate_counters: Dict[str, tuple] = {}
+
+
+def _telemetry_rate_exceeded(request: Request) -> bool:
+    now = time.monotonic()
+    ip = _client_ip(request)
+    window_start, count = _telemetry_rate_counters.get(ip, (now, 0))
+    if now - window_start >= 60:
+        window_start, count = now, 0
+    count += 1
+    _telemetry_rate_counters[ip] = (window_start, count)
+    if len(_telemetry_rate_counters) > 10_000:
+        cutoff = now - 60
+        for key in [k for k, v in _telemetry_rate_counters.items() if v[0] < cutoff]:
+            del _telemetry_rate_counters[key]
+    return count > _TELEMETRY_RATE_LIMIT_PER_MINUTE
+
+
+def _session_accepts_telemetry(session_row: dict) -> bool:
+    """Live sessions only — telemetry is research data, and a closed
+    session's behavioural record must not keep growing."""
+    status = session_row.get("status")
+    if status in ("active", "pending"):
+        return True
+    ended_at = session_row.get("ended_at")
+    if status == "ended" and ended_at:
+        age = (datetime.now(timezone.utc) - ended_at).total_seconds()
+        return age < _TELEMETRY_END_GRACE_SECONDS
+    return False
+
+
 @app.post("/session/{session_id}/telemetry")
 async def ingest_telemetry(session_id: str, request: Request):
     """Append a batch of client behavioural events to the event log.
@@ -737,8 +773,12 @@ async def ingest_telemetry(session_id: str, request: Request):
     Tolerant by design so it works with ``navigator.sendBeacon`` (which sends a
     Blob, often with a non-JSON content-type) and never blocks the participant:
     unknown event kinds are dropped and any failure returns 204 rather than
-    surfacing an error to the browser.
+    surfacing an error to the browser. Out-of-bounds requests (rate limit,
+    dead session) are dropped with the same 204.
     """
+    if _telemetry_rate_exceeded(request):
+        return Response(status_code=204)
+
     try:
         raw = await request.body()
         payload = json.loads(raw or b"{}")
@@ -755,10 +795,11 @@ async def ingest_telemetry(session_id: str, request: Request):
     except Exception:
         # Malformed session id (e.g. not a UUID) — drop silently.
         return Response(status_code=204)
-    if not session_row:
+    if not session_row or not _session_accepts_telemetry(session_row):
         return Response(status_code=204)
     experiment_id = session_row["experiment_id"]
 
+    batch = []
     for evt in events[:200]:  # cap batch size defensively
         if not isinstance(evt, dict):
             continue
@@ -768,13 +809,15 @@ async def ingest_telemetry(session_id: str, request: Request):
         data = evt.get("data") if isinstance(evt.get("data"), dict) else {}
         if evt.get("at"):
             data = {**data, "client_at": evt["at"]}
-        await event_repo.insert_event(
-            pool,
-            session_id=session_id,
-            experiment_id=experiment_id,
-            event_type=f"client_{kind}",
-            data=data,
-        )
+        batch.append({"event_type": f"client_{kind}", "data": data})
+
+    # One round-trip for the whole batch instead of one insert per event.
+    await event_repo.insert_events(
+        pool,
+        session_id=session_id,
+        experiment_id=experiment_id,
+        events=batch,
+    )
 
     return Response(status_code=204)
 

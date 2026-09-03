@@ -1,11 +1,11 @@
-"""Orchestrator â€” coordinates the three-call Director + Performer + Moderator pipeline.
+"""Orchestrator — coordinates the three-call Director + Performer + Moderator pipeline.
 
 Each turn:
   1. (Skip on first turn) Director Update: update last agent's profile
   2. Director Evaluate: assess validity criteria (every turn during warm-up,
      then every evaluate_interval turns once the first full interval completes)
   3. Director Action: select performer, action type, target, generate O/M/D
-     â€” If the Director selects the human participant, the turn short-circuits
+     — If the Director selects the human participant, the turn short-circuits
        here: Performer/Moderator are skipped, and the evaluate counter is
        not advanced (wait turns are not productive).
   4. Performer: generate message from agent profile + O/M/D + target message
@@ -78,7 +78,7 @@ class TurnResult:
     action_rationale: Optional[str] = None
 
 
-# Ã¢â€â‚¬Ã¢â€â‚¬ Anonymization helpers Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+# ── Anonymization helpers ────────────────────────────────────────────────────
 
 def build_name_map(agent_names: List[str], user_name: str, rng: random.Random) -> Dict[str, str]:
     """Build a stable identity map for the session."""
@@ -162,13 +162,13 @@ def _looks_truncated_response(text: Optional[str]) -> bool:
     if re.search(r"[a-záéíóúüñ][A-ZÁÉÍÓÚÜÑ]", cleaned):
         return True
 
-    if re.search(r"[.!?â€¦)\]\"'Â»â€]\s*$", cleaned):
+    if re.search(r"[.!?…)\]\"'»”]\s*$", cleaned):
         return False
 
-    if cleaned.endswith(("ðŸ˜‚", "ðŸ¤£", "ðŸ˜­", "ðŸ˜¡", "ðŸ˜¤", "ðŸ’¸", "ðŸ”¥", "ðŸ™", "â¤ï¸", "â™¥")):
+    if cleaned.endswith(("😂", "🤣", "😭", "😡", "😤", "💸", "🔥", "🙏", "❤️", "♥")):
         return False
 
-    if cleaned.endswith((",", ";", ":", "-", "â€”", "(", "[", "{", "Â¿", "Â¡")):
+    if cleaned.endswith((",", ";", ":", "-", "—", "(", "[", "{", "¿", "¡")):
         return True
 
     if re.search(r"\b(?:y|o|pero|porque|que|si|aunque|cuando|donde|mientras|como)\s*$", cleaned, re.IGNORECASE):
@@ -322,7 +322,7 @@ class Orchestrator:
         self._anon_user = self._name_map[state.user_name]
 
         # Performer profiles: keyed by anonymous name, values are free-form text.
-        # Includes both agents and the human â€” the Director treats all as equal performers.
+        # Includes both agents and the human — the Director treats all as equal performers.
         # Seeded with each agent's persona (anonymized) so the Director knows their character
         # from turn 1; further accumulated via Director Update calls.
         self.agent_profiles: Dict[str, str] = {}
@@ -360,7 +360,7 @@ class Orchestrator:
         self._internal_validity_summary: str = ""
         self._ecological_validity_summary: str = ""
 
-        # Participant alignment cell â€” computed after name_map and agent_traits are ready.
+        # Participant alignment cell — computed after name_map and agent_traits are ready.
         self._participant_alignment_cell_text = format_participant_alignment_cell(
             self._participant_alignment_cell_live()
         )
@@ -454,7 +454,7 @@ class Orchestrator:
         return bool(re.search(
             r"\b("
             r"exacto|exactamente|tal cual|totalmente de acuerdo|"
-            r"estoy de acuerdo|coincido|tienes raz[oÃ³]n|llevas raz[oÃ³]n|"
+            r"estoy de acuerdo|coincido|tienes raz[oó]n|llevas raz[oó]n|"
             r"muy de acuerdo|completamente de acuerdo|"
             r"eso mismo|justo eso|pienso igual|opino igual"
             r")\b",
@@ -470,9 +470,9 @@ class Orchestrator:
         return bool(re.search(
             r"\b("
             r"deja de|no digas|no vayas|calla|"
-            r"eres|es pat[eÃ©]tico|pat[eÃ©]tico|rid[iÃ­]culo|"
-            r"estupideces|tonter[iÃ­]as|gilipolleces|mierda|"
-            r"imb[eÃ©]cil|idiota|analfabeta|ignorante|ingenuo"
+            r"eres|es pat[eé]tico|pat[eé]tico|rid[ií]culo|"
+            r"estupideces|tonter[ií]as|gilipolleces|mierda|"
+            r"imb[eé]cil|idiota|analfabeta|ignorante|ingenuo"
             r")\b",
             normalized,
         ))
@@ -546,7 +546,7 @@ class Orchestrator:
             r"\b("
             r"skeptical|skeptic|unsure|unclear|mixed|neutral|ambivalent|"
             r"doubt|doubts|doubtful|uncertain|concerned|reservations?|"
-            r"esc[eÃ©]ptic|duda|dudas|reservas?"
+            r"esc[eé]ptic|duda|dudas|reservas?"
             r")\b",
             normalized,
         ))
@@ -579,7 +579,7 @@ class Orchestrator:
         cleaned = " ".join(str(content).split()).strip()
         if len(cleaned) < 12:
             return False
-        return bool(re.search(r"[A-Za-zÃÃ‰ÃÃ“ÃšÃ¡Ã©Ã­Ã³ÃºÃ‘Ã±]", cleaned))
+        return bool(re.search(r"[A-Za-zÁÉÍÓÚáéíóúÑñ]", cleaned))
 
     @classmethod
     def _participant_alignment_cell_from_message(
@@ -620,30 +620,30 @@ class Orchestrator:
             r"\bno me convence\b",
             r"\bme parece mal\b",
             r"\bes una mala medida\b",
-            r"\bestÃ¡ mal plantead[oa]\b",
+            r"\bestá mal plantead[oa]\b",
             r"\bes insuficiente\b",
             r"\bse queda corto\b",
-            r"\bes una verg[Ã¼u]enza\b",
+            r"\bes una verg[üu]enza\b",
             r"\bes una locura\b",
             r"\bno funciona\b",
         ]
         pro_topic_patterns = [
-            r"\bla inmigraci[oÃ³]n es un derecho\b",
+            r"\bla inmigraci[oó]n es un derecho\b",
             r"\bhay que regularizar\b",
-            r"\bsoy pro inmigraci[oÃ³]n\b",
-            r"\bcombatir el cambio clim[aÃ¡]tico\b",
-            r"\bhay que actuar contra el cambio clim[aÃ¡]tico\b",
-            r"\bel cambio clim[aÃ¡]tico es real\b",
+            r"\bsoy pro inmigraci[oó]n\b",
+            r"\bcombatir el cambio clim[aá]tico\b",
+            r"\bhay que actuar contra el cambio clim[aá]tico\b",
+            r"\bel cambio clim[aá]tico es real\b",
             r"\bhay que reducir emisiones\b",
         ]
         anti_topic_patterns = [
             r"\bsobran inmigrantes\b",
             r"\bdevolvedlos\b",
-            r"\bno necesitamos inmigraci[oÃ³]n\b",
+            r"\bno necesitamos inmigraci[oó]n\b",
             r"\befecto llamada\b",
-            r"\bel cambio clim[aÃ¡]tico es una farsa\b",
-            r"\bel cambio clim[aÃ¡]tico es un enga[Ã±n]o\b",
-            r"\bel cambio clim[aÃ¡]tico est[aÃ¡] exagerado\b",
+            r"\bel cambio clim[aá]tico es una farsa\b",
+            r"\bel cambio clim[aá]tico es un enga[ñn]o\b",
+            r"\bel cambio clim[aá]tico est[aá] exagerado\b",
         ]
 
         def _matches(patterns: List[str]) -> bool:
@@ -1404,23 +1404,6 @@ class Orchestrator:
             return self._expected_like_minded_for_agent(actor_name) is True
         return self._agents_share_alignment_cell(actor_name, message.sender)
 
-    def _make_accent_insensitive_regex(self, name: str) -> str:
-        # Maps Spanish/Catalan/common vowels to character classes
-        mapping = {
-            'a': '[aÃ¡Ã Ã¢Ã¤]', 'Ã¡': '[aÃ¡Ã Ã¢Ã¤]', 'Ã ': '[aÃ¡Ã Ã¢Ã¤]', 'Ã¢': '[aÃ¡Ã Ã¢Ã¤]', 'Ã¤': '[aÃ¡Ã Ã¢Ã¤]',
-            'e': '[eÃ©Ã¨ÃªÃ«]', 'Ã©': '[eÃ©Ã¨ÃªÃ«]', 'Ã¨': '[eÃ©Ã¨ÃªÃ«]', 'Ãª': '[eÃ©Ã¨ÃªÃ«]', 'Ã«': '[eÃ©Ã¨ÃªÃ«]',
-            'i': '[iÃ­Ã¬Ã®Ã¯]', 'Ã­': '[iÃ­Ã¬Ã®Ã¯]', 'Ã¬': '[iÃ­Ã¬Ã®Ã¯]', 'Ã®': '[iÃ­Ã¬Ã®Ã¯]', 'Ã¯': '[iÃ­Ã¬Ã®Ã¯]',
-            'o': '[oÃ³Ã²Ã´Ã¶]', 'Ã³': '[oÃ³Ã²Ã´Ã¶]', 'Ã²': '[oÃ³Ã²Ã´Ã¶]', 'Ã´': '[oÃ³Ã²Ã´Ã¶]', 'Ã¶': '[oÃ³Ã²Ã´Ã¶]',
-            'u': '[uÃºÃ¹Ã»Ã¼]', 'Ãº': '[uÃºÃ¹Ã»Ã¼]', 'Ã¹': '[uÃºÃ¹Ã»Ã¼]', 'Ã»': '[uÃºÃ¹Ã»Ã¼]', 'Ã¼': '[uÃºÃ¹Ã»Ã¼]',
-        }
-        pattern_parts = []
-        for char in name.lower():
-            if char in mapping:
-                pattern_parts.append(mapping[char])
-            else:
-                pattern_parts.append(re.escape(char))
-        return "".join(pattern_parts)
-
     @staticmethod
     def _strip_accents(text: str) -> str:
         return "".join(
@@ -1772,7 +1755,7 @@ class Orchestrator:
         internal_validity_criteria: str,
         allowed_performers: Optional[Set[str]] = None,
     ) -> Optional[TurnResult]:
-        """Run one full Update Ã¢â€ â€™ Evaluate Ã¢â€ â€™ Action Ã¢â€ â€™ Performer Ã¢â€ â€™ Moderator cycle.
+        """Run one full Update → Evaluate → Action → Performer → Moderator cycle.
 
         ``allowed_performers`` (real agent names) restricts which agents the
         Director can select in parallel mode, preventing duplicate picks.
@@ -1793,16 +1776,16 @@ class Orchestrator:
         anon_recent_action = [anonymize_message(m, self._name_map) for m in recent_action]
 
         # 1b. Detect if the human posted since the last orchestrator turn.
-        #     Do NOT treat the participant as a performer for Update purposes â€”
+        #     Do NOT treat the participant as a performer for Update purposes —
         #     the Director cannot instruct the human, and running Update on their
         #     message causes the Director to try to "correct" them in Action.
         if anon_recent_action and anon_recent_action[-1].sender == self._anon_user:
             self._last_action_type = "message"
             # Leave _last_agent unchanged so Update still targets the previous agent.
 
-        # 2. Director Update (skip on first turn â€” nothing to assess)
+        # 2. Director Update (skip on first turn — nothing to assess)
         if anon_recent_action and self._last_agent and self._last_agent != self._anon_user:
-            # Skip Update for likes â€” they aren't significant enough for a profile revision.
+            # Skip Update for likes — they aren't significant enough for a profile revision.
             if self._last_action_type != "like":
                 await self._director_update(anon_recent_action)
 
@@ -1904,7 +1887,7 @@ class Orchestrator:
         #     addresses a specific agent that has NOT yet replied to it, force
         #     that agent to reply.  We scan backwards through the window to find
         #     the latest participant message, then check whether any agent has
-        #     already responded after it â€” if so, the obligation is discharged.
+        #     already responded after it — if so, the obligation is discharged.
         agent_names = speaking_agent_names
 
         if addressed_agent and addressed_agent != agent_name:
@@ -1926,7 +1909,7 @@ class Orchestrator:
             action_data["target_user"] = None
             action_data["performer_instruction"] = {
                 "objective": f"Reply directly to {self.state.user_name}'s message addressed to you.",
-                "motivation": f"{self.state.user_name} addressed you specifically â€” not replying would feel rude and unnatural.",
+                "motivation": f"{self.state.user_name} addressed you specifically — not replying would feel rude and unnatural.",
                 "directive": "Keep it conversational and on-topic; stay true to your fixed stance and character.",
             }
 
@@ -2006,7 +1989,7 @@ class Orchestrator:
             action_type = "message"
             action_data["action_type"] = "message"
             target_user = None
-            # Clear the @mention instruction â€” the performer now posts a standalone message.
+            # Clear the @mention instruction — the performer now posts a standalone message.
             if action_data.get("performer_instruction"):
                 action_data["performer_instruction"] = {
                     "objective": action_data["performer_instruction"].get("objective", "Post a message to the chatroom."),
@@ -2288,7 +2271,7 @@ class Orchestrator:
                 target_message_id = None
                 action_data["target_message_id"] = None
 
-        # 3b. Handle 'wait' â€” Director selected the human participant.
+        # 3b. Handle 'wait' — Director selected the human participant.
         #     Skip Performer/Moderator and restore evaluate counter
         #     (wait turns are not productive turns).
         if agent_name == self.state.user_name:
@@ -2378,7 +2361,7 @@ class Orchestrator:
                 action_rationale=action_rationale,
             )
 
-        # 5. Performer Ã¢â€ â€™ Moderator loop (max MAX_PERFORMER_RETRIES attempts)
+        # 5. Performer → Moderator loop (max MAX_PERFORMER_RETRIES attempts)
         performer_instruction = action_data.get("performer_instruction", {})
 
         # Get the selected agent's profile and restore real names for the performer.
@@ -2398,7 +2381,7 @@ class Orchestrator:
                 None,
             )
         elif action_type == "message" and target_user:
-            # Director chose a targeted message but no explicit message_id â€”
+            # Director chose a targeted message but no explicit message_id —
             # resolve the target user's most recent message.
             for m in reversed(self.state.messages):
                 if m.sender == target_user:
@@ -2425,7 +2408,7 @@ class Orchestrator:
                         break
             recent_by_others.reverse()
 
-        # Get agent's raw persona for the performer (not anonymized â€” performer knows their own character)
+        # Get agent's raw persona for the performer (not anonymized — performer knows their own character)
         agent_obj = next((a for a in agents if a.name == agent_name), None)
         agent_persona = (agent_obj.persona or None) if agent_obj else None
 
@@ -2753,7 +2736,7 @@ class Orchestrator:
             action_rationale=action_rationale,
         )
 
-    # Ã¢â€â‚¬Ã¢â€â‚¬ Director Update (Call 1) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    # ── Director Update (Call 1) ─────────────────────────────────────────────────
 
     async def _director_update(self, anon_recent: List[Message]) -> None:
         """Run Director Update call: update last agent's profile.
@@ -2814,7 +2797,7 @@ class Orchestrator:
         if self._last_agent and self._last_agent in self.agent_profiles:
             self.agent_profiles[self._last_agent] = update_data["performer_profile_update"]
 
-    # Ã¢â€â‚¬Ã¢â€â‚¬ Director Evaluate (Call 2) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    # ── Director Evaluate (Call 2) ───────────────────────────────────────────────
 
     async def _director_evaluate(self, internal_validity_criteria: str, anon_recent: List[Message]) -> None:
         """Run Director Evaluate call: revise validity evaluations.
@@ -2886,7 +2869,7 @@ class Orchestrator:
         self._internal_validity_summary = evaluate_data["internal_validity_evaluation"]
         self._ecological_validity_summary = evaluate_data["ecological_validity_evaluation"]
 
-    # Ã¢â€â‚¬Ã¢â€â‚¬ Director Action (Call 3) Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
+    # ── Director Action (Call 3) ─────────────────────────────────────────────────
 
     async def _director_action(
         self,
@@ -2995,7 +2978,7 @@ class Orchestrator:
 
         # Retry loop: Director Action is the most critical call in the pipeline.
         # On empty response or unparseable JSON, retry with short exponential backoff
-        # before giving up â€” this handles cold-start timeouts and transient API errors
+        # before giving up — this handles cold-start timeouts and transient API errors
         # that are especially common at session start.
         MAX_ACTION_ATTEMPTS = 3
         BACKOFF_SECONDS = [0, 2, 5]  # delay before attempt 1, 2, 3
@@ -3088,6 +3071,6 @@ class Orchestrator:
 
         self.logger.log_error(
             "director_action_failed",
-            f"Director Action gave no valid response after {MAX_ACTION_ATTEMPTS} attempts â€” skipping turn",
+            f"Director Action gave no valid response after {MAX_ACTION_ATTEMPTS} attempts — skipping turn",
         )
         return None

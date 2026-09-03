@@ -19,7 +19,6 @@ import hashlib
 import random
 import re
 import unicodedata
-from copy import copy
 from dataclasses import dataclass
 from typing import Optional, List, Dict, Set
 
@@ -78,53 +77,7 @@ class TurnResult:
     action_rationale: Optional[str] = None
 
 
-# ── Anonymization helpers ────────────────────────────────────────────────────
-
-def build_name_map(agent_names: List[str], user_name: str, rng: random.Random) -> Dict[str, str]:
-    """Build a stable identity map for the session."""
-    del rng
-    all_names = list(agent_names) + [user_name]
-    return {name: name for name in all_names}
-
-
-
-def anonymize_message(msg: Message, name_map: Dict[str, str]) -> Message:
-    """Return a shallow copy of a Message with sender/mentions/content anonymized."""
-    anon = copy(msg)
-    anon.sender = name_map.get(msg.sender, msg.sender)
-
-    if msg.mentions:
-        anon.mentions = [name_map.get(m, m) for m in msg.mentions]
-
-    if msg.liked_by:
-        anon.liked_by = {name_map.get(u, u) for u in msg.liked_by}
-
-    anon.content = _replace_names_in_text(msg.content, name_map)
-
-    if msg.quoted_text:
-        anon.quoted_text = _replace_names_in_text(msg.quoted_text, name_map)
-
-    return anon
-
-
-def anonymize_agents(agents: List[Agent], name_map: Dict[str, str]) -> List[Agent]:
-    """Return a list of Agents with anonymized names."""
-    return [Agent(name=name_map.get(a.name, a.name), persona=a.persona) for a in agents]
-
-
-def _replace_names_in_text(text: str, name_map: Dict[str, str]) -> str:
-    """Replace all occurrences of real names in text with their anonymous labels."""
-    if not text:
-        return text
-    for real, anon in sorted(name_map.items(), key=lambda x: -len(x[0])):
-        text = text.replace(real, anon)
-    return text
-
-
-def deanonymize_text(text: str, reverse_map: Dict[str, str]) -> str:
-    """Replace anonymous labels in text back to real names."""
-    return _replace_names_in_text(text, reverse_map)
-
+# ── Text post-processing helpers ────────────────────────────────────────────────────
 
 def _strip_target_quote_echo(content: str, target_message: Optional[Message]) -> str:
     """Remove a copied target message prefix when the moderator echoes quoted text."""
@@ -313,27 +266,21 @@ class Orchestrator:
         self.boost_replies_mentions = boost_replies_mentions
         self.ten_messages_mode = ten_messages_mode
 
-        # Build the shuffled name mapping (stable for the session lifetime).
         _rng = rng or random.Random()
         self._rng = _rng
         agent_names = [a.name for a in state.agents]
-        self._name_map = build_name_map(agent_names, state.user_name, _rng)
-        self._reverse_map = {v: k for k, v in self._name_map.items()}
-        self._anon_user = self._name_map[state.user_name]
 
-        # Performer profiles: keyed by anonymous name, values are free-form text.
-        # Includes both agents and the human — the Director treats all as equal performers.
-        # Seeded with each agent's persona (anonymized) so the Director knows their character
-        # from turn 1; further accumulated via Director Update calls.
+        # Performer profiles: keyed by agent name, values are free-form text.
+        # Includes both agents and the human — the Director treats all as equal
+        # performers. Seeded with each agent's persona so the Director knows
+        # their character from turn 1; accumulated via Director Update calls.
         self.agent_profiles: Dict[str, str] = {}
         for a in state.agents:
-            anon_name = self._name_map[a.name]
             if a.persona and a.persona.strip():
-                persona_text = _replace_names_in_text(a.persona, self._name_map)
-                self.agent_profiles[anon_name] = f"Character persona: {persona_text}"
+                self.agent_profiles[a.name] = f"Character persona: {a.persona}"
             else:
-                self.agent_profiles[anon_name] = ""
-        self.agent_profiles[self._anon_user] = ""
+                self.agent_profiles[a.name] = ""
+        self.agent_profiles[state.user_name] = ""
 
         # Track the last agent that acted (anonymous name) and their action type, for Update calls.
         self._last_agent: Optional[str] = None
@@ -352,9 +299,9 @@ class Orchestrator:
 
         # Per-performer action counts (keyed by anonymous name).
         self._performer_counts: Dict[str, int] = {
-            self._name_map[name]: 0 for name in agent_names
+            name: 0 for name in agent_names
         }
-        self._performer_counts[self._anon_user] = 0
+        self._performer_counts[state.user_name] = 0
 
         # Carry forward validity evaluations between turns.
         self._internal_validity_summary: str = ""
@@ -762,8 +709,7 @@ class Orchestrator:
                     return True
 
         # 2. Check if the agent is mentioned in the last message
-        anon_name = self._name_map.get(agent_real_name)
-        if anon_name and last_message.mentions and anon_name in last_message.mentions:
+        if last_message.mentions and agent_real_name in last_message.mentions:
             return True
 
         # 3. Check if the last message was sent immediately after a message from this agent (adjacency)
@@ -1087,14 +1033,14 @@ class Orchestrator:
         if not summary:
             return summary
 
-        eligible = {name for name in eligible_anon_names if name != self._anon_user}
+        eligible = {name for name in eligible_anon_names if name != self.state.user_name}
         if not eligible:
             return summary
 
         all_agent_names = {
             anon_name
             for anon_name in self._performer_counts.keys()
-            if anon_name != self._anon_user
+            if anon_name != self.state.user_name
         }
         ineligible = sorted(all_agent_names - eligible, key=len, reverse=True)
 
@@ -1203,7 +1149,7 @@ class Orchestrator:
         all_anon_agents = sorted(
             anon_name
             for anon_name in self._performer_counts.keys()
-            if anon_name != self._anon_user
+            if anon_name != self.state.user_name
         )
 
         last_index_by_real: Dict[str, int] = {}
@@ -1215,7 +1161,7 @@ class Orchestrator:
         def _section(title: str, anon_names: List[str]) -> str:
             lines = [title]
             for anon_name in anon_names:
-                real_name = self._deanon_name(anon_name)
+                real_name = anon_name
                 message_count = count_by_real.get(real_name, 0)
                 last_index = last_index_by_real.get(real_name)
                 last_spoke = self._format_turns_ago(
@@ -1233,7 +1179,7 @@ class Orchestrator:
             eligible_only = sorted(
                 anon_name
                 for anon_name in eligible_anon_names
-                if anon_name != self._anon_user
+                if anon_name != self.state.user_name
             )
             if eligible_only:
                 sections.append(_section("Eligible speakers this turn:", eligible_only))
@@ -1440,7 +1386,7 @@ class Orchestrator:
     ) -> str:
         if not text:
             return text
-        names = list(self._name_map.keys())
+        names = [a.name for a in self.state.agents] + [self.state.user_name]
         if not names:
             return text
         # Sort names by length descending to prevent greedy matching on substrings
@@ -1477,7 +1423,7 @@ class Orchestrator:
         """Describe valid direct targets and best reply anchors per eligible speaker."""
         visible_speakers = sorted(
             anon_name for anon_name in eligible_anon_names
-            if anon_name != self._anon_user
+            if anon_name != self.state.user_name
         )
         if not visible_speakers:
             return "(No speaker-specific target constraints available.)"
@@ -1486,18 +1432,16 @@ class Orchestrator:
         all_agent_targets = sorted(
             anon_name
             for anon_name in self._performer_counts.keys()
-            if anon_name != self._anon_user
+            if anon_name != self.state.user_name
         )
         spoken_agent_reals = {
             m.sender for m in self.state.messages
             if m.sender != self.state.user_name and m.sender != "[news]"
         }
-        spoken_agent_anons = {
-            self._name_map.get(real, real) for real in spoken_agent_reals
-        }
+        spoken_agent_anons = set(spoken_agent_reals)
 
         for speaker_anon in visible_speakers:
-            speaker_real = self._deanon_name(speaker_anon)
+            speaker_real = speaker_anon
             valid_targets: List[str] = []
             forbidden_targets: List[str] = []
             for target_anon in all_agent_targets:
@@ -1505,7 +1449,7 @@ class Orchestrator:
                     continue
                 if target_anon not in spoken_agent_anons:
                     continue
-                target_real = self._deanon_name(target_anon)
+                target_real = target_anon
                 if self._agents_share_alignment_cell(speaker_real, target_real):
                     forbidden_targets.append(target_anon)
                 else:
@@ -1689,10 +1633,6 @@ class Orchestrator:
             self.logger.log_error("classifier_parse", str(exc))
             return {}
 
-    def _deanon_name(self, anon_name: str) -> str:
-        """Map an anonymous label back to the real name."""
-        return self._reverse_map.get(anon_name, anon_name)
-
     def _try_auto_like(
         self,
         allowed_performers: Optional[Set[str]],
@@ -1731,9 +1671,8 @@ class Orchestrator:
 
             target = likeable[0]
             self._action_counts["like"] += 1
-            anon_name = self._name_map.get(agent_name, agent_name)
-            self._performer_counts[anon_name] = self._performer_counts.get(anon_name, 0) + 1
-            self._last_agent = anon_name
+            self._performer_counts[agent_name] = self._performer_counts.get(agent_name, 0) + 1
+            self._last_agent = agent_name
             self._last_action_type = "like"
             self.logger.log_error(
                 "auto_like",
@@ -1767,27 +1706,27 @@ class Orchestrator:
             self._participant_alignment_cell_live()
         )
 
-        # 1. Gather recent messages, then anonymize.
+        # 1. Gather recent messages.
         #    Action and Evaluate use separate window sizes; Update and human
-        #    detection use the Action window (which contains the most recent message).
+        #    detection use the Action window (which contains the most recent
+        #    message). Names are used as-is: the participant identity is
+        #    already an alias, assigned before the session reaches this layer.
         recent_action = self.state.get_recent_messages(self.action_window_size)
         agents = self.state.agents
-
-        anon_recent_action = [anonymize_message(m, self._name_map) for m in recent_action]
 
         # 1b. Detect if the human posted since the last orchestrator turn.
         #     Do NOT treat the participant as a performer for Update purposes —
         #     the Director cannot instruct the human, and running Update on their
         #     message causes the Director to try to "correct" them in Action.
-        if anon_recent_action and anon_recent_action[-1].sender == self._anon_user:
+        if recent_action and recent_action[-1].sender == self.state.user_name:
             self._last_action_type = "message"
             # Leave _last_agent unchanged so Update still targets the previous agent.
 
         # 2. Director Update (skip on first turn — nothing to assess)
-        if anon_recent_action and self._last_agent and self._last_agent != self._anon_user:
+        if recent_action and self._last_agent and self._last_agent != self.state.user_name:
             # Skip Update for likes — they aren't significant enough for a profile revision.
             if self._last_action_type != "like":
-                await self._director_update(anon_recent_action)
+                await self._director_update(recent_action)
 
         # 2b. Director Evaluate
         #     Before the first full interval fires, evaluate every turn so the
@@ -1803,8 +1742,7 @@ class Orchestrator:
         )
         if should_evaluate:
             recent_eval = self.state.get_recent_messages(self.evaluate_interval)
-            anon_recent_eval = [anonymize_message(m, self._name_map) for m in recent_eval]
-            await self._director_evaluate(internal_validity_criteria, anon_recent_eval)
+            await self._director_evaluate(internal_validity_criteria, recent_eval)
             if self._turns_since_evaluate >= self.evaluate_interval:
                 self._has_completed_first_interval = True
                 self._turns_since_evaluate = 0
@@ -1838,9 +1776,9 @@ class Orchestrator:
             internal_validity_criteria,
             base_allowed_real,
         )
-        allowed_anon = {self._name_map[n] for n in filtered_allowed_real if n in self._name_map}
+        allowed_anon = set(filtered_allowed_real)
         # Always include the human so the Director can still yield ('wait').
-        allowed_anon.add(self._anon_user)
+        allowed_anon.add(self.state.user_name)
         action_profiles = {k: v for k, v in self.agent_profiles.items() if k in allowed_anon}
         action_perf_counts = {k: v for k, v in self._performer_counts.items() if k in allowed_anon}
 
@@ -1850,7 +1788,7 @@ class Orchestrator:
             return auto_like
 
         action_data = await self._director_action(
-            anon_recent_action,
+            recent_action,
             real_recent=recent_action,
             override_profiles=action_profiles,
             override_perf_counts=action_perf_counts,
@@ -1859,10 +1797,8 @@ class Orchestrator:
             return None
 
         action_type = action_data["action_type"]
-        agent_name = self._deanon_name(action_data["next_performer"])
+        agent_name = action_data["next_performer"]
         target_user = action_data.get("target_user")
-        if target_user:
-            target_user = self._deanon_name(target_user)
         target_message_id = action_data.get("target_message_id")
         priority = action_data.get("priority")
         performer_rationale = action_data.get("performer_rationale")
@@ -1896,7 +1832,7 @@ class Orchestrator:
                 f"Participant addressed '{addressed_agent}'; overriding Director choice '{agent_name}'",
             )
             agent_name = addressed_agent
-            action_data["next_performer"] = self._name_map.get(addressed_agent, addressed_agent)
+            action_data["next_performer"] = addressed_agent
 
         if addressed_agent:
             # Force a reply to the participant's message and reset the instruction
@@ -2321,7 +2257,7 @@ class Orchestrator:
         # Save previous values so we can restore on performer failure (silent skip).
         _saved_last_agent = self._last_agent
         _saved_last_action_type = self._last_action_type
-        self._last_agent = self._name_map.get(agent_name, action_data["next_performer"])
+        self._last_agent = agent_name
         self._last_action_type = action_type
 
         # 4. Handle 'like' actions (no Performer call needed)
@@ -2350,8 +2286,7 @@ class Orchestrator:
                     )
 
             self._action_counts["like"] += 1
-            anon_name = self._name_map.get(agent_name, agent_name)
-            self._performer_counts[anon_name] = self._performer_counts.get(anon_name, 0) + 1
+            self._performer_counts[agent_name] = self._performer_counts.get(agent_name, 0) + 1
             return TurnResult(
                 action_type="like",
                 agent_name=agent_name,
@@ -2364,12 +2299,8 @@ class Orchestrator:
         # 5. Performer → Moderator loop (max MAX_PERFORMER_RETRIES attempts)
         performer_instruction = action_data.get("performer_instruction", {})
 
-        # Get the selected agent's profile and restore real names for the performer.
-        anon_agent_name = self._name_map.get(agent_name, agent_name)
-        agent_profile = deanonymize_text(
-            self.agent_profiles.get(anon_agent_name, ""),
-            self._reverse_map,
-        )
+        # Get the selected agent's profile.
+        agent_profile = self.agent_profiles.get(agent_name, "")
 
         # Look up target message if needed.
         # For 'message' with a target_user (targeted response), find the
@@ -2408,7 +2339,7 @@ class Orchestrator:
                         break
             recent_by_others.reverse()
 
-        # Get agent's raw persona for the performer (not anonymized — performer knows their own character)
+        # Get agent's raw persona for the performer (it knows its own character)
         agent_obj = next((a for a in agents if a.name == agent_name), None)
         agent_persona = (agent_obj.persona or None) if agent_obj else None
 
@@ -2562,7 +2493,7 @@ class Orchestrator:
             else:
                 content = performer_raw.strip()
 
-            candidate_content = deanonymize_text(content, self._reverse_map)
+            candidate_content = content
             preserved_reply_name = None
             if (
                 action_type == "reply"
@@ -2722,8 +2653,7 @@ class Orchestrator:
             message.metadata["stance_confidence"] = stance_confidence
 
         self._action_counts[action_type] = self._action_counts.get(action_type, 0) + 1
-        anon_name = self._name_map.get(agent_name, agent_name)
-        self._performer_counts[anon_name] = self._performer_counts.get(anon_name, 0) + 1
+        self._performer_counts[agent_name] = self._performer_counts.get(agent_name, 0) + 1
 
         return TurnResult(
             action_type=action_type,
@@ -2738,7 +2668,7 @@ class Orchestrator:
 
     # ── Director Update (Call 1) ─────────────────────────────────────────────────
 
-    async def _director_update(self, anon_recent: List[Message]) -> None:
+    async def _director_update(self, recent: List[Message]) -> None:
         """Run Director Update call: update last agent's profile.
 
         Updates agent profile in place. On failure, carries forward unchanged.
@@ -2747,14 +2677,12 @@ class Orchestrator:
 
         # Find the most recent message by the last-acting agent.
         last_action = None
-        for msg in reversed(anon_recent):
+        for msg in reversed(recent):
             if msg.sender == self._last_agent:
                 last_action = msg
                 break
 
-        # Resolve the last agent's fixed traits (keyed by real name, looked up via reverse map)
-        last_agent_real_name = self._reverse_map.get(self._last_agent, self._last_agent)
-        last_agent_traits = self._agent_traits.get(last_agent_real_name) if self._agent_traits else None
+        last_agent_traits = self._agent_traits.get(self._last_agent) if self._agent_traits else None
 
         update_user = build_update_user_prompt(
             last_action=last_action,
@@ -2799,7 +2727,7 @@ class Orchestrator:
 
     # ── Director Evaluate (Call 2) ───────────────────────────────────────────────
 
-    async def _director_evaluate(self, internal_validity_criteria: str, anon_recent: List[Message]) -> None:
+    async def _director_evaluate(self, internal_validity_criteria: str, recent: List[Message]) -> None:
         """Run Director Evaluate call: revise validity evaluations.
 
         Updates validity evaluations in place. On failure, carries forward unchanged.
@@ -2820,7 +2748,7 @@ class Orchestrator:
             )
 
         evaluate_user = build_evaluate_user_prompt(
-            messages=anon_recent,
+            messages=recent,
             previous_internal=self._internal_validity_summary,
             previous_ecological=self._ecological_validity_summary,
             internal_validity_criteria=internal_validity_criteria,
@@ -2835,7 +2763,7 @@ class Orchestrator:
             action_counts=self._action_counts,
             performer_counts=self._performer_counts,
             participation_summary=self._format_participation_memory(),
-            exclude_performer=self._anon_user,
+            exclude_performer=self.state.user_name,
             template=self.director_evaluate_prompt_template,
         )
 
@@ -2873,7 +2801,7 @@ class Orchestrator:
 
     async def _director_action(
         self,
-        anon_recent: List[Message],
+        recent: List[Message],
         real_recent: Optional[List[Message]] = None,
         override_profiles: Optional[Dict[str, str]] = None,
         override_perf_counts: Optional[Dict[str, int]] = None,
@@ -2910,7 +2838,7 @@ class Orchestrator:
         perf_counts = override_perf_counts if override_perf_counts is not None else self._performer_counts
         eligible_anon_names = set(profiles.keys())
         visible_target_labels = set(self.agent_profiles.keys())
-        recent_messages = real_recent if real_recent is not None else self.state.get_recent_messages(len(anon_recent))
+        recent_messages = real_recent if real_recent is not None else self.state.get_recent_messages(len(recent))
         sanitized_internal_summary = self._sanitize_summary_for_eligible_agents(
             self._internal_validity_summary or "No actions have occurred yet. No assessment available.",
             eligible_anon_names,
@@ -2922,9 +2850,9 @@ class Orchestrator:
         anon_traits = None
         if self._agent_traits:
             anon_traits = {
-                self._name_map.get(real_name, real_name): traits
-                for real_name, traits in self._agent_traits.items()
-                if self._name_map.get(real_name, real_name) in profiles
+                name: traits
+                for name, traits in self._agent_traits.items()
+                if name in profiles
             }
 
         action_template = self.director_action_prompt_template
@@ -2933,7 +2861,7 @@ class Orchestrator:
             action_template = _BOOSTED_ACTION_TEMPLATE
 
         action_user = build_action_user_prompt(
-            messages=anon_recent,
+            messages=recent,
             agent_profiles=profiles,
             internal_validity_summary=sanitized_internal_summary,
             ecological_validity_summary=sanitized_ecological_summary,
@@ -2953,7 +2881,7 @@ class Orchestrator:
                 recent_messages=recent_messages,
             ),
             action_counts=self._action_counts,
-            exclude_performer=self._anon_user,
+            exclude_performer=self.state.user_name,
             agent_traits=anon_traits,
             template=action_template,
         )
@@ -2962,17 +2890,17 @@ class Orchestrator:
         all_agent_target_labels = {
             anon_name
             for anon_name in self._performer_counts.keys()
-            if anon_name != self._anon_user
+            if anon_name != self.state.user_name
         }
         for speaker_anon in eligible_anon_names:
-            if speaker_anon == self._anon_user:
+            if speaker_anon == self.state.user_name:
                 continue
-            speaker_real = self._deanon_name(speaker_anon)
+            speaker_real = speaker_anon
             valid_targets = {
                 target_anon
                 for target_anon in all_agent_target_labels
                 if target_anon != speaker_anon
-                and not self._agents_share_alignment_cell(speaker_real, self._deanon_name(target_anon))
+                and not self._agents_share_alignment_cell(speaker_real, target_anon)
             }
             valid_direct_targets_by_speaker[speaker_anon] = valid_targets
 
@@ -3039,8 +2967,8 @@ class Orchestrator:
 
             if (
                 selected_target_user
-                and selected_performer != self._anon_user
-                and selected_target_user != self._anon_user
+                and selected_performer != self.state.user_name
+                and selected_target_user != self.state.user_name
                 and selected_target_user not in valid_direct_targets_by_speaker.get(selected_performer, set())
             ):
                 self.logger.log_error(
@@ -3052,7 +2980,7 @@ class Orchestrator:
                     continue
 
             if action_data.get("action_type") == "reply" and action_data.get("target_message_id"):
-                speaker_real = self._deanon_name(selected_performer)
+                speaker_real = selected_performer
                 reply_target = next(
                     (message for message in self.state.messages if message.message_id == action_data["target_message_id"]),
                     None,

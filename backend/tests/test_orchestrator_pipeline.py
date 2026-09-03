@@ -19,7 +19,6 @@ from agents.STAGE.orchestrator import (
     TurnResult,
     MAX_PERFORMER_RETRIES,
     TARGET_ELIGIBLE_SPEAKER_COUNT,
-    anonymize_message,
     default_message_length_range,
     _looks_truncated_response,
 )
@@ -165,27 +164,18 @@ def _action_json(
 
 class TestOrchestratorInit:
 
-    def test_name_map_includes_all(self):
+    def test_profiles_include_all_performers(self):
         state = _make_state()
         orch, _ = _make_orchestrator(state=state)
-        assert "Alice" in orch._name_map
-        assert "Bob" in orch._name_map
-        assert "participant" in orch._name_map
-        assert orch._name_map["Alice"] == "Alice"
-        assert orch._name_map["Bob"] == "Bob"
-        assert orch._name_map["participant"] == "participant"
-
-    def test_reverse_map(self):
-        state = _make_state()
-        orch, _ = _make_orchestrator(state=state)
-        for real, anon in orch._name_map.items():
-            assert orch._reverse_map[anon] == real
+        assert "Alice" in orch.agent_profiles
+        assert "Bob" in orch.agent_profiles
+        assert "participant" in orch.agent_profiles
 
     def test_deterministic_with_seed(self):
         state = _make_state()
         orch1, _ = _make_orchestrator(state=state, rng=random.Random(42))
         orch2, _ = _make_orchestrator(state=state, rng=random.Random(42))
-        assert orch1._name_map == orch2._name_map
+        assert set(orch1.agent_profiles) == set(orch2.agent_profiles)
 
     def test_agent_profiles_initialized_empty(self):
         state = _make_state()
@@ -264,16 +254,16 @@ class TestOrchestratorInit:
                 "Bob": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
         )
 
         await orch._director_action(
-            anon_recent=[],
-            override_profiles={anon_alice: "", orch._anon_user: ""},
-            override_perf_counts={anon_alice: 1, orch._anon_user: 0},
+            recent=[],
+            override_profiles={anon_alice: "", "participant": ""},
+            override_perf_counts={anon_alice: 1, "participant": 0},
         )
 
         action_prompt = next(
@@ -304,8 +294,8 @@ class TestOrchestratorInit:
                 "Bob": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(
                 next_performer=anon_alice,
@@ -315,9 +305,9 @@ class TestOrchestratorInit:
         )
 
         action = await orch._director_action(
-            anon_recent=[],
-            override_profiles={anon_alice: "", orch._anon_user: ""},
-            override_perf_counts={anon_alice: 0, orch._anon_user: 0},
+            recent=[],
+            override_profiles={anon_alice: "", "participant": ""},
+            override_perf_counts={anon_alice: 0, "participant": 0},
         )
 
         assert action is not None
@@ -381,12 +371,12 @@ class TestOrchestratorInit:
     def test_sanitize_summary_for_eligible_agents_rewrites_noneligible_names(self):
         state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob"), Agent(name="Carol")])
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
-        anon_carol = orch._name_map["Carol"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
+        anon_carol = "Carol"
         sanitized = orch._sanitize_summary_for_eligible_agents(
             f"Alignment is close; introduce {anon_bob} and {anon_carol} soon to rebalance.",
-            {anon_alice, orch._anon_user},
+            {anon_alice, "participant"},
         )
         assert anon_bob not in sanitized
         assert anon_carol not in sanitized
@@ -426,7 +416,7 @@ class TestFirstTurn:
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
 
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         evaluate_resp = _evaluate_json()
         action_resp = _action_json(next_performer=anon_alice, action_type="message")
@@ -462,8 +452,8 @@ class TestUpdateEvaluateAndAct:
         state.add_message(Message.create(sender="Alice", content="First message"))
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         orch._last_agent = anon_alice
         # Force Evaluate to fire on this turn
@@ -504,7 +494,7 @@ class TestUpdateEvaluateAndAct:
         state.add_message(Message.create(sender="Alice", content="Something"))
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch._last_agent = anon_alice
         # Force Evaluate to fire on this turn
@@ -532,7 +522,7 @@ class TestUpdateEvaluateAndAct:
         state.add_message(Message.create(sender="Alice", content="Something"))
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch._last_agent = anon_alice
         orch._internal_validity_summary = "Previous summary"
@@ -558,8 +548,8 @@ class TestUpdateEvaluateAndAct:
         """Agent profiles should accumulate across multiple turns."""
         state = _make_state()
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         # --- Turn 1: no Update, warm-up Evaluate + Act ---
         evaluate_resp_1 = _evaluate_json()
@@ -602,7 +592,7 @@ class TestExecuteTurnMessage:
     async def test_basic_message_action(self):
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(next_performer=anon_alice, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
@@ -631,7 +621,7 @@ class TestExecuteTurnMessage:
                 "Bob": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(
@@ -684,7 +674,7 @@ class TestExecuteTurnMessage:
                 "Bob": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(
@@ -733,7 +723,7 @@ class TestExecuteTurnLike:
         msg_id = state.messages[0].message_id
 
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -888,7 +878,7 @@ class TestExecuteTurnReply:
         )
         state.add_message(participant_reply)
         orch, _ = _make_orchestrator(state=state)
-        anon_bob = orch._name_map["Bob"]
+        anon_bob = "Bob"
         orch._director_evaluate = AsyncMock()
         orch._director_action = AsyncMock(return_value={
             "next_performer": anon_bob,
@@ -925,7 +915,7 @@ class TestExecuteTurnReply:
         state.add_message(Message.create(sender="Charlie", content="Dummy message to prevent downgrade"))
 
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -951,7 +941,7 @@ class TestExecuteTurnReply:
         state.add_message(Message.create(sender="Charlie", content="Dummy message to prevent downgrade"))
 
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -980,7 +970,7 @@ class TestExecuteTurnReply:
         state.add_message(Message.create(sender="Charlie", content="Dummy message to prevent downgrade"))
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -1019,8 +1009,8 @@ class TestExecuteTurnMention:
         state.add_message(Message.create(sender="Bob", content="Hello"))
         state.add_message(Message.create(sender="Alice", content="Hi Bob"))
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -1060,7 +1050,7 @@ class TestPerformerPromptNames:
                 "Pilar": {"stance": "disagree", "incivility": "uncivil", "ideology": "right"},
             },
         )
-        anon_lucia = orch._name_map["Lucia"]
+        anon_lucia = "Lucia"
         orch.agent_profiles[anon_lucia] = "Lucia ha defendido a Martin frente a Pilar sin perder la calma."
 
         captured = {}
@@ -1107,7 +1097,7 @@ class TestSameSideGuard:
                 "Bob": {"stance": "agree"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -1147,7 +1137,7 @@ class TestSameSideGuard:
                 "Carol": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -1179,8 +1169,8 @@ class TestSameSideGuard:
                 "Bob": {"stance": "disagree"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         action_resp = _action_json(
             next_performer=anon_alice,
@@ -1220,7 +1210,7 @@ class TestExecuteTurnWait:
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
 
-        anon_user = orch._name_map[state.user_name]
+        anon_user = state.user_name
         action_resp = _action_json(next_performer=anon_user, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
 
@@ -1239,7 +1229,7 @@ class TestExecuteTurnWait:
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
 
-        anon_user = orch._name_map[state.user_name]
+        anon_user = state.user_name
         action_resp = _action_json(next_performer=anon_user, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
 
@@ -1253,7 +1243,7 @@ class TestExecuteTurnWait:
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
 
-        anon_user = orch._name_map[state.user_name]
+        anon_user = state.user_name
         action_resp = _action_json(next_performer=anon_user, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
 
@@ -1271,7 +1261,7 @@ class TestConsecutiveSpeakerLimit:
         state.add_message(Message.create(sender="Alice", content="Segunda"))
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
         )
@@ -1295,7 +1285,7 @@ class TestRoomWideOpeners:
         state.add_message(Message.create(sender="participant", content="Arrancamos el debate"))
 
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
         )
@@ -1317,7 +1307,7 @@ class TestRoomWideOpeners:
         state.add_message(participant_msg)
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
         )
@@ -1349,7 +1339,7 @@ class TestRoomWideOpeners:
                 "Bob": {"alignment_cell": "pro_policy_pro_topic"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
         )
@@ -1474,7 +1464,7 @@ class TestFixedStanceGuard:
             state=state,
             agent_traits={"Alice": {"stance": "disagree"}},
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
@@ -1537,7 +1527,7 @@ class TestFixedStanceGuard:
             state=state,
             agent_traits={"Alice": {"stance": "disagree"}},
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
@@ -1572,7 +1562,7 @@ class TestFixedStanceGuard:
             state=state,
             agent_traits={"Alice": {"stance": "disagree"}},
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
@@ -1627,7 +1617,7 @@ class TestFixedStanceGuard:
             state=state,
             agent_traits={"Alice": {"stance": "disagree"}},
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
@@ -1666,7 +1656,7 @@ class TestFixedStanceGuard:
             state=state,
             agent_traits={"Alice": {"stance": "disagree", "ideology": "right"}},
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer=anon_alice, action_type="message")
@@ -1737,7 +1727,7 @@ class TestExecuteTurnErrors:
     async def test_director_action_retries_when_performer_label_is_not_visible(self):
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
         orch.director_llm.generate_response = AsyncMock(
             side_effect=[
                 _action_json(next_performer="Performer 99", action_type="message"),
@@ -1745,7 +1735,7 @@ class TestExecuteTurnErrors:
             ]
         )
 
-        result = await orch._director_action(anon_recent=[])
+        result = await orch._director_action(recent=[])
 
         assert result is not None
         assert result["next_performer"] == anon_alice
@@ -1758,8 +1748,8 @@ class TestExecuteTurnErrors:
     async def test_director_action_retries_when_target_user_label_is_not_visible(self):
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
         orch.director_llm.generate_response = AsyncMock(
             side_effect=[
                 _action_json(next_performer=anon_alice, action_type="@mention", target_user="Performer 99"),
@@ -1767,7 +1757,7 @@ class TestExecuteTurnErrors:
             ]
         )
 
-        result = await orch._director_action(anon_recent=[])
+        result = await orch._director_action(recent=[])
 
         assert result is not None
         assert result["target_user"] == anon_bob
@@ -1791,7 +1781,7 @@ class TestExecuteTurnErrors:
                 "Carol": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         orch.director_llm.generate_response = AsyncMock(
             side_effect=[
@@ -1809,7 +1799,7 @@ class TestExecuteTurnErrors:
         )
 
         result = await orch._director_action(
-            anon_recent=[anonymize_message(m, orch._name_map) for m in state.messages],
+            recent=state.messages,
             real_recent=state.messages,
         )
 
@@ -1860,7 +1850,7 @@ class TestPerformerRetry:
     async def test_performer_retries_on_failure(self):
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(next_performer=anon_alice, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
@@ -1879,7 +1869,7 @@ class TestPerformerRetry:
     async def test_performer_retries_exhausted(self):
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(next_performer=anon_alice, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
@@ -1898,7 +1888,7 @@ class TestPerformerRetry:
         """Moderator returns NO_CONTENT â†’ triggers performer retry."""
         state = _make_state()
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = _action_json(next_performer=anon_alice, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
@@ -1917,15 +1907,15 @@ class TestPerformerRetry:
 
 # â”€â”€ Deanonymization in output â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-class TestOutputDeanonymization:
+class TestOutputNamePassthrough:
 
     @pytest.mark.asyncio
-    async def test_content_deanonymized(self):
-        """Anonymous labels in performer output should be replaced with real names."""
+    async def test_names_in_output_pass_through_unchanged(self):
+        """Names in performer output are used as-is (the alias system handles identity)."""
         state = _make_state()
         orch, _ = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         action_resp = _action_json(next_performer=anon_alice, action_type="message")
         orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
@@ -1993,8 +1983,8 @@ class TestUpgradeAndStripping:
         state.add_message(m2)
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         action_resp = json.dumps({
             "next_performer": anon_bob,
@@ -2023,16 +2013,12 @@ class TestUpgradeAndStripping:
         state = _make_state()
         orch, _ = _make_orchestrator(state=state)
         
-        orch._name_map = {"Alice": "Performer 1", "Bob": "Performer 2"}
-        orch._reverse_map = {"Performer 1": "Alice", "Performer 2": "Bob"}
-
         assert orch._strip_vocative_prefix("Alice, hola!") == "Hola!"
         assert orch._strip_vocative_prefix("Bob: Qué tal?") == "Qué tal?"
         assert orch._strip_vocative_prefix("¿Alice... qué dices?") == "¿Qué dices?"
         assert orch._strip_vocative_prefix("¡Bob - no hagas eso!") == "¡No hagas eso!"
         
-        orch._name_map["Lucía"] = "Performer 3"
-        orch._reverse_map["Performer 3"] = "Lucía"
+        state.agents.append(Agent(name="Lucía"))
         assert orch._strip_vocative_prefix("Lucia, cómo estás?") == "Cómo estás?"
         assert orch._strip_vocative_prefix("¿Lucía: dónde vas?") == "¿Dónde vas?"
         
@@ -2067,7 +2053,7 @@ class TestDowngradePrecedingTarget:
         state.add_message(m1)
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
+        anon_alice = "Alice"
 
         action_resp = json.dumps({
             "next_performer": anon_alice,
@@ -2111,8 +2097,8 @@ class TestDowngradePrecedingTarget:
         state.add_message(m1)
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         action_resp = json.dumps({
             "next_performer": anon_alice,
@@ -2154,8 +2140,8 @@ class TestDowngradePrecedingTarget:
         state.add_message(m1)
 
         orch, logger = _make_orchestrator(state=state)
-        anon_alice = orch._name_map["Alice"]
-        anon_bob = orch._name_map["Bob"]
+        anon_alice = "Alice"
+        anon_bob = "Bob"
 
         action_resp = json.dumps({
             "next_performer": anon_alice,

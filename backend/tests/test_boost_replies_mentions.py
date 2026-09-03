@@ -99,7 +99,7 @@ async def test_director_action_boosted_template_selection():
     }))
 
     # Trigger action call
-    await orch._director_action(anon_recent=[])
+    await orch._director_action(recent=[])
 
     # Assert that the system prompt passed to LLM was built from the boosted template
     llm_call_args = orch.director_llm.generate_response.call_args
@@ -127,7 +127,7 @@ async def test_director_action_default_template_selection():
     }))
 
     # Trigger action call
-    await orch._director_action(anon_recent=[])
+    await orch._director_action(recent=[])
 
     # Assert that the system prompt passed to LLM was built from the default template
     llm_call_args = orch.director_llm.generate_response.call_args

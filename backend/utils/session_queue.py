@@ -53,13 +53,8 @@ class SessionQueue:
 
     def _active_count(self) -> int:
         from utils.session_manager import session_manager
-        running = sum(1 for s in session_manager._sessions.values() if s.running)
-        now = time.monotonic()
-        pending = sum(
-            1 for info in session_manager._pending.values()
-            if now - info.get("_reserved_at", now) < 120
-        )
-        return running + pending
+        running = len(session_manager.running_sessions())
+        return running + session_manager.fresh_pending_count()
 
     def has_capacity(self) -> int:
         return self.cap - self._active_count() - self._inflight
@@ -109,6 +104,13 @@ class SessionQueue:
     def remove(self, token: str) -> None:
         self._queue.pop(token, None)
 
+    def begin_inflight_start(self) -> None:
+        """Count a /session/start in progress against capacity."""
+        self._inflight += 1
+
+    def end_inflight_start(self) -> None:
+        self._inflight = max(0, self._inflight - 1)
+
     def is_empty(self) -> bool:
         return len(self._queue) == 0
 
@@ -131,9 +133,7 @@ class SessionQueue:
         now = datetime.now(timezone.utc)
 
         end_times = []
-        for session in session_manager._sessions.values():
-            if not session.running:
-                continue
+        for session in session_manager.running_sessions():
             started = getattr(session.state, "start_time", None)
             duration = getattr(session.state, "duration_minutes", 20)
             if started:

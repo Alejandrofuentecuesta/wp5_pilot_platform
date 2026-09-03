@@ -478,5 +478,19 @@ class SessionManager:
         async with self._lock:
             return dict(self._sessions)
 
+    # ── Synchronous snapshots for the queue (same event loop, no await) ──────
+
+    def running_sessions(self) -> list:
+        """Snapshot of currently running sessions (for wait estimation)."""
+        return [s for s in self._sessions.values() if s.running]
+
+    def fresh_pending_count(self, within_seconds: float = 120) -> int:
+        """Pending reservations young enough to still claim a slot."""
+        now = time.monotonic()
+        return sum(
+            1 for info in self._pending.values()
+            if now - info.get("_reserved_at", now) < within_seconds
+        )
+
 
 session_manager = SessionManager.get()

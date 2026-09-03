@@ -648,7 +648,7 @@ async def start_session(request: SessionStartRequest, http_request: Request):
             detail={"reason": "at_capacity"},
         )
 
-    session_queue._inflight += 1
+    session_queue.begin_inflight_start()
     try:
         session_id = str(uuid.uuid4())
         result = await token_manager.consume_token(pool, request.token, session_id)
@@ -681,7 +681,7 @@ async def start_session(request: SessionStartRequest, http_request: Request):
             user_name=alias,
         )
     finally:
-        session_queue._inflight -= 1
+        session_queue.end_inflight_start()
 
 
 class QueueJoinRequest(BaseModel):

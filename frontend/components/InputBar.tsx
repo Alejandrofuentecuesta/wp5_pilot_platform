@@ -93,6 +93,7 @@ export default function InputBar({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            maxLength={2000}
             placeholder="Write a message..."
             className="max-h-32 flex-1 resize-none overflow-y-hidden bg-transparent text-sm leading-5 text-primary outline-none placeholder:text-tertiary"
             aria-label="Message input"

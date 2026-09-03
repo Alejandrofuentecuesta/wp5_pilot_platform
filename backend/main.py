@@ -197,6 +197,11 @@ PANEL_GROUP_MAP = {
 
 _PANEL_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{8,128}$")
 
+# Upper bound on a single chat message (~300+ words — far beyond any real
+# chat message). Applied server-side to user_message content/quoted_text
+# and mirrored by the input bar's maxLength.
+MAX_MESSAGE_CHARS = 2000
+
 # Backstop ceiling on panel-minted tokens per experiment. The hkey scheme is
 # public knowledge (sha256 of the token, visible in this repo), so minting
 # must be bounded even when the config does not set panel_mint_limit —
@@ -1082,12 +1087,18 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             if data.get("type") == "pong":
                 continue  # heartbeat response, ignore
             if data.get("type") == "user_message":
-                content = data.get("content", "").strip()
+                # Server-authoritative length cap (the input bar enforces the
+                # same limit client-side): one paste must not bloat prompts
+                # and the DB without bound. Truncate silently by design.
+                content = data.get("content", "").strip()[:MAX_MESSAGE_CHARS]
+                quoted_text = data.get("quoted_text")
+                if isinstance(quoted_text, str):
+                    quoted_text = quoted_text[:MAX_MESSAGE_CHARS]
                 if content:
                     await session.handle_user_message(
                         content,
                         reply_to=data.get("reply_to"),
-                        quoted_text=data.get("quoted_text"),
+                        quoted_text=quoted_text,
                         mentions=data.get("mentions"),
                     )
             elif data.get("type") == "emotions_checkup_response":

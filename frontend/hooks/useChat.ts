@@ -127,6 +127,18 @@ export function useChat() {
     mapperRef.current = makeNameMapper(alias, username || alias)
   }, [alias, username])
 
+  // Full conclusion of a session: nothing after this needs the typed name,
+  // so it is removed from the browser along with the alias pairing, stance
+  // and token — a shared device must not prefill the next visitor with the
+  // previous participant's real name.
+  const concludeSession = useCallback(() => {
+    setAlias("")            // per-session key — must go before the id
+    setUsername("")
+    setParticipantStance(null)
+    setSessionToken(null)
+    setSessionId(null)
+  }, [setAlias, setUsername, setParticipantStance, setSessionToken, setSessionId])
+
   // WebSocket message handler
   const handleWSMessage = useCallback((data: unknown) => {
     const obj = data as Record<string, unknown>
@@ -174,7 +186,7 @@ export function useChat() {
         setAgentImpressionSurveyOpen(true)
       } else {
         // Clear session so user can't refresh back into the chatroom.
-        setSessionId(null)
+        concludeSession()
       }
     } else if (obj && obj.event_type === "user_block") {
       const evt = obj as unknown as BlockEvent
@@ -220,7 +232,7 @@ export function useChat() {
         return [...prev, message]
       })
     }
-  }, [sessionId, setBlockedSenders, setSessionId, setAlias, setUsername])
+  }, [sessionId, setBlockedSenders, concludeSession, setAlias, setUsername])
 
   const handleSessionInvalid = useCallback(() => {
     setSessionId(null)
@@ -498,7 +510,9 @@ export function useChat() {
           })),
         )
         setAgentImpressionSurveyOpen(false)
-        setSessionId(null)
+        // The comments above were the last thing that needed the outbound
+        // name mapper — the typed name can now leave the browser.
+        concludeSession()
       } catch {
         setAgentImpressionsError(
           "No se ha podido guardar la valoración. Inténtalo de nuevo.",
@@ -507,7 +521,7 @@ export function useChat() {
         setAgentImpressionsSubmitting(false)
       }
     },
-    [sessionId, setSessionId],
+    [sessionId, concludeSession],
   )
 
   // Like message (with optimistic update + rollback)

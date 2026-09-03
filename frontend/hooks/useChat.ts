@@ -34,6 +34,13 @@ export function useChat() {
     null,
   )
   const [username, setUsername] = useLocalStorage<string>(LS_USERNAME, "")
+  // The token this session was started with. Lets the boot logic tell a
+  // page refresh (same token in the URL) apart from a NEW panel link that
+  // must not be hijacked by a stale stored session.
+  const [sessionToken, setSessionToken] = useLocalStorage<string | null>(
+    "wp5_session_token",
+    null,
+  )
   const [participantStance, setParticipantStance] = useLocalStorage<ParticipantStance | null>(
     LS_PARTICIPANT_STANCE,
     null,
@@ -319,6 +326,7 @@ export function useChat() {
         )
       }
       setSessionId(data.session_id)
+      setSessionToken(token)
       setAlias(data.user_name || "")
       if (cleanName) setUsername(cleanName)
       setParticipantStance(stance)
@@ -378,9 +386,16 @@ export function useChat() {
   // Reconnect to a still-alive session found via intake (used token whose
   // session is paused awaiting rejoin) — e.g. after cleared storage or on
   // another device.
-  const rejoinSession = (id: string) => {
+  const rejoinSession = (id: string, token?: string) => {
     setSessionId(id)
+    if (token) setSessionToken(token)
   }
+
+  // Drop the stored session so the login/handoff flow takes over (used when
+  // a NEW panel link must not be hijacked by a stale stored session).
+  const clearSession = useCallback(() => {
+    setSessionId(null)
+  }, [setSessionId])
 
   // Send message
   const sendMessage = useCallback((customContent?: string): boolean => {
@@ -646,6 +661,8 @@ export function useChat() {
   return {
     // Session
     sessionId,
+    sessionToken,
+    clearSession,
     username,
     setUsername,
     participantStance,

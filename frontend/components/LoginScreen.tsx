@@ -27,7 +27,7 @@ interface LoginScreenProps {
     panel?: { hkey?: string | null; g?: string | null },
   ) => Promise<SessionIntakeResponse>
   onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
-  onRejoin: (sessionId: string) => void
+  onRejoin: (sessionId: string, token?: string) => void
 }
 
 type LoginStep = "instructions" | "access" | "stance"
@@ -77,7 +77,7 @@ export default function LoginScreen({
       .then((resp) => {
         if (cancelled) return
         if (resp.rejoin_session_id) {
-          onRejoin(resp.rejoin_session_id)
+          onRejoin(resp.rejoin_session_id, handoff.token)
           return
         }
         setStatus("ready")
@@ -108,7 +108,7 @@ export default function LoginScreen({
     try {
       const response = await onPreview(token.trim())
       if (response.rejoin_session_id) {
-        onRejoin(response.rejoin_session_id)
+        onRejoin(response.rejoin_session_id, token.trim())
         return
       }
       setIntake(response)

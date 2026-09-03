@@ -31,8 +31,18 @@ export default function ChatApp() {
   const [bootChecked, setBootChecked] = useState(false)
 
   useEffect(() => {
-    setHandoff(parseHandoffParams())
+    const params = parseHandoffParams()
+    setHandoff(params)
+    // A link carrying a DIFFERENT token than the stored session's must win:
+    // otherwise a stale session in localStorage hijacks a fresh panel link
+    // (second study wave, shared browser). A plain refresh keeps the same
+    // token in the URL and reconnects as before; a re-clicked same-session
+    // link also rejoins via the intake path.
+    if (params?.token && chat.sessionId && params.token !== chat.sessionToken) {
+      chat.clearSession()
+    }
     setBootChecked(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   if (chat.agentImpressionSurveyOpen) {

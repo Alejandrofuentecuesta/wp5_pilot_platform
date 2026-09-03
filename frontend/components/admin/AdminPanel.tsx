@@ -414,8 +414,11 @@ export default function AdminPanel() {
       setExperimental(normalizeExperimentalConfig(config.experimental))
       setExperimentId(expId)
       setDescription(desc || "")
-      setStartsAt(starts_at ? starts_at.slice(0, 16) : "")
-      setEndsAt(ends_at ? ends_at.slice(0, 16) : "")
+      // Convert stored UTC to the local time the datetime-local input
+      // expects — a raw slice() shifted the window by the UTC offset on
+      // every edit round-trip.
+      setStartsAt(starts_at ? toLocalDatetimeString(new Date(starts_at)) : "")
+      setEndsAt(ends_at ? toLocalDatetimeString(new Date(ends_at)) : "")
       setEditingExperimentId(expId)
       setTokens({ groups: {} })
       setSessionTouched(false)
@@ -437,8 +440,11 @@ export default function AdminPanel() {
       setExperimental(normalizeExperimentalConfig(config.experimental))
       setExperimentId(copyId)
       setDescription(desc ? `${desc} (copy)` : `Copy of ${expId}`)
-      setStartsAt(starts_at ? starts_at.slice(0, 16) : "")
-      setEndsAt(ends_at ? ends_at.slice(0, 16) : "")
+      // Convert stored UTC to the local time the datetime-local input
+      // expects — a raw slice() shifted the window by the UTC offset on
+      // every edit round-trip.
+      setStartsAt(starts_at ? toLocalDatetimeString(new Date(starts_at)) : "")
+      setEndsAt(ends_at ? toLocalDatetimeString(new Date(ends_at)) : "")
       setEditingExperimentId(null)
       setTokens({ groups: {} })
       setSessionTouched(false)

@@ -1,6 +1,6 @@
 export function formatMessageTime(isoString: string): string {
   const date = new Date(isoString)
-  return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
+  return date.toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })
 }
 
 export function getDateLabel(isoString: string): string {
@@ -9,9 +9,9 @@ export function getDateLabel(isoString: string): string {
   const yesterday = new Date(today)
   yesterday.setDate(yesterday.getDate() - 1)
 
-  if (isSameDay(date, today)) return "Today"
-  if (isSameDay(date, yesterday)) return "Yesterday"
-  return date.toLocaleDateString([], {
+  if (isSameDay(date, today)) return "Hoy"
+  if (isSameDay(date, yesterday)) return "Ayer"
+  return date.toLocaleDateString("es-ES", {
     day: "numeric",
     month: "long",
     year: "numeric",

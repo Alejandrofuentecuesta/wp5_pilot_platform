@@ -237,7 +237,7 @@ export function useChat() {
   const handleSessionInvalid = useCallback(() => {
     setSessionId(null)
     alert(
-      "Session invalid or expired. Please enter your token to start a new session.",
+      "La sesión no es válida o ha caducado. Vuelve a entrar desde tu enlace de participación.",
     )
   }, [setSessionId])
 

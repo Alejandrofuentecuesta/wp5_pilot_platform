@@ -39,14 +39,14 @@ export default function ThankYouScreen({ redirectUrl }: ThankYouScreenProps) {
             </svg>
           </div>
           <h1 className="text-xl font-semibold text-primary m-0">
-            Thank you for participating!
+            ¡Gracias por participar!
           </h1>
           <p className="text-sm text-secondary mt-3">
-            The discussion has ended. Your contributions have been recorded.
+            La discusión ha terminado. Tus aportaciones han quedado registradas.
           </p>
           {redirectUrl && (
             <p className="text-xs text-tertiary mt-4">
-              Redirecting you shortly...
+              Te redirigimos en unos segundos...
             </p>
           )}
         </div>

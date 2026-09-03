@@ -11,9 +11,23 @@ from openai import APIConnectionError, APIStatusError, AsyncOpenAI, OpenAI
 load_dotenv()
 
 DEFAULT_LOCAL_BASE_URL = "http://127.0.0.1:8888/v1"
-DEFAULT_PUBLIC_BASE_URL = "http://212.128.226.126/incivility/api/v1"
-DEFAULT_BASE_URLS = (DEFAULT_LOCAL_BASE_URL, DEFAULT_PUBLIC_BASE_URL)
+DEFAULT_BASE_URLS = (DEFAULT_LOCAL_BASE_URL,)
 DEFAULT_API_KEYS_FILE = "/etc/incivility-api/api_keys.json"
+
+
+def _is_transport_safe(url: str) -> bool:
+    """Only HTTPS or loopback endpoints are acceptable.
+
+    Prompts contain participant messages and the request carries the API
+    key; a plain-HTTP endpoint on a public address sends both in cleartext.
+    (The public BSC endpoint currently serves this API over HTTP only —
+    verified Sept 2026 — so it must not be used until BSC exposes it via
+    TLS.)
+    """
+    lowered = url.lower()
+    if lowered.startswith("https://"):
+        return True
+    return lowered.startswith(("http://127.0.0.1", "http://localhost"))
 
 
 def _parse_base_urls(raw_value: Optional[str]) -> list[str]:
@@ -25,8 +39,12 @@ def _parse_base_urls(raw_value: Optional[str]) -> list[str]:
     urls: list[str] = []
     for value in values:
         stripped = value.strip().rstrip("/")
-        if stripped and stripped not in urls:
-            urls.append(stripped)
+        if not stripped or stripped in urls:
+            continue
+        if not _is_transport_safe(stripped):
+            print(f"[BSC] Ignoring insecure base URL (needs https or loopback): {stripped}")
+            continue
+        urls.append(stripped)
     return urls
 
 

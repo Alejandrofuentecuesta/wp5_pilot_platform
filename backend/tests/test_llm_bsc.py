@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 from utils.llm.provider.llm_bsc import (
     DEFAULT_LOCAL_BASE_URL,
-    DEFAULT_PUBLIC_BASE_URL,
     _extract_message_text,
     _load_api_key_from_keys_file,
     _resolve_base_urls,
@@ -40,13 +39,27 @@ class TestExtractMessageText:
 
 
 class TestBaseUrlResolution:
-    def test_defaults_to_local_then_public(self):
+    def test_defaults_to_loopback_only(self):
+        """No plain-HTTP public fallback: prompts and the API key would
+        travel in cleartext."""
         with patch.dict("os.environ", {"BSC_API_BASE_URL": ""}, clear=False):
-            assert _resolve_base_urls() == [DEFAULT_LOCAL_BASE_URL, DEFAULT_PUBLIC_BASE_URL]
+            assert _resolve_base_urls() == [DEFAULT_LOCAL_BASE_URL]
 
-    def test_env_base_urls_override_defaults(self):
-        with patch.dict("os.environ", {"BSC_API_BASE_URL": "http://a.test/v1, http://b.test/v1"}, clear=False):
-            assert _resolve_base_urls() == ["http://a.test/v1", "http://b.test/v1"]
+    def test_https_env_urls_are_accepted_in_order(self):
+        with patch.dict("os.environ", {"BSC_API_BASE_URL": "https://a.test/v1, https://b.test/v1"}, clear=False):
+            assert _resolve_base_urls() == ["https://a.test/v1", "https://b.test/v1"]
+
+    def test_loopback_http_is_accepted(self):
+        with patch.dict("os.environ", {"BSC_API_BASE_URL": "http://127.0.0.1:8888/v1"}, clear=False):
+            assert _resolve_base_urls() == ["http://127.0.0.1:8888/v1"]
+
+    def test_public_http_urls_are_dropped(self):
+        with patch.dict("os.environ", {"BSC_API_BASE_URL": "http://212.128.226.126/incivility/api/v1, https://ok.test/v1"}, clear=False):
+            assert _resolve_base_urls() == ["https://ok.test/v1"]
+
+    def test_all_insecure_config_falls_back_to_loopback_default(self):
+        with patch.dict("os.environ", {"BSC_API_BASE_URL": "http://evil.test/v1"}, clear=False):
+            assert _resolve_base_urls() == [DEFAULT_LOCAL_BASE_URL]
 
 
 class TestApiKeyLoading:

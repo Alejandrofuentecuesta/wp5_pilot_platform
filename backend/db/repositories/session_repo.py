@@ -118,6 +118,19 @@ async def get_session(pool: asyncpg.Pool, session_id: str) -> Optional[dict]:
     return dict(row) if row else None
 
 
+async def list_stale_pending(
+    pool: asyncpg.Pool, cutoff: datetime
+) -> List[str]:
+    """Session IDs still 'pending' whose row was created before the cutoff."""
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            "SELECT session_id FROM sessions "
+            "WHERE status = 'pending' AND created_at < $1",
+            cutoff,
+        )
+    return [str(r["session_id"]) for r in rows]
+
+
 async def list_active_sessions(
     pool: asyncpg.Pool, experiment_id: str
 ) -> List[dict]:

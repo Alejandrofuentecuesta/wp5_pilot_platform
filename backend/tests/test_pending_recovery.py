@@ -50,6 +50,7 @@ def _patched(row, session_cls):
             get_session=AsyncMock(return_value=row),
             end_session=AsyncMock(),
             get_agent_blocks=AsyncMock(return_value={}),
+            list_stale_pending=AsyncMock(return_value=[]),
         ),
         message_repo=MagicMock(get_session_messages=AsyncMock(return_value=[])),
         config_repo=MagicMock(
@@ -202,6 +203,51 @@ async def test_stale_pending_reservations_are_reaped():
     assert "fresh-id" in manager._pending
     assert end_call.kwargs["session_id"] == "stale-id"
     assert end_call.kwargs["reason"] == "no_first_message"
+
+
+@pytest.mark.asyncio
+async def test_orphaned_db_pending_rows_are_reaped_after_restart():
+    """A restart empties the in-memory pending dict, but the DB rows stay
+    'pending'. The reaper must sweep those by row age as well — otherwise
+    they linger forever unless that participant's token comes back."""
+    manager = SessionManager()  # empty _pending, as after a restart
+    session_cls, _ = _fake_session_cls()
+    with _patched(_pending_row(age_minutes=90), session_cls):
+        sm_module.session_repo.list_stale_pending = AsyncMock(
+            return_value=[SESSION_ID]
+        )
+        reaped = await manager.reap_stale_pending()
+        end_call = sm_module.session_repo.end_session.await_args
+        cutoff_arg = sm_module.session_repo.list_stale_pending.await_args.args[1]
+
+    assert reaped == 1
+    assert end_call.kwargs["session_id"] == SESSION_ID
+    assert end_call.kwargs["reason"] == "no_first_message"
+    # The cutoff handed to the DB query is the rejoin window, not epoch/now.
+    age = datetime.now(timezone.utc) - cutoff_arg
+    assert timedelta(minutes=30) < age < timedelta(minutes=120)
+
+
+@pytest.mark.asyncio
+async def test_orphan_sweep_skips_rows_with_a_live_reservation():
+    """A DB row that still has an in-memory reservation younger than the
+    window must not be closed by the orphan sweep."""
+    import time as time_module
+
+    manager = SessionManager()
+    manager._pending[SESSION_ID] = {
+        "treatment_group": "g", "_reserved_at": time_module.monotonic() - 60,
+    }
+    session_cls, _ = _fake_session_cls()
+    with _patched(_pending_row(), session_cls):
+        sm_module.session_repo.list_stale_pending = AsyncMock(
+            return_value=[SESSION_ID]
+        )
+        reaped = await manager.reap_stale_pending()
+        assert sm_module.session_repo.end_session.await_args is None
+
+    assert reaped == 0
+    assert SESSION_ID in manager._pending
 
 
 @pytest.mark.asyncio

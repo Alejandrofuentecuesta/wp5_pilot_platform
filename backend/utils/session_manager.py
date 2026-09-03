@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import json as _json
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Dict, Optional
 
 from platforms import SimulationSession
@@ -439,6 +439,23 @@ class SessionManager:
                     stale.append(session_id)
 
         pool = db_conn.get_pool()
+
+        # Pending rows can also be orphaned in the DB with no in-memory
+        # reservation: a restart empties self._pending while the rows keep
+        # status='pending'. Sweep those by row age too, or they linger
+        # forever unless that exact participant token comes back.
+        try:
+            cutoff_at = datetime.now(timezone.utc) - timedelta(seconds=cutoff_seconds)
+            orphaned = await session_repo.list_stale_pending(pool, cutoff_at)
+        except Exception as exc:
+            print(f"[SessionManager] Stale pending DB query failed: {exc}")
+            orphaned = []
+        async with self._lock:
+            pending_now = set(self._pending)
+        stale.extend(
+            sid for sid in orphaned if sid not in pending_now and sid not in stale
+        )
+
         for session_id in stale:
             try:
                 row = await session_repo.get_session(pool, session_id)

@@ -228,6 +228,14 @@ export function useChat() {
     onSessionInvalid: handleSessionInvalid,
   })
 
+  // The typing indicator is driven by paired typing_start/typing_stop
+  // events; a disconnect can eat the stop and leave "someone is writing…"
+  // stuck forever. Reset on every connection change — fresh events rebuild
+  // the true state within a tick.
+  useEffect(() => {
+    setTypingCount(0)
+  }, [isConnected])
+
   // Behavioural telemetry + idle "please write" reminder.
   const { track, noteActivity, idlePromptVisible, dismissIdlePrompt } =
     useBehaviorTracking({

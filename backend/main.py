@@ -29,7 +29,6 @@ from utils.session_manager import session_manager
 from utils.session_queue import session_queue
 from platforms.chatroom import build_return_url
 from platforms.chatroom import pick_participant_alias
-from utils import name_scrub
 from utils import token_manager
 from utils.log_viewer import generate_html_from_lines
 from utils.session_csv_exporter import render_session_messages_csv
@@ -286,26 +285,6 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
     if row:
         _experiment_id = row
         print(f"Auto-activated experiment: {_experiment_id}")
-
-    # Backstop for the end-of-session name scrub: any session that died
-    # without reaching teardown (crash, kill) still carries the name, and
-    # sessions.user_name is deliberately the last thing the scrub updates,
-    # so retrying by that column also finishes any partial scrub.
-    try:
-        async with pool.acquire() as conn:
-            stale = await conn.fetch(
-                "SELECT session_id FROM sessions "
-                "WHERE status IN ('ended', 'crashed') "
-                "AND user_name IS NOT NULL AND lower(user_name) <> 'participant'"
-            )
-        scrubbed = 0
-        for stale_row in stale:
-            if await name_scrub.scrub_session_records(pool, str(stale_row["session_id"])):
-                scrubbed += 1
-        if scrubbed:
-            print(f"Startup name scrub: cleaned {scrubbed} past session(s)")
-    except Exception as exc:
-        print(f"Startup name scrub failed: {exc}")
 
     # Warn about missing LLM API keys (they're only needed at runtime,
     # but an early heads-up saves debugging time).

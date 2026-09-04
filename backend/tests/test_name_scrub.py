@@ -1,14 +1,13 @@
-"""Tests for participant-name normalisation, scrubbing, and collision renames.
+"""Tests for chatroom name helpers: folding, renames, alias picking.
 
-The participant's first name is runtime-only data: normalised to a single
-first name on entry, unique in the room (a colliding agent is renamed), and
-rewritten to the canonical ``participant`` placeholder everywhere at session
-end, with a startup sweep as the backstop.
+The alias assigned by the backend is the participant's identity in every
+record and is kept in the data on purpose. These helpers only compare and
+rewrite names at session construction (collision renames in persona text).
 """
 from __future__ import annotations
 
 import json
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -16,26 +15,10 @@ from utils import name_scrub
 from utils.name_scrub import (
     CANONICAL_NAME,
     fold,
-    is_scrub_target,
-    scrub_json,
-    scrub_session_records,
     scrub_text,
 )
 
 from tests.test_chatroom import MINIMAL_CONFIG, _patch_externals
-
-
-# ── Normalisation ─────────────────────────────────────────────────────────────
-
-class TestScrubTarget:
-    def test_placeholder_is_not_a_target(self):
-        assert not is_scrub_target("participant")
-        assert not is_scrub_target("Participant")
-        assert not is_scrub_target("")
-        assert not is_scrub_target(None)
-
-    def test_real_name_is_a_target(self):
-        assert is_scrub_target("Lucía")
 
 
 # ── Text scrubbing ────────────────────────────────────────────────────────────
@@ -68,85 +51,6 @@ class TestScrubText:
     def test_none_and_empty(self):
         assert scrub_text(None, "Lucia") == (None, False)
         assert scrub_text("", "Lucia") == ("", False)
-
-
-class TestScrubJson:
-    def test_recursive_values_but_not_keys(self):
-        data = {
-            "prompt": "The human participant's name is Lucía.",
-            "nested": {"list": ["hola Lucia", 42, None]},
-            "Lucia": "key kept",
-        }
-        new, changed = scrub_json(data, "Lucia")
-        assert changed
-        assert new["prompt"] == "The human participant's name is participant."
-        assert new["nested"]["list"][0] == "hola participant"
-        assert new["nested"]["list"][1] == 42
-        assert "Lucia" in new  # keys are schema, not content
-
-    def test_no_change_returns_same_object(self):
-        data = {"a": "nothing here"}
-        new, changed = scrub_json(data, "Lucia")
-        assert not changed and new is data
-
-
-# ── DB scrub ordering ─────────────────────────────────────────────────────────
-
-class _FakeAcquire:
-    def __init__(self, conn):
-        self._conn = conn
-
-    async def __aenter__(self):
-        return self._conn
-
-    async def __aexit__(self, *exc):
-        return False
-
-
-@pytest.mark.asyncio
-async def test_scrub_session_records_updates_user_name_last():
-    """If the scrub dies partway, sessions.user_name must still hold the
-    name so the startup sweep retries — so it is the final write."""
-    conn = MagicMock()
-    conn.fetchrow = AsyncMock(side_effect=[
-        {"user_name": "Lucía"},
-        {"simulation_config": None, "experimental_config": None},
-    ])
-    conn.fetch = AsyncMock(side_effect=[
-        [  # messages
-            {
-                "message_id": "m1", "sender": "Lucía",
-                "content": "hola a todos", "quoted_text": None,
-                "mentions": [], "liked_by": [], "metadata": None,
-            },
-        ],
-        [  # events
-            {"id": 7, "data": json.dumps({"prompt": "Lucía said hi"})},
-        ],
-    ])
-    conn.execute = AsyncMock()
-    pool = MagicMock()
-    pool.acquire = lambda: _FakeAcquire(conn)
-
-    assert await scrub_session_records(pool, "sid") is True
-
-    statements = [call.args[0] for call in conn.execute.await_args_list]
-    assert any("UPDATE messages" in s for s in statements)
-    assert any("UPDATE events" in s for s in statements)
-    assert "UPDATE sessions" in statements[-1]
-    assert conn.execute.await_args_list[-1].args[2] == CANONICAL_NAME
-
-
-@pytest.mark.asyncio
-async def test_scrub_session_records_noop_for_placeholder():
-    conn = MagicMock()
-    conn.fetchrow = AsyncMock(return_value={"user_name": "participant"})
-    conn.execute = AsyncMock()
-    pool = MagicMock()
-    pool.acquire = lambda: _FakeAcquire(conn)
-
-    assert await scrub_session_records(pool, "sid") is False
-    conn.execute.assert_not_awaited()
 
 
 # ── Collision rename at session construction ─────────────────────────────────

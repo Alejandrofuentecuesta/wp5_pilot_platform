@@ -294,9 +294,12 @@ class SimulationSession:
         self.experiment_id = experiment_id
         self.logger = Logger(session_id, experiment_id)
         self._paused = False
-        # Set (to a monotonic timestamp) while the participant is disconnected;
-        # the clock loop freezes and enforces the rejoin window.
+        # Set (to a monotonic timestamp) while the session is frozen — either
+        # the participant disconnected, or they went idle past the activity
+        # floor. The clock loop freezes and enforces the rejoin window.
+        # ``_pause_trigger`` records which so the abandon reason can differ.
         self._pause_started_monotonic: Optional[float] = None
+        self._pause_trigger: Optional[str] = None
 
         if not _config:
             raise RuntimeError(
@@ -890,10 +893,13 @@ class SimulationSession:
         except Exception as exc:
             print(f"[Session {self.session_id}] DB end_session failed: {exc}")
 
-        # Timeout endings happen with no browser present, so the participant
-        # cannot deliver the return redirect themselves. Fire it server-side
-        # so the panel never has to infer non-completion from silence.
-        if reason in ("abandoned", "no_first_message"):
+        # Timeout endings may happen with no browser present, so the
+        # participant cannot always deliver the return redirect themselves.
+        # Fire it server-side so the panel never has to infer non-completion
+        # from silence. If the browser is still attached (an idle time-out
+        # with the tab open) it also redirects; the panel treats the first
+        # signal per token as authoritative, so the duplicate is harmless.
+        if reason in ("abandoned", "no_first_message", "idle_timeout"):
             await self._notify_panel_return(reason)
 
         print(f"Session {self.session_id} stopped: {reason}")
@@ -949,9 +955,17 @@ class SimulationSession:
                 if self._pause_started_monotonic is not None:
                     away_seconds = time.monotonic() - self._pause_started_monotonic
                     if away_seconds >= REJOIN_WINDOW_MINUTES * 60:
-                        await self._publish_session_end("abandoned")
+                        # Both end as a non-complete (r=2); the reason differs
+                        # so the data separates an idle time-out from a genuine
+                        # disconnect.
+                        end_reason = (
+                            "idle_timeout"
+                            if self._pause_trigger == "idle"
+                            else "abandoned"
+                        )
+                        await self._publish_session_end(end_reason)
                         await asyncio.sleep(0.5)
-                        await self.stop(reason="abandoned")
+                        await self.stop(reason=end_reason)
                         break
                     await asyncio.sleep(tick_interval)
                     continue
@@ -1324,8 +1338,26 @@ class SimulationSession:
         if self._pause_started_monotonic is not None or not self.running:
             return
         self._pause_started_monotonic = time.monotonic()
+        self._pause_trigger = "disconnect"
         self.logger.log_event("session_paused", {"trigger": "disconnected"})
         print(f"Session {self.session_id} paused (participant disconnected)")
+
+    def pause_for_idle(self) -> None:
+        """Freeze the session while the participant is idle past the floor.
+
+        Same freeze as ``pause_for_disconnect`` — the clock loop stops running
+        turns and the countdown stops consuming duration, so the participant
+        does not miss exposure while an idle reminder is shown. The guard is
+        essential: the client re-sends the idle signal every reminder window,
+        and a repeat must not restart the away-clock (that would defer the
+        60-minute abandon indefinitely).
+        """
+        if self._pause_started_monotonic is not None or not self.running:
+            return
+        self._pause_started_monotonic = time.monotonic()
+        self._pause_trigger = "idle"
+        self.logger.log_event("session_paused", {"trigger": "idle"})
+        print(f"Session {self.session_id} paused (participant idle)")
 
     def resume_from_pause(self) -> float:
         """Unfreeze after a rejoin; paused time is credited back to the session.
@@ -1337,9 +1369,29 @@ class SimulationSession:
         paused_for = time.monotonic() - self._pause_started_monotonic
         self.state.paused_seconds += paused_for
         self._pause_started_monotonic = None
+        self._pause_trigger = None
         self.logger.log_event("session_resumed", {"paused_for_seconds": round(paused_for, 1)})
         print(f"Session {self.session_id} resumed after {paused_for:.0f}s away")
         return paused_for
+
+    async def resume_from_idle(self) -> None:
+        """Resume after an idle pause and persist the credited time.
+
+        The participant stays connected through an idle pause, so unlike a
+        rejoin there is no ``attach_websocket`` to persist the credit — this
+        does it, mirroring that path, so a restart cannot under-credit the
+        session. Agent turns resume and the client receives new messages
+        through the existing pub/sub stream; the client hides its own
+        reminder locally, so no resume broadcast is needed.
+        """
+        credited = self.resume_from_pause()
+        if credited:
+            try:
+                await session_repo.add_paused_seconds(
+                    db_conn.get_pool(), self.session_id, credited
+                )
+            except Exception as exc:
+                self.logger.log_error("persist_paused_seconds", str(exc))
 
     async def attach_websocket(
         self,

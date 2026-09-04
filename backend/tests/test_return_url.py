@@ -20,6 +20,7 @@ TOKEN = "tok-123"
     ("user_exit", "3"),
     ("abandoned", "2"),
     ("no_first_message", "2"),
+    ("idle_timeout", "2"),
     ("duration_expired_on_recovery", "2"),
     ("", "2"),
 ])

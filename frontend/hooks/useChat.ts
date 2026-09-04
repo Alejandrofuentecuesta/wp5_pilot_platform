@@ -256,7 +256,7 @@ export function useChat() {
   }, [isConnected])
 
   // Behavioural telemetry + idle "please write" reminder.
-  const { track, noteActivity, idlePromptVisible, dismissIdlePrompt } =
+  const { track, noteActivity, idlePromptVisible } =
     useBehaviorTracking({
       sessionId,
       trackingEnabled: behaviorConfig.behaviorTrackingEnabled,
@@ -264,6 +264,22 @@ export function useChat() {
       idleSeconds: behaviorConfig.idlePromptSeconds,
       idleActive: initialMessageDone,
     })
+
+  // Idle past the activity floor: tell the backend to freeze the simulation
+  // so the participant does not miss exposure while the reminder is shown.
+  // Fires once per idle episode (the flag only re-arms after a resume); the
+  // backend guards against a repeat restarting its away-clock.
+  useEffect(() => {
+    if (idlePromptVisible) send({ type: "idle_pause" } as any)
+  }, [idlePromptVisible, send])
+
+  // Dismissing the reminder resumes the simulation and starts a fresh idle
+  // window. noteActivity resets the idle clock and hides the reminder, so the
+  // participant gets the full interval again before the next pause.
+  const resumeFromIdle = useCallback(() => {
+    send({ type: "resume" } as any)
+    noteActivity()
+  }, [send, noteActivity])
 
   // Per-message composition metrics (time spent typing, edit effort).
   const composeRef = useRef({ startedAt: 0, keystrokes: 0, backspaces: 0, pasted: false })
@@ -717,7 +733,7 @@ export function useChat() {
     typingCount,
     // Idle "please write in the chat" reminder
     idlePromptVisible,
-    dismissIdlePrompt,
+    resumeFromIdle,
     // Session end
     sessionEnded,
     redirectUrl,

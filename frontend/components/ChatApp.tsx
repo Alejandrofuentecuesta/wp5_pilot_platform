@@ -93,7 +93,7 @@ export default function ChatApp() {
     <>
       <IdleReminderBanner
         visible={chat.idlePromptVisible}
-        onDismiss={chat.dismissIdlePrompt}
+        onDismiss={chat.resumeFromIdle}
       />
       <ChatRoom
       visibleMessages={chat.visibleMessages}

@@ -1083,6 +1083,16 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                         quoted_text=quoted_text,
                         mentions=data.get("mentions"),
                     )
+            elif data.get("type") == "idle_pause":
+                # Participant idle past the activity floor: freeze the sim so
+                # they do not miss exposure while the reminder is shown. The
+                # client re-sends this every reminder window; pause_for_idle
+                # guards against restarting the away-clock.
+                session.pause_for_idle()
+            elif data.get("type") == "resume":
+                # Participant dismissed the reminder: unfreeze and credit the
+                # paused time back to the session clock.
+                await session.resume_from_idle()
             elif data.get("type") == "emotions_checkup_response":
                 await session.handle_emotions_checkup_response(data)
             elif data.get("type") == "user_exit":

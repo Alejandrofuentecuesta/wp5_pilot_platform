@@ -33,6 +33,8 @@ interface LoginScreenProps {
 type LoginStep = "instructions" | "access" | "stance"
 type HandoffStatus = "checking" | "ready" | "invalid"
 
+const NAME_REQUIRED_ERROR = "Introduce tu nombre para continuar."
+
 export default function LoginScreen({
   initialUsername,
   handoff,
@@ -99,6 +101,10 @@ export default function LoginScreen({
 
   // Manual flow: validate the typed token, then move to the stance question.
   const handlePreview = useCallback(async () => {
+    if (!sanitizeName(username)) {
+      setError(NAME_REQUIRED_ERROR)
+      return
+    }
     if (!token.trim()) {
       setError("Introduce tu token para continuar.")
       return
@@ -119,15 +125,20 @@ export default function LoginScreen({
     } finally {
       setLoading(false)
     }
-  }, [token, onPreview, onRejoin])
+  }, [token, username, onPreview, onRejoin])
 
   // Handoff flow: stance is already known, start directly from the access step.
   const handleHandoffStart = useCallback(async () => {
     if (loading || !handoff?.stance) return
+    const cleanName = sanitizeName(username)
+    if (!cleanName) {
+      setError(NAME_REQUIRED_ERROR)
+      return
+    }
     setLoading(true)
     setError("")
     try {
-      await onStart(handoff.token, sanitizeName(username), handoff.stance)
+      await onStart(handoff.token, cleanName, handoff.stance)
     } catch {
       setError("No se ha podido iniciar la sesión. Inténtalo de nuevo.")
       setLoading(false)
@@ -135,6 +146,12 @@ export default function LoginScreen({
   }, [loading, handoff, username, onStart])
 
   const handleManualStart = useCallback(async () => {
+    const cleanName = sanitizeName(username)
+    if (!cleanName) {
+      setError(NAME_REQUIRED_ERROR)
+      setStep("access")
+      return
+    }
     if (!selectedStance) {
       setError("Elige la columna que se acerque más a tu posición.")
       return
@@ -142,7 +159,7 @@ export default function LoginScreen({
     setLoading(true)
     setError("")
     try {
-      await onStart(token.trim(), sanitizeName(username), selectedStance)
+      await onStart(token.trim(), cleanName, selectedStance)
     } catch {
       setError("No se ha podido iniciar la sesión. Inténtalo de nuevo.")
       setLoading(false)
@@ -363,16 +380,23 @@ export default function LoginScreen({
               <div className="grid gap-4 md:grid-cols-2">
                 <div>
                   <label htmlFor="username" className="mb-1 block text-xs font-medium text-secondary">
-                    Nombre visible (opcional)
+                    Nombre visible <span className="text-danger">*</span>
                   </label>
                   <input
                     id="username"
                     type="text"
                     value={username}
-                    onChange={(e) => setUsername(e.target.value)}
+                    onChange={(e) => {
+                      setUsername(e.target.value)
+                      if (error === NAME_REQUIRED_ERROR) setError("")
+                    }}
                     onKeyDown={handleKeyDown}
                     placeholder="p. ej. Alicia"
                     autoFocus={isHandoff}
+                    required
+                    aria-required="true"
+                    aria-invalid={error === NAME_REQUIRED_ERROR}
+                    maxLength={60}
                     className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2.5 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30"
                   />
                 </div>

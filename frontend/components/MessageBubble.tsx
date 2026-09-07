@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useRef, useState } from "react"
 import type { Message } from "@/lib/types"
 import { getSenderColor, PARTICIPANT_SENDER } from "@/lib/constants"
 import { formatMessageTime } from "@/lib/dates"
@@ -15,6 +16,7 @@ interface MessageBubbleProps {
   onLike: (msg: Message) => void
   onMention: (sender: string) => void
   onReport: (msg: Message) => void
+  onBlock: (msg: Message) => void
 }
 
 function renderContent(content: string, mentions?: string[]) {
@@ -52,7 +54,29 @@ export default function MessageBubble({
   onLike,
   onMention,
   onReport,
+  onBlock,
 }: MessageBubbleProps) {
+  const [optionsOpen, setOptionsOpen] = useState(false)
+  const optionsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!optionsOpen) return
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (!optionsRef.current?.contains(event.target as Node)) {
+        setOptionsOpen(false)
+      }
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOptionsOpen(false)
+    }
+    document.addEventListener("pointerdown", closeOnOutsideClick)
+    document.addEventListener("keydown", closeOnEscape)
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick)
+      document.removeEventListener("keydown", closeOnEscape)
+    }
+  }, [optionsOpen])
+
   // The backend stores the participant's chosen display name as sender, while
   // older sessions may still use the canonical "participant" value.
   const messageIsSelf =
@@ -96,6 +120,42 @@ export default function MessageBubble({
             >
               {senderLabel}
             </span>
+            {!messageIsSelf && (
+              <div ref={optionsRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => setOptionsOpen((open) => !open)}
+                  aria-label={`Opciones para ${senderLabel}`}
+                  aria-haspopup="menu"
+                  aria-expanded={optionsOpen}
+                  className="flex h-6 w-6 items-center justify-center rounded-md text-secondary transition-colors hover:bg-bg-feed hover:text-primary"
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <circle cx="5" cy="12" r="1.8" />
+                    <circle cx="12" cy="12" r="1.8" />
+                    <circle cx="19" cy="12" r="1.8" />
+                  </svg>
+                </button>
+                {optionsOpen && (
+                  <div
+                    role="menu"
+                    className="absolute left-0 top-full z-30 mt-1 min-w-44 rounded-lg border border-border bg-white p-1 shadow-lg"
+                  >
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setOptionsOpen(false)
+                        onBlock(message)
+                      }}
+                      className="w-full rounded-md px-3 py-2 text-left text-sm font-medium text-danger transition-colors hover:bg-danger/5"
+                    >
+                      Bloquear usuario
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
             <span className="text-[11px] text-tertiary ml-auto">
               {formatMessageTime(message.timestamp)}
             </span>

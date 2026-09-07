@@ -48,9 +48,9 @@ def _row(status="active", ended_ago_seconds=None):
     return row
 
 
-def _post(client, ip="9.9.9.9"):
+def _post(client, ip="9.9.9.9", body=BODY):
     return client.post(
-        f"/session/{SESSION_ID}/telemetry", json=BODY,
+        f"/session/{SESSION_ID}/telemetry", json=body,
         headers={"X-Forwarded-For": ip},
     )
 
@@ -63,6 +63,27 @@ class TestSessionLiveness:
         assert response.status_code == 204
         assert insert is not None
         assert insert.kwargs["events"][0]["event_type"] == "client_activity"
+
+    def test_exit_attempt_is_allowlisted(self, client):
+        body = {
+            "events": [{
+                "kind": "exit_attempt",
+                "at": "2026-09-07T10:00:00Z",
+                "data": {"source": "chat_header"},
+            }],
+        }
+        with _patched(_row("active")):
+            response = _post(client, body=body)
+            insert = main.event_repo.insert_events.await_args
+        assert response.status_code == 204
+        assert insert is not None
+        assert insert.kwargs["events"] == [{
+            "event_type": "client_exit_attempt",
+            "data": {
+                "source": "chat_header",
+                "client_at": "2026-09-07T10:00:00Z",
+            },
+        }]
 
     def test_ended_session_is_dropped(self, client):
         with _patched(_row("ended", ended_ago_seconds=3600)):

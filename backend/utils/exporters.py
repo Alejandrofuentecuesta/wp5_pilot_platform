@@ -240,15 +240,17 @@ behavioural telemetry** (prefixed `client_`):
 | `client_activity` | periodic heartbeat while the tab is open | is_visible, had_mouse_move, had_keyboard (in the interval) |
 | `client_idle_prompt_shown` | the "please write in the chat" reminder was shown | idle_seconds (threshold that fired) |
 | `client_page_unload` | the participant closed / navigated away from the page | — |
+| `client_exit_attempt` | participant clicked “Salir”, whether they later confirmed or cancelled | source |
 
 Flattened convenience columns (`compose_ms`, `keystrokes`, `backspaces`,
 `char_count`, `pasted`, `is_visible`, `had_mouse_move`, `had_keyboard`) are
 projections of `data_json`; they are blank for events that don't carry them.
 
-Behavioural note: telemetry is only collected when enabled for the experiment
-and covers coarse presence/activity signals (tab visibility, window focus,
-typing effort, periodic mouse/keyboard activity). No keystroke *content* and no
-mouse coordinates are recorded.
+Behavioural note: routine telemetry is only collected when enabled for the
+experiment and covers coarse presence/activity signals (tab visibility, window
+focus, typing effort, periodic mouse/keyboard activity). `client_exit_attempt`
+is always recorded because it is an explicit study interaction. No keystroke
+*content* and no mouse coordinates are recorded.
 """
 
 

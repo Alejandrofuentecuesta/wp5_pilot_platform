@@ -256,7 +256,7 @@ export function useChat() {
   }, [isConnected])
 
   // Behavioural telemetry + idle "please write" reminder.
-  const { track, noteActivity, idlePromptVisible } =
+  const { track, trackImmediately, noteActivity, idlePromptVisible } =
     useBehaviorTracking({
       sessionId,
       trackingEnabled: behaviorConfig.behaviorTrackingEnabled,
@@ -504,6 +504,11 @@ export function useChat() {
     setEmotionsCheckupOpen(false)
   }, [send])
 
+  const openExitModal = useCallback(() => {
+    trackImmediately("exit_attempt", { source: "chat_header" })
+    setExitModalOpen(true)
+  }, [trackImmediately])
+
   const exitSession = useCallback((reason: string) => {
     send({
       type: "user_exit",
@@ -599,13 +604,15 @@ export function useChat() {
     }
   }
 
-  // Report message (with optimistic update + rollback)
-  const performReport = async (block: boolean) => {
-    if (!reportTarget || !sessionId) return
+  // Report or block a message sender (with optimistic update + rollback).
+  // Both the report dialog and the participant options menu share this path,
+  // so blocking always keeps the existing backend event and replacement flow.
+  const reportOrBlock = async (target: Message, block: boolean) => {
+    if (!sessionId || reporting) return
     setReporting(true)
     const uid = PARTICIPANT_SENDER
-    const messageId = reportTarget.message_id
-    const sender = reportTarget.sender
+    const messageId = target.message_id
+    const sender = target.sender
 
     // Prevent reporting yourself
     if (sender === uid || sender === username) {
@@ -615,7 +622,7 @@ export function useChat() {
       return
     }
 
-    const prevReported = reportTarget.reported || false
+    const prevReported = target.reported || false
 
     // Optimistic update
     setMessages((prev) =>
@@ -672,6 +679,15 @@ export function useChat() {
     }
   }
 
+  const performReport = async (block: boolean) => {
+    if (!reportTarget) return
+    await reportOrBlock(reportTarget, block)
+  }
+
+  const blockUser = async (message: Message) => {
+    await reportOrBlock(message, true)
+  }
+
   // Filtered messages (respecting blocked senders)
   const visibleMessages = useMemo(() => {
     return messages.filter((msg) => {
@@ -721,6 +737,7 @@ export function useChat() {
     setReportTarget,
     reporting,
     performReport,
+    blockUser,
     newsArticle,
     newsArticleModalOpen,
     dismissNewsArticle,
@@ -747,6 +764,7 @@ export function useChat() {
     submitEmotionsCheckup,
     // Exit
     exitModalOpen,
+    openExitModal,
     setExitModalOpen,
     exitSession,
     // Queue

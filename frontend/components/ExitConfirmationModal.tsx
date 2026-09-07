@@ -46,6 +46,9 @@ export default function ExitConfirmationModal({
           <p className="text-sm text-secondary leading-relaxed mb-4">
             ¿Estás seguro de querer salir del experimento? Después no podrás volver a entrar.
           </p>
+          <p className="mb-4 rounded-lg border border-danger/30 bg-danger/5 px-3 py-2.5 text-sm font-semibold leading-relaxed text-danger">
+            Si sales ahora, tu participación quedará incompleta y perderás la compensación económica.
+          </p>
           <label className="block text-sm font-medium text-primary mb-1.5">
             ¿Por qué quieres salir? <span className="text-danger">*</span>
           </label>

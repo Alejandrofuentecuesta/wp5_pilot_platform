@@ -112,6 +112,7 @@ export default function ChatApp() {
       setReportTarget={chat.setReportTarget}
       reporting={chat.reporting}
       performReport={chat.performReport}
+      blockUser={chat.blockUser}
       typingCount={chat.typingCount}
       newsArticle={chat.newsArticle}
       newsArticleModalOpen={chat.newsArticleModalOpen}
@@ -123,6 +124,7 @@ export default function ChatApp() {
       emotionsCheckupOpen={chat.emotionsCheckupOpen}
       onSubmitEmotionsCheckup={chat.submitEmotionsCheckup}
       exitModalOpen={chat.exitModalOpen}
+      openExitModal={chat.openExitModal}
       setExitModalOpen={chat.setExitModalOpen}
       exitSession={chat.exitSession}
       />

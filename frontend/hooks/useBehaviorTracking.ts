@@ -14,6 +14,7 @@ export type TelemetryKind =
   | "activity"
   | "idle_prompt_shown"
   | "page_unload"
+  | "exit_attempt"
 
 interface QueuedEvent {
   kind: TelemetryKind
@@ -68,6 +69,20 @@ export function useBehaviorTracking({
   const track = useCallback(
     (kind: TelemetryKind, data?: Record<string, unknown>) => enqueue(kind, data),
     [enqueue],
+  )
+
+  // Exit attempts are a required study event rather than optional activity
+  // tracking. Send them immediately so closing the confirmation dialog (or
+  // leaving the page soon afterwards) cannot discard the click.
+  const trackImmediately = useCallback(
+    (kind: TelemetryKind, data?: Record<string, unknown>) => {
+      if (!sessionId) return
+      if (kind !== "exit_attempt" && !trackingEnabled) return
+      sendTelemetry(sessionId, [
+        { kind, at: new Date().toISOString(), data },
+      ])
+    },
+    [sessionId, trackingEnabled],
   )
 
   // Public: the participant posted a message — this is the ONLY thing that
@@ -182,5 +197,5 @@ export function useBehaviorTracking({
     }
   }, [sessionId, trackingEnabled, idleEnabled, flush])
 
-  return { track, noteActivity, idlePromptVisible, dismissIdlePrompt }
+  return { track, trackImmediately, noteActivity, idlePromptVisible, dismissIdlePrompt }
 }

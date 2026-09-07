@@ -714,6 +714,7 @@ async def queue_join(request: QueueJoinRequest):
 _TELEMETRY_KINDS = {
     "tab_hidden", "tab_visible", "window_focus", "window_blur",
     "compose", "activity", "idle_prompt_shown", "page_unload",
+    "exit_attempt",
 }
 
 

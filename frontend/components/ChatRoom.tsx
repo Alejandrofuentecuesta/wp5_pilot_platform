@@ -1,5 +1,6 @@
 "use client"
 
+import { useState } from "react"
 import type { Message, EmotionRating } from "@/lib/types"
 import ChatHeader from "./ChatHeader"
 import MessageFeed from "./MessageFeed"
@@ -8,6 +9,7 @@ import ReportModal from "./ReportModal"
 import NewsArticleModal from "./NewsArticleModal"
 import EmotionsCheckupModal from "./EmotionsCheckupModal"
 import ExitConfirmationModal from "./ExitConfirmationModal"
+import BlockUserModal from "./BlockUserModal"
 import type { ParticipantStance } from "@/lib/types"
 
 interface ChatRoomProps {
@@ -34,6 +36,7 @@ interface ChatRoomProps {
   setReportTarget: (msg: Message | null) => void
   reporting: boolean
   performReport: (block: boolean) => void
+  blockUser: (msg: Message) => void
   typingCount: number
   newsArticle: Message | null
   newsArticleModalOpen: boolean
@@ -45,6 +48,7 @@ interface ChatRoomProps {
   emotionsCheckupOpen: boolean
   onSubmitEmotionsCheckup: (emotions: EmotionRating[], tempted: boolean, reportedUsers?: string[]) => void
   exitModalOpen: boolean
+  openExitModal: () => void
   setExitModalOpen: (open: boolean) => void
   exitSession: (reason: string) => void
 }
@@ -66,6 +70,7 @@ export default function ChatRoom({
   setReportTarget,
   reporting,
   performReport,
+  blockUser,
   typingCount,
   newsArticle,
   newsArticleModalOpen,
@@ -77,15 +82,18 @@ export default function ChatRoom({
   emotionsCheckupOpen,
   onSubmitEmotionsCheckup,
   exitModalOpen,
+  openExitModal,
   setExitModalOpen,
   exitSession,
 }: ChatRoomProps) {
+  const [blockTarget, setBlockTarget] = useState<Message | null>(null)
+
   return (
     <div className="fixed inset-0 mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden overscroll-none bg-bg-surface shadow-lg">
       <ChatHeader
         participantCount={participants.length}
         isConnected={isConnected}
-        onExitClick={() => setExitModalOpen(true)}
+        onExitClick={openExitModal}
       />
 
       <MessageFeed
@@ -100,6 +108,7 @@ export default function ChatRoom({
           setReportTarget(msg)
           setReportModalOpen(true)
         }}
+        onBlock={setBlockTarget}
         onArticleClick={newsArticle ? openNewsArticle : undefined}
       />
 
@@ -122,6 +131,18 @@ export default function ChatRoom({
             setReportModalOpen(false)
             setReportTarget(null)
           }}
+        />
+      )}
+
+      {blockTarget && (
+        <BlockUserModal
+          senderName={blockTarget.sender}
+          blocking={reporting}
+          onConfirm={() => {
+            blockUser(blockTarget)
+            setBlockTarget(null)
+          }}
+          onClose={() => setBlockTarget(null)}
         />
       )}
 

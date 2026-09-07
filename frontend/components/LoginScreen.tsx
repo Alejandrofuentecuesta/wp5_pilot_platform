@@ -311,7 +311,7 @@ export default function LoginScreen({
                   <li className="flex gap-3 items-start">
                     <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
                     <span>
-                      <strong>Consultar otras pestañas</strong> si quieres buscar información para participar en el debate.
+                      <strong>Abrir otras pestañas en tu navegador</strong> si quieres buscar información para participar en el debate.
                     </span>
                   </li>
                   <li className="flex gap-3 items-start">

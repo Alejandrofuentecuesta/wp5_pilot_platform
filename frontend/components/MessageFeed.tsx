@@ -16,6 +16,7 @@ interface MessageFeedProps {
   onLike: (msg: Message) => void
   onMention: (sender: string) => void
   onReport: (msg: Message) => void
+  onBlock: (msg: Message) => void
   onArticleClick?: (msg: Message) => void
 }
 
@@ -63,6 +64,7 @@ export default function MessageFeed({
   onLike,
   onMention,
   onReport,
+  onBlock,
   onArticleClick,
 }: MessageFeedProps) {
   const feedRef = useRef<HTMLDivElement>(null)
@@ -119,6 +121,7 @@ export default function MessageFeed({
                 onLike={onLike}
                 onMention={onMention}
                 onReport={onReport}
+                onBlock={onBlock}
               />
             )
           })}

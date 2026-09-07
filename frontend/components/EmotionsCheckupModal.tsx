@@ -40,6 +40,8 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
   const emotions = [
     { value: "Enfadado/a", label: "Enfadado/a", emoji: "😡" },
     { value: "contento/a", label: "Contento/a", emoji: "😊" },
+    { value: "Triste", label: "Triste", emoji: "😢" },
+    { value: "Aburrido/a", label: "Aburrido/a", emoji: "🥱" },
     { value: "asustado/a", label: "Asustado/a", emoji: "😨" },
     { value: "Otra", label: "Otra", emoji: "💭" },
   ]
@@ -67,7 +69,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] px-4 py-6"
+      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 p-2 backdrop-blur-sm sm:px-4 sm:py-6"
       role="dialog"
       aria-modal="true"
       aria-labelledby="emotions-checkup-title"
@@ -75,11 +77,11 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
       <div
         ref={modalRef}
         tabIndex={-1}
-        className="bg-white rounded-2xl w-full max-w-[500px] shadow-2xl border border-border overflow-hidden focus:outline-none animate-in fade-in zoom-in-95 duration-200"
+        className="flex max-h-[calc(100dvh-1rem)] w-full max-w-[500px] flex-col overflow-hidden rounded-2xl border border-border bg-white shadow-2xl focus:outline-none animate-in fade-in zoom-in-95 duration-200 sm:max-h-[calc(100dvh-3rem)]"
       >
-        <div className="h-1.5 bg-accent" />
+        <div className="h-1.5 shrink-0 bg-accent" />
         
-        <div className="p-6 space-y-6">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6">
           <div className="space-y-1 text-center">
             <h3 id="emotions-checkup-title" className="text-xl font-bold text-primary">
               Chequeo de estado de ánimo
@@ -94,7 +96,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
             <label className="block text-sm font-semibold text-primary">
               1. ¿Cómo te sientes en este momento? <span className="font-normal text-secondary">(puedes elegir varias)</span>
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5">
               {emotions.map((emotion) => {
                 const isSelected = selectedEmotions.includes(emotion.value)
                 return (
@@ -103,7 +105,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
                     type="button"
                     onClick={() => toggleEmotion(emotion.value)}
                     aria-pressed={isSelected}
-                    className={`flex flex-col items-center justify-center p-3 rounded-xl border text-sm font-medium transition-all ${
+                    className={`flex flex-col items-center justify-center rounded-xl border p-2.5 text-sm font-medium transition-all sm:p-3 ${
                       isSelected
                         ? "border-accent bg-accent-soft text-accent ring-2 ring-accent/30"
                         : "border-border text-secondary hover:border-accent-hover hover:bg-bg-feed"
@@ -182,7 +184,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
             <label className="block text-sm font-semibold text-primary">
               2. ¿Has tenido la tentación de reportar a algún usuario de la plataforma?
             </label>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
               <button
                 type="button"
                 onClick={() => setSelectedTempted(true)}
@@ -246,7 +248,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
           </div>
 
           {/* Reminder box */}
-          <div className="rounded-xl bg-bg-feed border border-border/60 p-4 flex gap-3 items-start">
+          <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-bg-feed p-3 sm:p-4">
             <svg
               className="w-5 h-5 text-accent shrink-0 mt-0.5"
               fill="none"
@@ -269,7 +271,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
         </div>
 
         {/* Submit button */}
-        <div className="bg-bg-feed px-6 py-4 flex justify-end border-t border-border">
+        <div className="flex shrink-0 justify-end border-t border-border bg-bg-feed px-4 py-3 sm:px-6 sm:py-4">
           <button
             onClick={handleSubmit}
             disabled={!isFormValid}

@@ -297,7 +297,7 @@ export default function LoginScreen({
                   <li className="flex gap-3 items-start">
                     <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
                     <span className="inline-flex items-center flex-wrap gap-1.5">
-                      <strong>Reportar o bloquear</strong>
+                      <strong>Reportar:</strong>
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-red-50 text-danger font-medium">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
@@ -305,7 +305,21 @@ export default function LoginScreen({
                         </svg>
                         Report
                       </span>
-                      comentarios o usuarios que te parezcan inapropiados, molestos o incómodos.
+                      Puedes denunciar comentarios y usuarios que te parezcan inapropiados, molestos o incómodos.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span className="inline-flex items-center flex-wrap gap-1.5">
+                      <strong>Bloquear:</strong>
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-red-50 text-danger font-medium">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" aria-hidden="true">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M5.6 5.6l12.8 12.8" />
+                        </svg>
+                        Bloquear
+                      </span>
+                      Puedes silenciar usuarios que te parezcan inapropiados, molestos o incómodos.
                     </span>
                   </li>
                   <li className="flex gap-3 items-start">

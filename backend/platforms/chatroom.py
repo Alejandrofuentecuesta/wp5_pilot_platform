@@ -14,6 +14,11 @@ from utils import name_scrub
 from utils.llm.llm_manager import LLMManager
 from agents.agent_manager import AgentManager
 from agents.STAGE.classifier import DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
+from agents.STAGE.safety_classifier import (
+    PARTICIPANT_SAFETY_SYSTEM_PROMPT,
+    build_participant_safety_prompt,
+    parse_participant_safety_response,
+)
 from agents.STAGE.orchestrator import Orchestrator
 from features import load_features
 from db import connection as db_conn
@@ -97,7 +102,8 @@ def build_return_url(redirect_url: str, token: str, reason: str) -> str:
     """Append the panel hand-back parameters (token + completion status) to
     the configured return URL. r=1: full session duration received (complete);
     r=3: participant chose to leave via the exit button; r=2: any other
-    outcome (non-complete)."""
+    outcome (non-complete). A safety intervention is compensated as complete
+    even when it ends the exposure early."""
     if not redirect_url:
         return ""
     if not token:
@@ -107,8 +113,9 @@ def build_return_url(redirect_url: str, token: str, reason: str) -> str:
     # of wall-clock time while nobody was watching (restart + disconnected
     # participant), so the participant may have received only a fraction of
     # the exposure. When in doubt, under-claim completion.
-    if reason.startswith("duration_expired") and not reason.startswith(
-        "duration_expired_on_recovery"
+    if reason == "participant_safety" or (
+        reason.startswith("duration_expired")
+        and not reason.startswith("duration_expired_on_recovery")
     ):
         r_code = "1"
     elif reason.startswith("user_exit"):
@@ -491,6 +498,9 @@ class SimulationSession:
         self._parallel_turns = max(1, int(self.simulation_config.get("parallel_turns", 1)))
         self._active_turn_tasks: set = set()  # track fire-and-forget parallel tasks
         self._next_pipeline_id = 0  # cycles 1..N for parallel pipeline tagging
+        self._safety_tasks: set[asyncio.Task] = set()
+        self._safety_stop_lock = asyncio.Lock()
+        self._safety_intervention_triggered = False
 
         # Pre-split agents across pipeline slots so each director only picks
         # from its own subset, avoiding duplicate agent selection.
@@ -878,6 +888,25 @@ class SimulationSession:
                 pass
         self._active_turn_tasks.clear()
 
+        # Classifier checks are independent background tasks. On a normal end,
+        # cancel them so a late result cannot revive a terminal interaction.
+        # When stop() is called by the positive classifier itself, do not make
+        # that task await/cancel itself.
+        current_task = asyncio.current_task()
+        for task in list(self._safety_tasks):
+            if task is current_task:
+                continue
+            task.cancel()
+            try:
+                await task
+            except asyncio.CancelledError:
+                pass
+        # Mutate the existing set: each task's done callback is bound to this
+        # exact set object and must still be able to remove the current task.
+        self._safety_tasks.intersection_update(
+            {current_task} if current_task is not None else set()
+        )
+
         self.logger.log_session_end(reason)
         # Flush any pending fire-and-forget log tasks before closing DB connection.
         await self.logger.drain()
@@ -899,7 +928,7 @@ class SimulationSession:
         # from silence. If the browser is still attached (an idle time-out
         # with the tab open) it also redirects; the panel treats the first
         # signal per token as authoritative, so the duplicate is harmless.
-        if reason in ("abandoned", "no_first_message", "idle_timeout"):
+        if reason in ("abandoned", "no_first_message", "idle_timeout", "participant_safety"):
             await self._notify_panel_return(reason)
 
         print(f"Session {self.session_id} stopped: {reason}")
@@ -1049,8 +1078,12 @@ class SimulationSession:
         After the LLM returns a message, a length-based typing delay is
         applied before the message is persisted and broadcast.
         """
+        if not self.running or self._safety_intervention_triggered:
+            return
         async with self._turn_lock:
             try:
+                if not self.running or self._safety_intervention_triggered:
+                    return
                 await self._publish_typing(started=True)
                 result = await self.agent_manager.orchestrator.execute_turn(
                     self.internal_validity_criteria,
@@ -1059,11 +1092,19 @@ class SimulationSession:
                 if result is None or result.action_type == "wait":
                     return
 
+                if not self.running or self._safety_intervention_triggered:
+                    return
+
                 # Apply realistic typing delay based on message length.
                 if result.message and result.message.content:
                     delay = len(result.message.content) / self.TYPING_CHARS_PER_SECOND
                     delay = max(self.TYPING_DELAY_MIN, min(delay, self.TYPING_DELAY_MAX))
                     await asyncio.sleep(delay)
+
+                # A safety classification can finish while the LLM or typing
+                # delay is in flight. Never persist or expose that late action.
+                if not self.running or self._safety_intervention_triggered:
+                    return
 
                 # Delegate persistence + broadcast to AgentManager.
                 if result.action_type == "like":
@@ -1092,6 +1133,8 @@ class SimulationSession:
         pipeline_id_var.set(pid)
         orchestrator = self._pipeline_orchestrators[pid - 1]
         try:
+            if not self.running or self._safety_intervention_triggered:
+                return
             participant_target, _ = orchestrator._pending_participant_target(
                 self.state.get_recent_messages(orchestrator.action_window_size),
                 set(self._agent_names),
@@ -1113,9 +1156,14 @@ class SimulationSession:
             if result is None or result.action_type == "wait":
                 return
 
+            if not self.running or self._safety_intervention_triggered:
+                return
+
             # ── Phase 2: Likes need no typing delay — persist immediately ─────
             if result.action_type == "like":
                 async with self._turn_lock:
+                    if not self.running or self._safety_intervention_triggered:
+                        return
                     await self.agent_manager._handle_like(result)
                 return
 
@@ -1127,6 +1175,8 @@ class SimulationSession:
 
             # ── Phase 4: Persist + broadcast (serialised for ordering) ────────
             async with self._turn_lock:
+                if not self.running or self._safety_intervention_triggered:
+                    return
                 await self.agent_manager._handle_message(result)
 
         except Exception as e:
@@ -1245,7 +1295,7 @@ class SimulationSession:
         mentions: Optional[list] = None,
     ) -> None:
         """Handle an incoming user message — persist to DB and broadcast."""
-        if not self.running:
+        if not self.running or self._safety_intervention_triggered:
             return  # session has ended; silently drop
         message = Message.create(
             sender=self.state.user_name,
@@ -1324,6 +1374,111 @@ class SimulationSession:
                 await self.websocket_send(message.to_dict())
             except Exception as send_exc:
                 self.logger.log_error("fallback_send_user_message", str(send_exc))
+
+        # Safety classification is deliberately fire-and-forget: the user
+        # message and the rest of the agent pipeline never wait for Claude.
+        # Snapshot the context now so rapid later messages cannot change what
+        # this particular decision was based on.
+        safety_task = asyncio.create_task(
+            self._run_participant_safety_check(
+                message,
+                list(self.state.messages[-4:]),
+            )
+        )
+        self._safety_tasks.add(safety_task)
+        safety_task.add_done_callback(self._safety_tasks.discard)
+
+    async def _run_participant_safety_check(
+        self,
+        message: Message,
+        recent_context: List[Message],
+    ) -> None:
+        """Classify one participant message without blocking chat delivery."""
+        prompt = build_participant_safety_prompt(
+            latest_message=message,
+            recent_context=recent_context,
+            participant_name=self.state.user_name,
+        )
+        raw = None
+        try:
+            raw = await self.classifier_llm.generate_response(
+                prompt,
+                max_retries=1,
+                system_prompt=PARTICIPANT_SAFETY_SYSTEM_PROMPT,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.logger.log_error("participant_safety_classifier_call", str(exc))
+
+        self.logger.log_llm_call(
+            agent_name="__participant_safety_classifier__",
+            prompt=(
+                f"[SYSTEM]\n{PARTICIPANT_SAFETY_SYSTEM_PROMPT}"
+                f"\n\n[USER]\n{prompt}"
+            ),
+            response=raw,
+            error=None if raw else "Safety classifier LLM returned no response",
+        )
+        if not raw or not self.running or self._safety_intervention_triggered:
+            return
+
+        try:
+            decision = parse_participant_safety_response(raw)
+        except ValueError as exc:
+            self.logger.log_error("participant_safety_classifier_parse", str(exc))
+            return
+
+        classification_data = {
+            "message_id": message.message_id,
+            "should_stop": decision["should_stop"],
+            "category": decision["category"],
+            "confidence": decision["confidence"],
+            "rationale": decision["rationale"],
+        }
+        self.logger.log_event(
+            "participant_safety_classification",
+            classification_data,
+        )
+        if decision["should_stop"]:
+            await self._trigger_safety_intervention(classification_data)
+
+    async def _trigger_safety_intervention(self, classification: Dict[str, object]) -> None:
+        """Atomically end the experiment after a positive safety decision."""
+        async with self._safety_stop_lock:
+            if self._safety_intervention_triggered or not self.running:
+                return
+            self._safety_intervention_triggered = True
+
+            # Abort both the sequential clock-owned turn and all parallel
+            # turns. The guards above also discard a result at the final
+            # persistence boundary if cancellation races with completion.
+            current_task = asyncio.current_task()
+            if self.clock_task and self.clock_task is not current_task:
+                self.clock_task.cancel()
+            for task in list(self._active_turn_tasks):
+                if task is not current_task:
+                    task.cancel()
+
+            # The trigger is primary safety/audit data, so persist it strictly.
+            # Publishing the terminal event first keeps the participant-facing
+            # warning responsive even if the database is temporarily slow.
+            await self._publish_session_end("participant_safety")
+            try:
+                await event_repo.insert_event_strict(
+                    db_conn.get_pool(),
+                    session_id=self.session_id,
+                    experiment_id=self.experiment_id,
+                    event_type="participant_safety_triggered",
+                    data=classification,
+                )
+            except Exception as exc:
+                self.logger.log_error("persist_participant_safety_trigger", str(exc))
+
+            # Give Redis/WebSocket delivery a short grace period before the
+            # subscriber is torn down, matching other terminal flows.
+            await asyncio.sleep(0.5)
+            await self.stop(reason="participant_safety")
 
     # ── WebSocket attachment / detachment ─────────────────────────────────────
 

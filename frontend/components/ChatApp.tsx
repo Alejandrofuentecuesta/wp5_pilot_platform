@@ -7,6 +7,7 @@ import LoginScreen, { type HandoffParams } from "./LoginScreen"
 import ChatRoom from "./ChatRoom"
 import IdleReminderBanner from "./IdleReminderBanner"
 import ThankYouScreen from "./ThankYouScreen"
+import SafetyInterventionScreen from "./SafetyInterventionScreen"
 import QueueScreen from "./QueueScreen"
 import AgentImpressionSurvey from "./AgentImpressionSurvey"
 import type { ParticipantStance } from "@/lib/types"
@@ -54,6 +55,10 @@ export default function ChatApp() {
         onSubmit={chat.submitAgentImpressions}
       />
     )
+  }
+
+  if (chat.safetyIntervention) {
+    return <SafetyInterventionScreen redirectUrl={chat.redirectUrl} />
   }
 
   if (chat.sessionEnded) {

@@ -223,12 +223,19 @@ are UTC ISO-8601 unless noted. Files:
 `event_type` values include server events (`session_start`, `session_end`,
 `message`, `message_like`, `message_report`, `user_block`,
 `emotions_checkup_trigger`, `emotions_checkup_response`, `exit_survey`,
+`participant_safety_classification`, `participant_safety_triggered`,
 `agent_impressions_open`, `agent_impressions`
 (open-ended reason the participant gave when leaving early; payload key
 `reason`; optional final agent ratings use `ratings`, each with
 `agent_name`, a 1–5 `rating`, and an optional `comment`),
 `websocket_attach`, `websocket_detach`, …) and **client
 behavioural telemetry** (prefixed `client_`):
+
+Safety events link the classifier decision to `message_id` and include
+`should_stop`, `category` (`self_harm`, `severe_distress`, or `none`),
+`confidence`, and a short `rationale`. A positive result additionally emits
+`participant_safety_triggered` and ends the session with reason
+`participant_safety`; this outcome is compensated as complete (`r=1`).
 
 | event_type | meaning | key payload fields |
 |---|---|---|

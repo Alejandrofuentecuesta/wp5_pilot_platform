@@ -515,6 +515,118 @@ class TestHandleUserMessage:
             # The wrapped websocket_send should have been called as fallback
 
 
+# ── Participant safety classifier ───────────────────────────────────────────
+
+class TestParticipantSafety:
+
+    @pytest.mark.asyncio
+    async def test_user_message_does_not_wait_for_safety_classifier(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            classifier_started = asyncio.Event()
+            release_classifier = asyncio.Event()
+
+            async def slow_classifier(*args, **kwargs):
+                classifier_started.set()
+                await release_classifier.wait()
+                return None
+
+            session.classifier_llm.generate_response = AsyncMock(side_effect=slow_classifier)
+
+            await asyncio.wait_for(session.handle_user_message("Mensaje normal"), timeout=0.1)
+            await asyncio.wait_for(classifier_started.wait(), timeout=0.1)
+            assert session._safety_tasks
+
+            release_classifier.set()
+            await asyncio.gather(*list(session._safety_tasks))
+
+    @pytest.mark.asyncio
+    async def test_positive_classifier_requests_safety_intervention(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            session.classifier_llm.generate_response = AsyncMock(return_value=json.dumps({
+                "should_stop": True,
+                "category": "self_harm",
+                "confidence": "high",
+                "rationale": "Explicit personal self-harm intent",
+            }))
+            session._trigger_safety_intervention = AsyncMock()
+            message = Message.create(sender=session.state.user_name, content="No puedo más")
+
+            await session._run_participant_safety_check(message, [message])
+
+            session._trigger_safety_intervention.assert_awaited_once()
+            classification = session._trigger_safety_intervention.await_args.args[0]
+            assert classification["message_id"] == message.message_id
+            assert classification["category"] == "self_harm"
+
+    @pytest.mark.asyncio
+    async def test_invalid_classifier_output_fails_open(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            session.classifier_llm.generate_response = AsyncMock(return_value="invalid")
+            session._trigger_safety_intervention = AsyncMock()
+            message = Message.create(sender=session.state.user_name, content="Mensaje normal")
+
+            await session._run_participant_safety_check(message, [message])
+
+            session._trigger_safety_intervention.assert_not_awaited()
+            assert session.running is True
+
+    @pytest.mark.asyncio
+    async def test_trigger_publishes_persists_and_stops(self):
+        with _patch_externals(), \
+             patch("platforms.chatroom.event_repo") as mock_event_repo, \
+             patch("platforms.chatroom.asyncio.sleep", new=AsyncMock()):
+            mock_event_repo.insert_event_strict = AsyncMock()
+            session, _ = _create_session()
+            session.running = True
+            session._publish_session_end = AsyncMock()
+            session.stop = AsyncMock()
+            classification = {
+                "message_id": "m1",
+                "should_stop": True,
+                "category": "severe_distress",
+                "confidence": "high",
+                "rationale": "Explicit intense distress",
+            }
+
+            await session._trigger_safety_intervention(classification)
+
+            assert session._safety_intervention_triggered is True
+            session._publish_session_end.assert_awaited_once_with("participant_safety")
+            mock_event_repo.insert_event_strict.assert_awaited_once()
+            assert (
+                mock_event_repo.insert_event_strict.await_args.kwargs["event_type"]
+                == "participant_safety_triggered"
+            )
+            session.stop.assert_awaited_once_with(reason="participant_safety")
+
+    @pytest.mark.asyncio
+    async def test_completed_agent_result_is_discarded_after_safety_trigger(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+
+            async def finish_after_safety(*args, **kwargs):
+                session._safety_intervention_triggered = True
+                result = MagicMock()
+                result.action_type = "message"
+                result.message = Message.create(sender="Alice", content="Late response")
+                return result
+
+            orchestrator = session.agent_manager.orchestrator
+            orchestrator.execute_turn = AsyncMock(side_effect=finish_after_safety)
+            session.agent_manager._handle_message = AsyncMock()
+
+            await session._guarded_turn()
+
+            session.agent_manager._handle_message.assert_not_awaited()
+
+
 # ── Blocked agent filtering ─────────────────────────────────────────────────
 
 class TestBlockedAgentFiltering:

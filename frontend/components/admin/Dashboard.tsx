@@ -687,6 +687,8 @@ function SessionsTab({
 const EVENT_COLORS: Record<string, { light: string; dark: string }> = {
   session_start: { light: "text-green-700 bg-green-50", dark: "text-emerald-300 bg-emerald-900/30" },
   session_end: { light: "text-amber-700 bg-amber-50", dark: "text-amber-300 bg-amber-900/30" },
+  participant_safety_classification: { light: "text-violet-700 bg-violet-50", dark: "text-violet-300 bg-violet-900/30" },
+  participant_safety_triggered: { light: "text-red-700 bg-red-50", dark: "text-red-300 bg-red-900/30" },
   message: { light: "text-blue-700 bg-blue-50", dark: "text-blue-300 bg-blue-900/30" },
   llm_call: { light: "text-purple-700 bg-purple-50", dark: "text-purple-300 bg-purple-900/30" },
   error: { light: "text-red-700 bg-red-50", dark: "text-red-300 bg-red-900/30" },
@@ -704,6 +706,10 @@ function summarizeEvent(evt: AdminEvent): string {
       return `Session started (group: ${d.treatment_group || "?"})`
     case "session_end":
       return `Session ended: ${d.reason || "unknown"}`
+    case "participant_safety_classification":
+      return `Safety check: ${d.category || "none"} (${d.confidence || "unknown"})${d.should_stop ? " — stop" : " — continue"}`
+    case "participant_safety_triggered":
+      return `Safety intervention: ${d.category || "unknown"} (${d.confidence || "unknown"})`
     case "message":
       return `${d.sender || "?"}: ${String(d.content || "").slice(0, 80)}${String(d.content || "").length > 80 ? "..." : ""}`
     case "llm_call": {

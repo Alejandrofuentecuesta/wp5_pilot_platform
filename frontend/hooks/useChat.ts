@@ -57,6 +57,7 @@ export function useChat() {
 
   // Session end state
   const [sessionEnded, setSessionEnded] = useState(false)
+  const [safetyIntervention, setSafetyIntervention] = useState(false)
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null)
   const [sessionAgentNames, setSessionAgentNames] = useState<string[]>([])
   const [agentImpressionSurveyOpen, setAgentImpressionSurveyOpen] = useState(false)
@@ -174,6 +175,17 @@ export function useChat() {
           )
         : []
       const feedbackAlreadySubmitted = Boolean(obj.agent_feedback_submitted)
+      if (reason === "participant_safety") {
+        setTypingCount(0)
+        setRedirectUrl(url || null)
+        setSafetyIntervention(true)
+        setSessionEnded(false)
+        setAgentImpressionSurveyOpen(false)
+        // This is a terminal screen. Clear stored identity/session data while
+        // retaining the in-memory return URL for its explicit exit button.
+        concludeSession()
+        return
+      }
       setSessionEnded(true)
       setRedirectUrl(url || null)
       if (
@@ -360,6 +372,7 @@ export function useChat() {
       setParticipantStance(stance)
       setQueueToken(null)
       setSessionEnded(false)
+      setSafetyIntervention(false)
       setRedirectUrl(null)
       setAgentImpressionSurveyOpen(false)
       setSessionAgentNames([])
@@ -753,6 +766,7 @@ export function useChat() {
     resumeFromIdle,
     // Session end
     sessionEnded,
+    safetyIntervention,
     redirectUrl,
     sessionAgentNames,
     agentImpressionSurveyOpen,

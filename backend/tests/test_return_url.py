@@ -17,6 +17,7 @@ TOKEN = "tok-123"
 
 @pytest.mark.parametrize("reason,expected_r", [
     ("duration_expired", "1"),
+    ("participant_safety", "1"),
     ("user_exit", "3"),
     ("abandoned", "2"),
     ("no_first_message", "2"),

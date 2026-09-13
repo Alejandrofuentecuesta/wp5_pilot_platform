@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import type { ExperimentalConfig, TreatmentGroup, SeedArticle, FeatureMeta, PoolAgent, HumanizeRules, AgentAlignmentCell, NarrativePoolCell, AgentIdeology } from "../../../lib/admin-types"
+import type { ExperimentalConfig, TreatmentGroup, SeedArticle, FeatureMeta, PoolAgent, HumanizeRules, AgentAlignmentCell, NarrativePoolCell, AgentIdeology, SafetyConfig } from "../../../lib/admin-types"
 import { createExperimental3x3Preset } from "../../../lib/treatment-presets"
 import { createSeedFromTemplate, getNewsTemplateById, NEWS_TEMPLATE_OPTIONS, type NewsTemplateId } from "../../../lib/news-story-options"
 import { DEFAULT_AGENT_POOL, autoSelectAgents, getAgentPoolPreset, parseTargetsFromCriteria } from "../../../lib/agent-pool-presets"
@@ -768,6 +768,95 @@ function NarrativePoolEditor({
   )
 }
 
+/* ── Safety screening ─────────────────────────────────────────────────── */
+
+function SafetyScreeningSection({
+  safety,
+  onChange,
+}: {
+  safety: SafetyConfig
+  onChange: (s: SafetyConfig) => void
+}) {
+  const set = (patch: Partial<SafetyConfig>) => onChange({ ...safety, ...patch })
+  return (
+    <div className="rounded-xl border border-admin-border bg-admin-surface p-5 space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h3 className="text-sm font-semibold text-admin-text">Safety screening</h3>
+          <p className="text-xs text-admin-faint mt-1">
+            Every agent message is classified by Llama Guard before it reaches the participant, and every
+            participant message after it is posted. Flags go to the Safety tab for human review; if the
+            classifier gives no verdict the agent turn is withheld.
+          </p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-admin-text shrink-0">
+          <input
+            type="checkbox"
+            checked={safety.enabled}
+            onChange={(e) => set({ enabled: e.target.checked })}
+          />
+          Enabled
+        </label>
+      </div>
+      {!safety.enabled && (
+        <p className="text-xs text-admin-danger-text">
+          Screening is off: nothing is checked before it reaches the participant. Only for demos and tests.
+        </p>
+      )}
+      {safety.enabled && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div>
+            <label className="block text-xs font-medium text-admin-text mb-1">Transport</label>
+            <select
+              value={safety.transport ?? ""}
+              onChange={(e) => set({ transport: (e.target.value || undefined) as SafetyConfig["transport"] })}
+              className={inputClass}
+            >
+              <option value="">(from SAFETY_TRANSPORT env)</option>
+              <option value="openai_completions">openai_completions (vLLM / Konstanz)</option>
+              <option value="ollama_raw">ollama_raw (Ollama root URL, e.g. http://host:11434 or https://webui/ollama)</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-admin-text mb-1">Model</label>
+            <input
+              value={safety.model ?? ""}
+              onChange={(e) => set({ model: e.target.value || undefined })}
+              placeholder="(from SAFETY_MODEL env) e.g. meta-llama/Llama-Guard-3-8B"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-admin-text mb-1">Base URL</label>
+            <input
+              value={safety.base_url ?? ""}
+              onChange={(e) => set({ base_url: e.target.value || undefined })}
+              placeholder="(from SAFETY_BASE_URL env)"
+              className={inputClass}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-admin-text mb-1">Timeout (seconds)</label>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={safety.timeout_s ?? 8}
+              onChange={(e) => set({ timeout_s: Number(e.target.value) || 8 })}
+              className={inputClass}
+            />
+          </div>
+          <p className="md:col-span-2 text-xs text-admin-faint">
+            The API key is never stored in config; the backend reads SAFETY_API_KEY. Categories use the
+            model&rsquo;s default fourteen; custom definitions can be set through the config API.
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+
 export default function StepTreatments({ config, onChange, availableFeatures, agentMode, humanizeEnabled, humanizePerAgent, onHumanizePerAgentChange }: StepTreatmentsProps) {
   const [showBuilder, setShowBuilder] = useState(false)
   const [dimA, setDimA] = useState({ name: "", levels: ["", ""] })
@@ -1068,6 +1157,11 @@ export default function StepTreatments({ config, onChange, availableFeatures, ag
           <p className="text-xs text-admin-faint mt-1">What &ldquo;realistic&rdquo; means for this chatroom. The Director uses this to maintain natural conversational flow. Shared across all treatment groups.</p>
         </div>
       </div>
+
+      <SafetyScreeningSection
+        safety={config.safety ?? { enabled: false }}
+        onChange={(safety) => onChange({ ...config, safety })}
+      />
 
       {agentMode === "pool" && (
         <AgentPoolEditor

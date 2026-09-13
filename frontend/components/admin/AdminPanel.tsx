@@ -81,6 +81,9 @@ const DEFAULT_TOKENS: TokenConfig = { groups: {} }
 function getDefaultExperimentalConfig(): ExperimentalConfig {
   return {
     ...DEFAULT_EXPERIMENTAL,
+    // New experiments screen by default; the endpoint comes from the
+    // backend's SAFETY_* environment unless set here.
+    safety: { enabled: true, timeout_s: 8 },
     agent_pool: DEFAULT_EXPERIMENTAL.agent_pool
       ? DEFAULT_EXPERIMENTAL.agent_pool.map((agent) => ({ ...agent }))
       : undefined,

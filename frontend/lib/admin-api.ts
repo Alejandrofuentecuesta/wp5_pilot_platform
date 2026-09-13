@@ -1,7 +1,7 @@
 /* Admin API client — all requests include X-Admin-Key header. */
 
 import { API_BASE } from "./constants"
-import type { AdminMeta, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats, ProviderKeyStatus, ExperimentToken } from "./admin-types"
+import type { AdminMeta, SafetyFlag, SafetySummary, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats, ProviderKeyStatus, ExperimentToken } from "./admin-types"
 
 async function adminFetch(
   path: string,
@@ -523,5 +523,60 @@ export async function getComplianceStats(
 ): Promise<ComplianceStats> {
   const res = await adminFetch(`/admin/experiment/${encodeURIComponent(experimentId)}/compliance`, key)
   if (!res.ok) throw new Error("Failed to load compliance stats")
+  return res.json()
+}
+
+/* ── Safety tab ─────────────────────────────────────────────────────────── */
+
+export async function getSafetySummary(key: string): Promise<SafetySummary> {
+  const res = await adminFetch("/admin/safety/summary", key)
+  if (!res.ok) throw new Error("Failed to load safety summary")
+  return res.json()
+}
+
+export async function listSafetyFlags(
+  key: string,
+  params: { status?: "open" | "reviewed" | "all"; session_id?: string; limit?: number } = {},
+): Promise<{ flags: SafetyFlag[]; server_time: string }> {
+  const q = new URLSearchParams()
+  if (params.status) q.set("status", params.status)
+  if (params.session_id) q.set("session_id", params.session_id)
+  if (params.limit) q.set("limit", String(params.limit))
+  const res = await adminFetch(`/admin/safety/flags?${q.toString()}`, key)
+  if (!res.ok) throw new Error("Failed to load safety flags")
+  return res.json()
+}
+
+export async function reviewSafetyFlag(
+  key: string,
+  flagId: string,
+  verdict: "no_concern" | "concern",
+  reviewer: string,
+  note?: string,
+): Promise<void> {
+  const res = await adminFetch(`/admin/safety/flags/${flagId}/review`, key, {
+    method: "POST",
+    body: JSON.stringify({ verdict, reviewer, note: note || null }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Review failed" }))
+    throw new Error(err.detail || "Review failed")
+  }
+}
+
+export async function safetySessionAction(
+  key: string,
+  sessionId: string,
+  action: "pause" | "resume" | "end",
+  reviewer: string,
+): Promise<{ status: string }> {
+  const res = await adminFetch(`/admin/safety/sessions/${sessionId}/${action}`, key, {
+    method: "POST",
+    body: JSON.stringify({ reviewer }),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: `${action} failed` }))
+    throw new Error(err.detail || `${action} failed`)
+  }
   return res.json()
 }

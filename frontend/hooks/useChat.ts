@@ -93,6 +93,9 @@ export function useChat() {
   const [reporting, setReporting] = useState(false)
   const [newsArticleModalOpen, setNewsArticleModalOpen] = useState(false)
   const [emotionsCheckupOpen, setEmotionsCheckupOpen] = useState(false)
+  // Researcher hold (Safety tab): the room is frozen and the participant is
+  // shown a neutral notice; only a server resume event clears it.
+  const [safetyHoldNotice, setSafetyHoldNotice] = useState<string | null>(null)
   const [exitModalOpen, setExitModalOpen] = useState(false)
   const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
   const [initialMessageDone, setInitialMessageDone] = useState(false)
@@ -207,7 +210,18 @@ export function useChat() {
       }
     } else if (obj && obj.event_type === "emotions_checkup_trigger") {
       setEmotionsCheckupOpen(true)
+    } else if (obj && obj.event_type === "session_paused") {
+      if (obj.trigger === "hold") {
+        setSafetyHoldNotice(typeof obj.notice === "string" && obj.notice ? obj.notice : "La sala está en pausa por un momento técnico. Volverá en breve.")
+      }
+    } else if (obj && obj.event_type === "session_resumed") {
+      if (obj.trigger === "hold") setSafetyHoldNotice(null)
     } else if (obj && obj.event_type === "session_config") {
+      if (obj.held) {
+        setSafetyHoldNotice(typeof obj.hold_notice === "string" && obj.hold_notice ? obj.hold_notice : "La sala está en pausa por un momento técnico. Volverá en breve.")
+      } else {
+        setSafetyHoldNotice(null)
+      }
       setBehaviorConfig({
         behaviorTrackingEnabled: Boolean(obj.behavior_tracking_enabled),
         idlePromptEnabled: Boolean(obj.idle_prompt_enabled),
@@ -763,6 +777,7 @@ export function useChat() {
     typingCount,
     // Idle "please write in the chat" reminder
     idlePromptVisible,
+    safetyHoldNotice,
     resumeFromIdle,
     // Session end
     sessionEnded,

@@ -21,12 +21,14 @@ import {
   getComplianceStats,
   getProviderKeys,
   setProviderKey,
+  getSafetySummary,
 } from "../../lib/admin-api"
 import type { SessionSummary, TokenGroupStats, SimulationConfig, ExperimentalConfig, ComplianceGroupStats, ProviderKeyStatus, ExperimentToken } from "../../lib/admin-types"
 import type { ExperimentSummary, AdminEvent } from "../../lib/admin-api"
 import { API_BASE } from "../../lib/constants"
 import type { AdminTheme } from "./AdminPanel"
 import EvaluateTab from "./EvaluateTab"
+import SafetyTab from "./SafetyTab"
 
 interface DashboardProps {
   adminKey: string
@@ -39,7 +41,7 @@ interface DashboardProps {
   onToggleTheme: () => void
 }
 
-type Tab = "overview" | "sessions" | "evaluate" | "compliance" | "logs" | "settings"
+type Tab = "overview" | "sessions" | "safety" | "evaluate" | "compliance" | "logs" | "settings"
 
 /* ── Theme toggle button ─────────────────────────────────────────────────── */
 
@@ -172,6 +174,7 @@ function StatusDot({ label, online }: { label: string; online: boolean | null })
 const TAB_LABELS: { key: Tab; label: string; icon: string }[] = [
   { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
   { key: "sessions", label: "Sessions", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
+  { key: "safety", label: "Safety", icon: "M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z M12 8v4m0 3h.01" },
   { key: "evaluate", label: "Evaluate", icon: "M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" },
   { key: "compliance", label: "Compliance", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
   { key: "logs", label: "Event Log", icon: "M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" },
@@ -183,11 +186,13 @@ function TabBar({
   onTabChange,
   sessionCount,
   errorCount,
+  openFlags,
 }: {
   activeTab: Tab
   onTabChange: (tab: Tab) => void
   sessionCount: number
   errorCount: number
+  openFlags: number
 }) {
   return (
     <div className="bg-admin-surface border-b border-admin-border">
@@ -200,7 +205,9 @@ function TabBar({
                 ? sessionCount
                 : key === "logs" && errorCount > 0
                   ? errorCount
-                  : null
+                  : key === "safety" && openFlags > 0
+                    ? openFlags
+                    : null
             return (
               <button
                 key={key}
@@ -218,7 +225,7 @@ function TabBar({
                 {badge !== null && (
                   <span
                     className={`ml-1 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-bold ${
-                      key === "logs"
+                      key === "logs" || key === "safety"
                         ? "bg-admin-danger-soft text-admin-danger-text"
                         : "bg-admin-accent-soft text-admin-accent"
                     }`}
@@ -1766,6 +1773,7 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
   const [loading, setLoading] = useState(true)
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>("overview")
+  const [openFlags, setOpenFlags] = useState(0)
   const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null)
   const [switching, setSwitching] = useState(false)
   const [switchError, setSwitchError] = useState<string | null>(null)
@@ -1829,6 +1837,29 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
     const interval = setInterval(refreshSessionData, 10000)
     return () => clearInterval(interval)
   }, [refreshSessionData])
+
+  // Open safety flags drive the tab badge and the window title so a reviewer
+  // notices new flags from any tab or another browser tab.
+  useEffect(() => {
+    let cancelled = false
+    const poll = async () => {
+      try {
+        const s = await getSafetySummary(adminKey)
+        if (!cancelled) setOpenFlags(s.open_flags)
+      } catch {
+        /* backend offline: badge keeps its last value */
+      }
+    }
+    poll()
+    const interval = setInterval(poll, 5000)
+    return () => { cancelled = true; clearInterval(interval) }
+  }, [adminKey])
+
+  useEffect(() => {
+    const base = "WP5 Admin"
+    document.title = openFlags > 0 ? `(${openFlags}) Safety — ${base}` : base
+    return () => { document.title = base }
+  }, [openFlags])
 
   // Selecting an experiment makes it the live one, which pauses the current
   // one. The selection therefore only moves once the switch has succeeded.
@@ -1914,11 +1945,14 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
             onTabChange={setActiveTab}
             sessionCount={activeSessionCount}
             errorCount={0}
+            openFlags={openFlags}
           />
 
           {/* Tab content */}
           <div className="max-w-6xl mx-auto px-6 py-6">
-            {!selectedExperimentId ? (
+            {activeTab === "safety" ? (
+              <SafetyTab adminKey={adminKey} />
+            ) : !selectedExperimentId ? (
               <div className="text-center py-12">
                 <p className="text-sm text-admin-faint">Select an experiment to view its data.</p>
               </div>

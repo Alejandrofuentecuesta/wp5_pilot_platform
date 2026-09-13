@@ -137,6 +137,21 @@ export interface NarrativePoolCell {
   narratives: string
 }
 
+export interface SafetyCategory {
+  code: string
+  title: string
+  definition?: string
+}
+
+export interface SafetyConfig {
+  enabled: boolean
+  transport?: "openai_completions" | "ollama_raw"
+  base_url?: string
+  model?: string
+  timeout_s?: number
+  categories?: SafetyCategory[]
+}
+
 export interface ExperimentalConfig {
   chatroom_context: string
   incivility_framework: string
@@ -145,6 +160,7 @@ export interface ExperimentalConfig {
   groups: Record<string, TreatmentGroup>
   agent_pool?: PoolAgent[]
   narrative_pool?: NarrativePoolCell[]
+  safety?: SafetyConfig
 }
 
 export interface TokenConfig {
@@ -222,4 +238,53 @@ export interface ComplianceGroupStats {
 export interface ComplianceStats {
   experiment_id: string
   groups: ComplianceGroupStats[]
+}
+
+/* ── Safety tab ─────────────────────────────────────────────────────────── */
+
+export type SafetyFlag = {
+  flag_id: string
+  session_id: string
+  experiment_id: string
+  message_id: string | null
+  seq: number | null
+  sender_type: "agent" | "participant"
+  sender: string
+  content: string
+  context_user_turn: string
+  verdict: "unsafe" | "unavailable"
+  categories: string[]
+  category_names: string[]
+  raw_output: string | null
+  model: string | null
+  prompt_hash: string
+  unsafe_prob: number | null
+  latency_ms: number | null
+  error: string | null
+  displayed_at: string | null
+  created_at: string
+  reviewed_at: string | null
+  reviewed_by: string | null
+  review_verdict: "no_concern" | "concern" | null
+  review_note: string | null
+  // joined from sessions
+  user_name: string
+  treatment_group: string
+  session_status: string
+  safety_paused_at: string | null
+  started_at: string | null
+  ended_at: string | null
+  end_reason: string | null
+  live: boolean
+}
+
+export type SafetySummary = {
+  open_flags: number
+  unavailable_last_10m: number
+  last_flag_at: string | null
+  last_verdict_at: string | null
+  live_sessions: number
+  paused_sessions: number
+  experiments: { experiment_id: string; screening_enabled: boolean; live: number }[]
+  category_names: Record<string, string>
 }

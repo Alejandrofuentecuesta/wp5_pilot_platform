@@ -1,0 +1,185 @@
+"""SafetyScreen policy: publish/withhold decisions and the flags they open.
+
+safe        → publish, verdict on message, no flag
+unsafe      → publish, verdict on message, flag with displayed_at
+unavailable → agent turn withheld and flagged (no message_id); participant
+              message flagged only
+disabled    → nothing screened, nothing written
+"""
+from __future__ import annotations
+
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+from models.message import Message
+from platforms.safety_screen import SafetyScreen
+from utils.safety import DEFAULT_CATEGORIES, SafetyVerdict
+
+
+class FakeClient:
+    def __init__(self, verdict: SafetyVerdict, raise_exc: bool = False):
+        self.verdict = verdict
+        self.raise_exc = raise_exc
+        self.prompts = []
+
+    async def classify(self, prompt):
+        self.prompts.append(prompt)
+        if self.raise_exc:
+            raise RuntimeError("boom")
+        return self.verdict
+
+
+def _state(*messages):
+    return SimpleNamespace(messages=list(messages), user_name="Paula")
+
+
+def _screen(client, enabled=True, seed="Artículo de prueba"):
+    logger = MagicMock()
+    return SafetyScreen(
+        session_id="sess",
+        experiment_id="exp",
+        logger=logger,
+        client=client,
+        categories=list(DEFAULT_CATEGORIES),
+        enabled=enabled,
+        user_name="Paula",
+        seed_text=seed,
+    ), logger
+
+
+@pytest.fixture
+def repo():
+    with patch("platforms.safety_screen.db_conn") as db, patch("platforms.safety_screen.safety_repo") as sr:
+        db.get_pool.return_value = MagicMock()
+        sr.insert_flag = AsyncMock()
+        sr.set_message_safety_verdict = AsyncMock()
+        sr.set_flag_seq = AsyncMock()
+        yield sr
+
+
+class TestAgentPath:
+    async def test_safe_publishes_without_flag(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        msg = Message.create(sender="Carlos", content="Hola")
+        out = await screen.screen_agent(msg, _state())
+        assert out.publish is True
+        await screen.after_publish(msg, out)
+        repo.set_message_safety_verdict.assert_awaited_once_with(repo.set_message_safety_verdict.call_args[0][0], msg.message_id, "safe")
+        repo.insert_flag.assert_not_awaited()
+
+    async def test_unsafe_publishes_and_flags(self, repo):
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10", model="g", prompt_hash="h")
+        screen, logger = _screen(FakeClient(v))
+        user = Message.create(sender="Paula", content="Los moros fuera")
+        msg = Message.create(sender="Carlos", content="Eso, fuera todos")
+        out = await screen.screen_agent(msg, _state(user))
+        assert out.publish is True
+        await screen.after_publish(msg, out)
+        kw = repo.insert_flag.call_args.kwargs
+        assert kw["sender_type"] == "agent"
+        assert kw["message_id"] == msg.message_id
+        assert kw["verdict"] == "unsafe"
+        assert kw["categories"] == ["S10"]
+        assert kw["context_user_turn"] == "Los moros fuera"
+        assert kw["displayed_at"] is not None
+        assert kw["prompt_hash"] == "h"
+        assert logger.log_event.call_args[0][0] == "safety_flag_opened"
+
+    async def test_unavailable_withholds_and_flags(self, repo):
+        v = SafetyVerdict(status="unavailable", error="ConnectError: refused")
+        screen, logger = _screen(FakeClient(v))
+        msg = Message.create(sender="Carlos", content="texto retenido")
+        out = await screen.screen_agent(msg, _state())
+        assert out.publish is False
+        kw = repo.insert_flag.call_args.kwargs
+        assert kw["verdict"] == "unavailable"
+        assert kw["message_id"] is None
+        assert kw["displayed_at"] is None
+        assert kw["content"] == "texto retenido"
+        assert kw["error"] == "ConnectError: refused"
+        assert logger.log_event.call_args[0][0] == "safety_turn_withheld"
+        repo.set_message_safety_verdict.assert_not_awaited()
+
+    async def test_client_exception_withholds(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe"), raise_exc=True))
+        msg = Message.create(sender="Carlos", content="x")
+        out = await screen.screen_agent(msg, _state())
+        assert out.publish is False
+        assert repo.insert_flag.call_args.kwargs["verdict"] == "unavailable"
+
+    async def test_flag_persist_failure_still_withholds(self, repo):
+        repo.insert_flag = AsyncMock(side_effect=RuntimeError("db down"))
+        screen, logger = _screen(FakeClient(SafetyVerdict(status="unavailable", error="timeout")))
+        out = await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
+        assert out.publish is False
+        assert out.flag_id is None
+        assert logger.log_error.called
+
+    async def test_user_turn_is_latest_participant_message(self, repo):
+        client = FakeClient(SafetyVerdict(status="safe"))
+        screen, _ = _screen(client)
+        state = _state(
+            Message.create(sender="Paula", content="primero"),
+            Message.create(sender="Carlos", content="agente"),
+            Message.create(sender="Paula", content="segundo"),
+        )
+        await screen.screen_agent(Message.create(sender="Carlos", content="resp"), state)
+        assert "User: segundo\n\nAgent: resp\n\n" in client.prompts[0]
+        assert "agente" not in client.prompts[0]
+
+    async def test_seed_used_before_first_participant_message(self, repo):
+        client = FakeClient(SafetyVerdict(status="safe"))
+        screen, _ = _screen(client, seed="Cuerpo del artículo")
+        await screen.screen_agent(Message.create(sender="Carlos", content="resp"), _state())
+        assert "User: Cuerpo del artículo\n\n" in client.prompts[0]
+
+    async def test_disabled_screen_publishes_and_writes_nothing(self, repo):
+        screen, _ = _screen(None, enabled=False)
+        msg = Message.create(sender="Carlos", content="x")
+        out = await screen.screen_agent(msg, _state())
+        assert out.publish is True
+        await screen.after_publish(msg, out)
+        repo.set_message_safety_verdict.assert_not_awaited()
+        repo.insert_flag.assert_not_awaited()
+
+    async def test_enabled_without_client_is_disabled(self, repo):
+        screen, _ = _screen(None, enabled=True)
+        assert screen.enabled is False
+
+
+class TestParticipantPath:
+    async def test_safe_records_verdict_only(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe")))
+        msg = Message.create(sender="Paula", content="hola")
+        await screen.screen_participant(msg)
+        repo.set_message_safety_verdict.assert_awaited_once()
+        repo.insert_flag.assert_not_awaited()
+
+    async def test_unsafe_flags_as_participant(self, repo):
+        v = SafetyVerdict(status="unsafe", categories=["S11"], raw="unsafe\nS11")
+        client = FakeClient(v)
+        screen, _ = _screen(client)
+        msg = Message.create(sender="Paula", content="me quiero morir")
+        await screen.screen_participant(msg)
+        kw = repo.insert_flag.call_args.kwargs
+        assert kw["sender_type"] == "participant"
+        assert kw["categories"] == ["S11"]
+        assert kw["message_id"] == msg.message_id
+        assert kw["displayed_at"] == msg.timestamp
+        assert "ONLY THE LAST User message" in client.prompts[0]
+
+    async def test_unavailable_flags_but_message_stays(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="unavailable", error="timeout")))
+        msg = Message.create(sender="Paula", content="x")
+        v = await screen.screen_participant(msg)
+        assert v.status == "unavailable"
+        assert repo.insert_flag.call_args.kwargs["verdict"] == "unavailable"
+        # Verdict column stays NULL: no verdict was obtained.
+        assert repo.set_message_safety_verdict.call_args[0][2] is None
+
+    async def test_disabled_does_nothing(self, repo):
+        screen, _ = _screen(None, enabled=False)
+        assert await screen.screen_participant(Message.create(sender="Paula", content="x")) is None
+        repo.insert_flag.assert_not_awaited()

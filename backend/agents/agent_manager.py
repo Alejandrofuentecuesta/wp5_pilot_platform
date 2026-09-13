@@ -22,18 +22,37 @@ class AgentManager:
         logger,
         session_id: str,
         experiment_id: str = "default",
+        safety_screen=None,
+        hold_active=None,
     ) -> None:
         self.state = state
         self.orchestrator = orchestrator
         self.logger = logger
         self.session_id = session_id
         self.experiment_id = experiment_id
+        # The safety gate. Every agent message is screened here before it is
+        # added to state, persisted or broadcast; this is the only route by
+        # which agent text reaches the participant.
+        self.safety_screen = safety_screen
+        # Callable returning True while a researcher hold is in force. A turn
+        # that was already in flight when the hold began must not publish.
+        self.hold_active = hold_active
 
     async def _handle_message(self, result: TurnResult) -> None:
-        """Persist and broadcast a generated agent message."""
+        """Screen, persist and broadcast a generated agent message."""
         message = result.message
         if not message:
             return
+
+        if self.hold_active is not None and self.hold_active():
+            self.logger.log_event("turn_dropped_during_hold", {"sender": message.sender})
+            return
+
+        outcome = None
+        if self.safety_screen is not None:
+            outcome = await self.safety_screen.screen_agent(message, self.state)
+            if not outcome.publish:
+                return
 
         # Add to in-memory state (for context window and message lookup).
         self.state.add_message(message)
@@ -69,6 +88,9 @@ class AgentManager:
             )
         except Exception as exc:
             self.logger.log_error("persist_agent_message", str(exc))
+
+        if outcome is not None:
+            await self.safety_screen.after_publish(message, outcome)
 
         # Push to Redis context window.
         try:

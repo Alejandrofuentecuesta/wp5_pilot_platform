@@ -22,7 +22,9 @@ from agents.STAGE.safety_classifier import (
 from agents.STAGE.orchestrator import Orchestrator
 from features import load_features
 from db import connection as db_conn
-from db.repositories import session_repo, message_repo, config_repo, event_repo
+from db.repositories import session_repo, message_repo, config_repo, event_repo, safety_repo
+from platforms.safety_screen import SafetyScreen
+from utils.safety import SafetyClient, categories_from_config
 from cache import redis_client
 
 # How long a disconnected participant has to rejoin before their session is
@@ -296,6 +298,7 @@ class SimulationSession:
         _config: Optional[Dict] = None,
         _started_at: Optional[datetime] = None,
         _paused_seconds: float = 0.0,
+        _safety_paused_at: Optional[datetime] = None,
     ):
         self.session_id = session_id
         self.experiment_id = experiment_id
@@ -519,13 +522,26 @@ class SimulationSession:
         # AgentManager uses publish_event (Redis) for delivery, not direct websocket.
         # It holds a reference to the first orchestrator for sequential-mode use
         # and for operations that apply to the whole session (e.g. rebuild_roster).
+        # The safety gate sits between the orchestrators and publication.
+        self.safety_screen = self._build_safety_screen(experimental_full)
+
         self.agent_manager = AgentManager(
             state=self.state,
             orchestrator=self._pipeline_orchestrators[0],
             logger=self.logger,
             session_id=session_id,
             experiment_id=experiment_id,
+            safety_screen=self.safety_screen,
+            hold_active=lambda: self.safety_held,
         )
+
+        # Researcher-initiated hold (Safety tab). Independent of the
+        # disconnect/idle pause so a rejoin cannot lift it; only an explicit
+        # resume from the dashboard does. Restored from the DB on recovery.
+        self._safety_hold_started_monotonic: Optional[float] = None
+        self._safety_hold_notified = False
+        if _safety_paused_at is not None:
+            self._safety_hold_started_monotonic = time.monotonic()
         self.emotions_checkup_enabled = bool(self.simulation_config.get("emotions_checkup_enabled", False))
         self.emotions_checkup_time_minutes = float(self.simulation_config.get("emotions_checkup_time_minutes", 1))
         self._emotions_checkup_triggered = False
@@ -596,6 +612,29 @@ class SimulationSession:
         )
         orc.set_participant_stance_hint(self.participant_stance_hint)
         return orc
+
+    def _build_safety_screen(self, experimental_full: Dict) -> SafetyScreen:
+        """Construct the safety gate from ``experimental.safety``.
+
+        A misconfigured but enabled screen is a hard error at session start:
+        silently running without screening is exactly what must not happen.
+        """
+        cfg = experimental_full.get("safety") or {}
+        enabled = bool(cfg.get("enabled", False))
+        client = None
+        if enabled:
+            client = SafetyClient.from_config(cfg)
+        seed = self.experimental_config.get("seed") or {}
+        return SafetyScreen(
+            session_id=self.session_id,
+            experiment_id=self.experiment_id,
+            logger=self.logger,
+            client=client,
+            categories=categories_from_config(cfg.get("categories")),
+            enabled=enabled,
+            user_name=self.state.user_name,
+            seed_text=seed.get("body") or seed.get("agent_summary") or "",
+        )
 
     def _build_pipeline_orchestrators(self) -> List[Orchestrator]:
         """Build one Orchestrator per pipeline slot.
@@ -928,7 +967,12 @@ class SimulationSession:
         # from silence. If the browser is still attached (an idle time-out
         # with the tab open) it also redirects; the panel treats the first
         # signal per token as authoritative, so the duplicate is harmless.
-        if reason in ("abandoned", "no_first_message", "idle_timeout", "participant_safety"):
+        # A reviewer-ended session may also have no browser attached (the
+        # participant left during the hold), so it gets the same treatment.
+        if reason in (
+            "abandoned", "no_first_message", "idle_timeout",
+            "participant_safety", "safety_stop",
+        ):
             await self._notify_panel_return(reason)
 
         print(f"Session {self.session_id} stopped: {reason}")
@@ -979,6 +1023,12 @@ class SimulationSession:
 
         while self.running:
             try:
+                # Researcher hold from the Safety tab: freeze everything, no
+                # timers run, and nothing but an explicit resume lifts it.
+                if self.safety_held:
+                    await asyncio.sleep(tick_interval)
+                    continue
+
                 # Participant disconnected: freeze everything and enforce the
                 # rejoin window. attach_websocket() clears the pause.
                 if self._pause_started_monotonic is not None:
@@ -1195,8 +1245,13 @@ class SimulationSession:
         except Exception as exc:
             self.logger.log_error("publish_typing", str(exc))
 
-    async def _publish_session_end(self, reason: str) -> None:
-        """Publish a session_end event via Redis pub/sub so the frontend can redirect."""
+    async def _publish_session_end(self, reason: str, client_reason: Optional[str] = None) -> None:
+        """Publish a session_end event via Redis pub/sub so the frontend can redirect.
+
+        ``client_reason`` replaces ``reason`` in the event sent to the browser
+        when the real reason must stay server-side; the return URL still
+        derives from ``reason``.
+        """
         appeared_agent_names = self._appeared_agent_names()
         if reason in {"duration_expired", "user_exit"}:
             try:
@@ -1211,7 +1266,7 @@ class SimulationSession:
                 self.logger.log_error("persist_agent_impressions_open", str(exc))
         event = {
             "event_type": "session_end",
-            "reason": reason,
+            "reason": client_reason or reason,
             "redirect_url": await self._build_return_url(reason),
             "agent_names": appeared_agent_names,
         }
@@ -1480,6 +1535,90 @@ class SimulationSession:
             await asyncio.sleep(0.5)
             await self.stop(reason="participant_safety")
 
+        # Screen the participant's own words after publication (flag only):
+        # a self-harm disclosure or a stated intent to harm someone must reach
+        # the reviewer even though the message itself is never withheld.
+        try:
+            await self.safety_screen.screen_participant(message)
+        except Exception as exc:
+            self.logger.log_error("screen_participant", str(exc))
+
+    # ── Safety hold (researcher-initiated, from the Safety tab) ──────────────
+
+    SAFETY_HOLD_NOTICE = "La sala está en pausa por un momento técnico. Volverá en breve."
+
+    @property
+    def safety_held(self) -> bool:
+        return self._safety_hold_started_monotonic is not None
+
+    async def pause_for_safety(self, by: str) -> bool:
+        """Freeze the session on a researcher's instruction.
+
+        Same freeze as the disconnect/idle pause (no turns, countdown stopped,
+        time credited back on resume) but held in its own state so that a
+        rejoin or participant activity cannot lift it. Persisted so a restart
+        recovers the session still held. Returns False if already held or not
+        running.
+        """
+        if self.safety_held or not self.running:
+            return False
+        self._safety_hold_started_monotonic = time.monotonic()
+        self._safety_hold_notified = False
+        try:
+            await safety_repo.set_safety_paused(
+                db_conn.get_pool(), self.session_id, datetime.now(timezone.utc)
+            )
+        except Exception as exc:
+            self.logger.log_error("persist_safety_pause", str(exc))
+        self.logger.log_event("session_paused", {"trigger": "safety", "by": by})
+        await self._notify_safety_hold(paused=True)
+        print(f"Session {self.session_id} paused by safety reviewer {by!r}")
+        return True
+
+    async def resume_from_safety(self, by: str) -> float:
+        """Lift the safety hold; the held time is credited back to the session."""
+        if not self.safety_held:
+            return 0.0
+        paused_for = time.monotonic() - self._safety_hold_started_monotonic
+        self._safety_hold_started_monotonic = None
+        self.state.paused_seconds += paused_for
+        try:
+            pool = db_conn.get_pool()
+            await session_repo.add_paused_seconds(pool, self.session_id, paused_for)
+            await safety_repo.set_safety_paused(pool, self.session_id, None)
+        except Exception as exc:
+            self.logger.log_error("persist_safety_resume", str(exc))
+        self.logger.log_event(
+            "session_resumed", {"trigger": "safety", "by": by, "paused_for_seconds": round(paused_for, 1)}
+        )
+        await self._notify_safety_hold(paused=False)
+        print(f"Session {self.session_id} resumed by safety reviewer {by!r} after {paused_for:.0f}s")
+        return paused_for
+
+    async def end_for_safety(self, by: str) -> None:
+        """End the session on a researcher's instruction (panel return r=2)."""
+        self.logger.log_event("session_ended_by_reviewer", {"reason": "safety_stop", "by": by})
+        await self._publish_session_end("safety_stop", client_reason="closed_by_researcher")
+        await asyncio.sleep(0.5)  # let pub/sub deliver before teardown
+        await self.stop(reason="safety_stop")
+
+    async def _notify_safety_hold(self, *, paused: bool) -> None:
+        """Tell the participant's client the room is frozen (no reason given)."""
+        # The participant learns only that the room is held, never why: the
+        # wire trigger is neutral and the reason stays server-side.
+        event = {
+            "event_type": "session_paused" if paused else "session_resumed",
+            "trigger": "hold",
+            "notice": self.SAFETY_HOLD_NOTICE if paused else None,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+        try:
+            r = redis_client.get_redis()
+            await redis_client.publish_event(r, self.session_id, event)
+            self._safety_hold_notified = paused
+        except Exception as exc:
+            self.logger.log_error("publish_safety_hold", str(exc))
+
     # ── WebSocket attachment / detachment ─────────────────────────────────────
 
     def pause_for_disconnect(self) -> None:
@@ -1623,6 +1762,10 @@ class SimulationSession:
                 # transcript use. A rejoining device needs it to anchor
                 # self-detection and the alias→name display mapping.
                 "user_name": self.state.user_name,
+                # A rejoin during a researcher hold must show the frozen
+                # notice again; the hold itself is not lifted by rejoining.
+                "held": self.safety_held,
+                "hold_notice": self.SAFETY_HOLD_NOTICE if self.safety_held else None,
             })
         except Exception as exc:
             self.logger.log_error("send_session_config", str(exc))

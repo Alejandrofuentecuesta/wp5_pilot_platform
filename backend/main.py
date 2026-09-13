@@ -34,7 +34,8 @@ from utils.log_viewer import generate_html_from_lines
 from utils.session_csv_exporter import render_session_messages_csv
 from db import connection as db_conn
 from cache import redis_client
-from db.repositories import message_repo, session_repo, event_repo, config_repo, token_repo
+from db.repositories import message_repo, session_repo, event_repo, config_repo, token_repo, safety_repo
+from utils.safety.prompt import CATEGORY_NAMES
 from features import AVAILABLE_FEATURES, FEATURES_META
 
 
@@ -2116,6 +2117,135 @@ async def admin_stop_session(session_id: str, x_admin_key: str = Header(None)):
     return {"status": "stopped", "session_id": session_id}
 
 
+# ── Safety tab ────────────────────────────────────────────────────────────────
+
+
+class SafetyReviewRequest(BaseModel):
+    verdict: Literal["no_concern", "concern"]
+    reviewer: str
+    note: Optional[str] = None
+
+
+class SafetyActionRequest(BaseModel):
+    reviewer: str
+
+
+def _reviewer_name(raw: str) -> str:
+    name = (raw or "").strip()
+    if not name or len(name) > 80:
+        raise HTTPException(status_code=422, detail="reviewer name required (max 80 chars)")
+    return name
+
+
+@app.get("/admin/safety/summary")
+async def admin_safety_summary(x_admin_key: str = Header(None)):
+    """Header counts for the Safety tab, plus which live experiments screen."""
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+    data = await safety_repo.summary(pool)
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT e.experiment_id,
+                   COALESCE((e.config->'experimental'->'safety'->>'enabled')::boolean, false) AS enabled,
+                   COUNT(s.session_id) FILTER (WHERE s.status = 'active') AS live
+            FROM experiments e
+            LEFT JOIN sessions s ON s.experiment_id = e.experiment_id
+            GROUP BY e.experiment_id, enabled
+            """
+        )
+    data["experiments"] = [
+        {"experiment_id": r["experiment_id"], "screening_enabled": bool(r["enabled"]), "live": int(r["live"])}
+        for r in rows
+    ]
+    data["category_names"] = CATEGORY_NAMES
+    return data
+
+
+@app.get("/admin/safety/flags")
+async def admin_safety_flags(
+    status: Literal["open", "reviewed", "all"] = "open",
+    session_id: Optional[str] = None,
+    experiment_id: Optional[str] = None,
+    limit: int = 200,
+    x_admin_key: str = Header(None),
+):
+    """Flags newest first, joined with session alias, cell and status."""
+    _require_admin(x_admin_key)
+    limit = max(1, min(int(limit), 1000))
+    pool = _get_pool()
+    flags = await safety_repo.list_flags(
+        pool, status=status, session_id=session_id, experiment_id=experiment_id, limit=limit
+    )
+    live_ids = set((await session_manager.list_sessions()).keys())
+    for f in flags:
+        f["live"] = f["session_id"] in live_ids and f.get("session_status") == "active"
+        f["category_names"] = [CATEGORY_NAMES.get(c, c) for c in f.get("categories", [])]
+    return {"flags": flags, "server_time": datetime.now(timezone.utc).isoformat()}
+
+
+@app.post("/admin/safety/flags/{flag_id}/review")
+async def admin_safety_review(
+    flag_id: str, body: SafetyReviewRequest, x_admin_key: str = Header(None)
+):
+    """Record the human review of one flag. Re-reviewing overwrites."""
+    _require_admin(x_admin_key)
+    reviewer = _reviewer_name(body.reviewer)
+    pool = _get_pool()
+    ok = await safety_repo.review_flag(
+        pool, flag_id=flag_id, verdict=body.verdict, reviewer=reviewer, note=body.note
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="flag not found")
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            "SELECT session_id, experiment_id FROM safety_flags WHERE flag_id = $1", flag_id
+        )
+    if row:
+        await event_repo.insert_event(
+            pool,
+            session_id=str(row["session_id"]),
+            experiment_id=row["experiment_id"],
+            event_type="safety_flag_reviewed",
+            data={"flag_id": flag_id, "verdict": body.verdict, "by": reviewer, "note": body.note},
+        )
+    return {"status": "reviewed", "flag_id": flag_id}
+
+
+async def _live_session_or_404(session_id: str) -> SimulationSession:
+    session = await session_manager.get_session(session_id)
+    if not session or not session.running:
+        raise HTTPException(status_code=404, detail="session is not live on this worker")
+    return session
+
+
+@app.post("/admin/safety/sessions/{session_id}/pause")
+async def admin_safety_pause(session_id: str, body: SafetyActionRequest, x_admin_key: str = Header(None)):
+    _require_admin(x_admin_key)
+    reviewer = _reviewer_name(body.reviewer)
+    session = await _live_session_or_404(session_id)
+    changed = await session.pause_for_safety(reviewer)
+    return {"status": "paused" if changed else "already_paused", "session_id": session_id}
+
+
+@app.post("/admin/safety/sessions/{session_id}/resume")
+async def admin_safety_resume(session_id: str, body: SafetyActionRequest, x_admin_key: str = Header(None)):
+    _require_admin(x_admin_key)
+    reviewer = _reviewer_name(body.reviewer)
+    session = await _live_session_or_404(session_id)
+    credited = await session.resume_from_safety(reviewer)
+    return {"status": "resumed", "session_id": session_id, "credited_seconds": round(credited, 1)}
+
+
+@app.post("/admin/safety/sessions/{session_id}/end")
+async def admin_safety_end(session_id: str, body: SafetyActionRequest, x_admin_key: str = Header(None)):
+    _require_admin(x_admin_key)
+    reviewer = _reviewer_name(body.reviewer)
+    session = await _live_session_or_404(session_id)
+    await session.end_for_safety(reviewer)
+    return {"status": "ended", "session_id": session_id}
+
+
 @app.post("/admin/reset-sessions")
 async def admin_reset_sessions(
     body: Dict[str, Any] = None,
@@ -2156,6 +2286,11 @@ async def admin_reset_sessions(
 
         await conn.execute(
             "DELETE FROM events WHERE session_id IN "
+            "(SELECT session_id FROM sessions WHERE experiment_id = $1)",
+            target_id,
+        )
+        await conn.execute(
+            "DELETE FROM safety_flags WHERE session_id IN "
             "(SELECT session_id FROM sessions WHERE experiment_id = $1)",
             target_id,
         )
@@ -2252,7 +2387,7 @@ async def admin_erase_participant(
         async with conn.transaction():
             if session_ids:
                 for table in ("manual_message_evaluations", "events",
-                              "agent_blocks", "messages"):
+                              "safety_flags", "agent_blocks", "messages"):
                     await conn.execute(
                         f"DELETE FROM {table} WHERE session_id = ANY($1)",
                         session_ids,
@@ -2312,6 +2447,11 @@ async def admin_reset_db(
 
         await conn.execute(
             "DELETE FROM events WHERE session_id IN "
+            "(SELECT session_id FROM sessions WHERE experiment_id = $1)",
+            target_id,
+        )
+        await conn.execute(
+            "DELETE FROM safety_flags WHERE session_id IN "
             "(SELECT session_id FROM sessions WHERE experiment_id = $1)",
             target_id,
         )
@@ -2989,6 +3129,7 @@ async def admin_sessions_csv(experiment_id: str, x_admin_key: str = Header(None)
             "is_like_minded",
             "inferred_participant_stance",
             "classification_rationale",
+            "safety_verdict",
         ]
     )
 
@@ -3000,6 +3141,7 @@ async def admin_sessions_csv(experiment_id: str, x_admin_key: str = Header(None)
         if isinstance(exp_cfg, str):
             exp_cfg = json.loads(exp_cfg)
         messages = await message_repo.get_session_messages(pool, str(session_row["session_id"]))
+        safety_verdicts = await safety_repo.verdicts_for_session(pool, str(session_row["session_id"]))
 
         base = [
             experiment_id,
@@ -3040,6 +3182,7 @@ async def admin_sessions_csv(experiment_id: str, x_admin_key: str = Header(None)
                     msg.get("is_like_minded"),
                     msg.get("inferred_participant_stance") or "",
                     msg.get("classification_rationale") or "",
+                    safety_verdicts.get(msg["message_id"]) or "",
                 ]
             )
 

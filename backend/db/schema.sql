@@ -145,3 +145,53 @@ DO $$ BEGIN
     ALTER TABLE messages ADD COLUMN classification_rationale TEXT;
 EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;
+
+-- Safety screening: every message is classified by the safety model before
+-- it reaches the participant (agent turns) or right after it is posted
+-- (participant turns). Verdicts live on the message; anything that needs a
+-- human decision becomes a safety_flags row that stays open until reviewed.
+DO $$ BEGIN
+    ALTER TABLE messages ADD COLUMN safety_verdict TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE sessions ADD COLUMN safety_paused_at TIMESTAMPTZ;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+
+CREATE TABLE IF NOT EXISTS safety_flags (
+    flag_id           UUID        PRIMARY KEY,
+    session_id        UUID        NOT NULL REFERENCES sessions(session_id),
+    experiment_id     TEXT        NOT NULL,
+    -- NULL when the turn was withheld (no verdict) and never published.
+    message_id        UUID        REFERENCES messages(message_id),
+    seq               BIGINT,
+    -- 'agent' | 'participant'
+    sender_type       TEXT        NOT NULL,
+    sender            TEXT        NOT NULL,
+    content           TEXT        NOT NULL,
+    -- The User turn the message was judged against.
+    context_user_turn TEXT        NOT NULL DEFAULT '',
+    -- 'unsafe' | 'unavailable'
+    verdict           TEXT        NOT NULL,
+    categories        TEXT[]      NOT NULL DEFAULT '{}',
+    raw_output        TEXT,
+    model             TEXT,
+    prompt_hash       TEXT        NOT NULL DEFAULT '',
+    unsafe_prob       DOUBLE PRECISION,
+    latency_ms        INTEGER,
+    error             TEXT,
+    -- When the message reached the participant; NULL if withheld.
+    displayed_at      TIMESTAMPTZ,
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    reviewed_at       TIMESTAMPTZ,
+    reviewed_by       TEXT,
+    -- 'no_concern' | 'concern'
+    review_verdict    TEXT,
+    review_note       TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_safety_flags_open
+    ON safety_flags(created_at) WHERE reviewed_at IS NULL;
+CREATE INDEX IF NOT EXISTS idx_safety_flags_session
+    ON safety_flags(session_id, created_at);

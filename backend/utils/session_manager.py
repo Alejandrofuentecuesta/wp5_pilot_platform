@@ -30,7 +30,7 @@ from typing import Callable, Dict, Optional
 from platforms import SimulationSession
 from platforms.chatroom import REJOIN_WINDOW_MINUTES
 from db import connection as db_conn
-from db.repositories import session_repo, message_repo, config_repo
+from db.repositories import session_repo, message_repo, config_repo, safety_repo
 from cache import redis_client
 
 # Ended sessions stay in the registry for this long so a participant who
@@ -256,6 +256,20 @@ class SessionManager:
         # participant who was away during a restart is not billed for it.
         started_at = row.get("started_at")
         paused_seconds = float(row.get("paused_seconds") or 0.0)
+
+        # A researcher hold that spans the restart: the held time so far is
+        # credited now and the hold restarts from this moment, so the
+        # participant loses nothing and the session comes back still frozen.
+        safety_paused_at = row.get("safety_paused_at")
+        if safety_paused_at is not None:
+            now = datetime.now(timezone.utc)
+            held = max(0.0, (now - safety_paused_at).total_seconds())
+            if held:
+                await session_repo.add_paused_seconds(pool, session_id, held)
+                paused_seconds += held
+            await safety_repo.set_safety_paused(pool, session_id, now)
+            safety_paused_at = now
+
         if started_at:
             sim_cfg = row.get("simulation_config")
             if isinstance(sim_cfg, str):
@@ -285,6 +299,7 @@ class SessionManager:
             "status": row["status"],
             "started_at": started_at,
             "paused_seconds": paused_seconds,
+            "safety_paused_at": safety_paused_at,
         }
         return await self._reconstruct_session(session_id, websocket_send, meta)
 
@@ -336,6 +351,7 @@ class SessionManager:
                 _config=config,
                 _started_at=meta.get("started_at"),
                 _paused_seconds=float(meta.get("paused_seconds") or 0.0),
+                _safety_paused_at=meta.get("safety_paused_at"),
             )
             self._sessions[session_id] = session
 

@@ -261,6 +261,53 @@ def validate_experimental_config(
             raise ValueError("All fields in narrative cells must be strings")
     out["narrative_pool"] = narrative_pool
 
+    out["safety"] = validate_safety_config(out.get("safety"))
+
+    return out
+
+
+SAFETY_TRANSPORTS = ("openai_completions", "ollama_raw")
+
+
+def validate_safety_config(raw: Any) -> Dict[str, Any]:
+    """Validate ``experimental.safety``. Returns the cleaned block.
+
+    ``enabled: false`` (the default) needs nothing else. When enabled, the
+    transport must be known; base_url and model may be left empty to fall
+    back to the SAFETY_* environment variables at session start. Categories,
+    when given, are a list of ``{code, title, definition?}``.
+    """
+    if raw is None:
+        return {"enabled": False}
+    if not isinstance(raw, dict):
+        raise ValueError("'safety' must be an object")
+    out = dict(raw)
+    out["enabled"] = bool(out.get("enabled", False))
+    transport = out.get("transport")
+    if transport is not None and transport not in SAFETY_TRANSPORTS:
+        raise ValueError(
+            f"'safety.transport' must be one of {', '.join(SAFETY_TRANSPORTS)}"
+        )
+    for key in ("base_url", "model"):
+        val = out.get(key)
+        if val is not None and not isinstance(val, str):
+            raise ValueError(f"'safety.{key}' must be a string")
+    if "timeout_s" in out:
+        try:
+            out["timeout_s"] = float(out["timeout_s"])
+        except (TypeError, ValueError):
+            raise ValueError("'safety.timeout_s' must be a number")
+        if out["timeout_s"] <= 0:
+            raise ValueError("'safety.timeout_s' must be positive")
+    cats = out.get("categories")
+    if cats is not None:
+        if not isinstance(cats, list):
+            raise ValueError("'safety.categories' must be a list")
+        for c in cats:
+            if not isinstance(c, dict) or not str(c.get("code", "")).strip() or not str(c.get("title", "")).strip():
+                raise ValueError("each safety category needs 'code' and 'title'")
+            if c.get("definition") is not None and not isinstance(c["definition"], str):
+                raise ValueError("'definition' of a safety category must be a string")
     return out
 
 

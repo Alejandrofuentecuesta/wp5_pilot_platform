@@ -9,7 +9,9 @@ from typing import Optional
 # Load environment variables
 load_dotenv()
 
-BASE_URL = "https://whatif.inf.uni-konstanz.de/v1"
+# Overridable so a development machine can point the same client at another
+# OpenAI-compatible host (e.g. an Ollama/Open WebUI endpoint).
+BASE_URL = os.getenv("KONSTANZ_BASE_URL", "https://whatif.inf.uni-konstanz.de/v1")
 
 
 def _log_usage(provider: str, model: str, completion, latency: float) -> None:

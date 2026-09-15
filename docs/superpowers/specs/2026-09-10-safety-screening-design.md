@@ -75,12 +75,39 @@ comma-separated category codes. Anything else parses as `unavailable`.
 Llama Guard is trained on two-party User/Agent conversations and judges only
 the last turn. The multi-party chatroom is mapped as follows.
 
-- Agent message under test: `[("user", <participant's most recent message>), ("assistant", <agent message>)]`.
-  If the participant has not written yet, the user turn is the seed news
-  article body.
 - Participant message under test: `[("user", <participant message>)]`.
+- Agent message under test: `[("user", <context turn>), ("assistant", <agent message>)]`,
+  where the context turn depends on `safety.context_mode`:
+  - `none`: the fixed neutral placeholder `(no participant message)`.
+  - `conditional` (default): the participant's most recent message only when
+    that message was itself judged `unsafe`; otherwise the placeholder. This
+    is the case where an agent endorsing the participant matters, and it
+    avoids the model reacting to the participant's words when judging a
+    benign agent reply.
+  - `always`: the participant's most recent message (or the seed article
+    body before the first one).
 
-Other agents' messages are not included.
+Other agents' messages are never included.
+
+### Screening policy (categories and context)
+
+`safety.categories` lists the 14 Llama Guard codes with `enabled` and an
+optional `definition`; a disabled code is omitted from the prompt, so the
+model cannot return it. `safety.context_mode` selects the mapping above.
+Both are editable from the Safety tab's "Screening policy" panel through
+`GET/PUT /admin/safety/policy/{experiment_id}`, which touches only the
+safety block and applies to sessions started afterwards. `safety.locked`
+(set only through `POST /admin/safety/policy/{id}/lock`, never from the
+panel) makes the panel read-only and the PUT return 409; it is set before
+fieldwork. Every flag stores the hash of the prompt that produced it, so
+the policy in force is auditable per flag.
+
+Findings from the replay set (863 heretic-model messages): in-context
+descriptions do not narrow S10 on this model (a permissive S10 text raised
+S10 flags from 60 to 69), and with the participant turn always included the
+model reacts to the participant's words rather than the agent's (benign
+replies to a hateful participant get S10). Hence the `conditional` default
+and the recommendation to leave descriptions blank.
 
 ### `backend/platforms/safety_screen.py` — `SafetyScreen`
 

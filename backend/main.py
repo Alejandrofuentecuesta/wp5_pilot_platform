@@ -35,7 +35,7 @@ from utils.session_csv_exporter import render_session_messages_csv
 from db import connection as db_conn
 from cache import redis_client
 from db.repositories import message_repo, session_repo, event_repo, config_repo, token_repo, safety_repo
-from utils.safety.prompt import CATEGORY_NAMES
+from utils.safety.prompt import CATEGORY_NAMES, full_policy
 from features import AVAILABLE_FEATURES, FEATURES_META
 
 
@@ -2210,6 +2210,87 @@ async def admin_safety_review(
             data={"flag_id": flag_id, "verdict": body.verdict, "by": reviewer, "note": body.note},
         )
     return {"status": "reviewed", "flag_id": flag_id}
+
+
+class SafetyPolicyRequest(BaseModel):
+    categories: List[Dict[str, Any]]
+    context_mode: Literal["none", "conditional", "always"]
+
+
+class SafetyLockRequest(BaseModel):
+    locked: bool
+
+
+async def _safety_block(pool, experiment_id: str) -> Dict[str, Any]:
+    config = await config_repo.get_experiment_config(pool, experiment_id)
+    if not config:
+        raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
+    return config_repo.validate_safety_config((config.get("experimental") or {}).get("safety"))
+
+
+def _policy_view(experiment_id: str, safety: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "experiment_id": experiment_id,
+        "enabled": safety.get("enabled", False),
+        "locked": safety.get("locked", False),
+        "context_mode": safety.get("context_mode", "conditional"),
+        "categories": full_policy(safety.get("categories")),
+        "transport": safety.get("transport"),
+        "model": safety.get("model"),
+    }
+
+
+@app.get("/admin/safety/policy/{experiment_id}")
+async def admin_safety_policy_get(experiment_id: str, x_admin_key: str = Header(None)):
+    """The screening policy of an experiment: every category with its enabled flag and description."""
+    _require_admin(x_admin_key)
+    safety = await _safety_block(_get_pool(), experiment_id)
+    return _policy_view(experiment_id, safety)
+
+
+@app.put("/admin/safety/policy/{experiment_id}")
+async def admin_safety_policy_put(
+    experiment_id: str, body: SafetyPolicyRequest, x_admin_key: str = Header(None)
+):
+    """Update categories and context mode only. Refused while the policy is locked.
+
+    Applies to sessions started afterwards; live sessions keep the policy they
+    were built with.
+    """
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+    safety = await _safety_block(pool, experiment_id)
+    if safety.get("locked"):
+        raise HTTPException(status_code=409, detail="Screening policy is locked")
+    cats = []
+    for c in body.categories:
+        cats.append({
+            "code": str(c.get("code", "")).strip(),
+            "title": str(c.get("title", "")).strip(),
+            "enabled": bool(c.get("enabled", True)),
+            **({"definition": c["definition"].strip()} if c.get("definition") and str(c["definition"]).strip() else {}),
+        })
+    safety["categories"] = cats
+    safety["context_mode"] = body.context_mode
+    try:
+        safety = config_repo.validate_safety_config(safety)
+        await config_repo.update_safety_block(pool, experiment_id, safety)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return _policy_view(experiment_id, safety)
+
+
+@app.post("/admin/safety/policy/{experiment_id}/lock")
+async def admin_safety_policy_lock(
+    experiment_id: str, body: SafetyLockRequest, x_admin_key: str = Header(None)
+):
+    """Lock or unlock the screening policy. Deliberately not exposed in the panel."""
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+    safety = await _safety_block(pool, experiment_id)
+    safety["locked"] = body.locked
+    await config_repo.update_safety_block(pool, experiment_id, safety)
+    return {"experiment_id": experiment_id, "locked": body.locked}
 
 
 async def _live_session_or_404(session_id: str) -> SimulationSession:

@@ -267,6 +267,7 @@ def validate_experimental_config(
 
 
 SAFETY_TRANSPORTS = ("openai_completions", "ollama_raw")
+SAFETY_CONTEXT_MODES = ("none", "conditional", "always")
 
 
 def validate_safety_config(raw: Any) -> Dict[str, Any]:
@@ -278,11 +279,16 @@ def validate_safety_config(raw: Any) -> Dict[str, Any]:
     when given, are a list of ``{code, title, definition?}``.
     """
     if raw is None:
-        return {"enabled": False}
+        return {"enabled": False, "context_mode": "conditional", "locked": False}
     if not isinstance(raw, dict):
         raise ValueError("'safety' must be an object")
     out = dict(raw)
     out["enabled"] = bool(out.get("enabled", False))
+    out["locked"] = bool(out.get("locked", False))
+    mode = out.get("context_mode") or "conditional"
+    if mode not in SAFETY_CONTEXT_MODES:
+        raise ValueError(f"'safety.context_mode' must be one of {', '.join(SAFETY_CONTEXT_MODES)}")
+    out["context_mode"] = mode
     transport = out.get("transport")
     if transport is not None and transport not in SAFETY_TRANSPORTS:
         raise ValueError(
@@ -308,7 +314,34 @@ def validate_safety_config(raw: Any) -> Dict[str, Any]:
                 raise ValueError("each safety category needs 'code' and 'title'")
             if c.get("definition") is not None and not isinstance(c["definition"], str):
                 raise ValueError("'definition' of a safety category must be a string")
+            if "enabled" in c and not isinstance(c["enabled"], bool):
+                raise ValueError("'enabled' of a safety category must be a boolean")
+        if not any(c.get("enabled", True) for c in cats):
+            raise ValueError("at least one safety category must be enabled")
+    if "num_ctx" in out:
+        try:
+            out["num_ctx"] = int(out["num_ctx"])
+        except (TypeError, ValueError):
+            raise ValueError("'safety.num_ctx' must be an integer")
     return out
+
+
+async def update_safety_block(
+    pool: asyncpg.Pool, experiment_id: str, safety: Dict[str, Any]
+) -> None:
+    """Replace only ``config.experimental.safety`` of an experiment."""
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE experiments
+            SET config = jsonb_set(config, '{experimental,safety}', $2::jsonb, true)
+            WHERE experiment_id = $1
+            """,
+            experiment_id,
+            json.dumps(safety),
+        )
+        if result == "UPDATE 0":
+            raise ValueError(f"Experiment '{experiment_id}' not found")
 
 
 def validate_token_groups(

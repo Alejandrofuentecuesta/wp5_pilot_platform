@@ -112,9 +112,79 @@ class TestSessionActions:
         session.end_for_safety.assert_awaited_once_with("Laia")
 
 
+class TestPolicyEndpoints:
+    def _cfg(self, locked=False):
+        return {"simulation": {}, "experimental": {"safety": {
+            "enabled": True, "locked": locked, "context_mode": "always",
+            "categories": [{"code": "S10", "title": "Hate", "enabled": True},
+                           {"code": "S13", "title": "Elections", "enabled": False}]}}}
+
+    def test_get_expands_all_categories(self, client):
+        with patch.object(main, "_get_pool", return_value=MagicMock()), \
+             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg())):
+            r = client.get("/admin/safety/policy/e1", headers=HDR)
+        assert r.status_code == 200
+        body = r.json()
+        rows = {c["code"]: c for c in body["categories"]}
+        assert len(rows) == 14
+        assert rows["S10"]["enabled"] is True and rows["S13"]["enabled"] is False
+        assert rows["S1"]["enabled"] is False  # omitted from a saved policy = off
+        assert body["context_mode"] == "always" and body["locked"] is False
+
+    def test_put_updates_block_only(self, client):
+        with patch.object(main, "_get_pool", return_value=MagicMock()), \
+             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg())), \
+             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
+            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
+                "context_mode": "none",
+                "categories": [{"code": "S10", "title": "Hate", "enabled": True, "definition": " d "},
+                               {"code": "S1", "title": "Violent Crimes", "enabled": False}]})
+        assert r.status_code == 200, r.text
+        saved = upd.call_args[0][2]
+        assert saved["context_mode"] == "none" and saved["enabled"] is True
+        assert saved["categories"][0] == {"code": "S10", "title": "Hate", "enabled": True, "definition": "d"}
+        assert "definition" not in saved["categories"][1]
+
+    def test_put_refused_when_locked(self, client):
+        with patch.object(main, "_get_pool", return_value=MagicMock()), \
+             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg(locked=True))), \
+             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
+            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
+                "context_mode": "none", "categories": [{"code": "S10", "title": "Hate", "enabled": True}]})
+        assert r.status_code == 409
+        upd.assert_not_awaited()
+
+    def test_put_all_disabled_is_400(self, client):
+        with patch.object(main, "_get_pool", return_value=MagicMock()), \
+             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg())):
+            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
+                "context_mode": "none", "categories": [{"code": "S10", "title": "Hate", "enabled": False}]})
+        assert r.status_code == 400
+
+    def test_lock_endpoint(self, client):
+        with patch.object(main, "_get_pool", return_value=MagicMock()), \
+             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg())), \
+             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
+            r = client.post("/admin/safety/policy/e1/lock", headers=HDR, json={"locked": True})
+        assert r.status_code == 200 and r.json()["locked"] is True
+        assert upd.call_args[0][2]["locked"] is True
+
+
 class TestSafetyConfigValidation:
     def test_absent_is_disabled(self):
-        assert validate_safety_config(None) == {"enabled": False}
+        out = validate_safety_config(None)
+        assert out["enabled"] is False and out["locked"] is False
+        assert out["context_mode"] == "conditional"
+
+    def test_context_mode_and_enabled_flags(self):
+        with pytest.raises(ValueError):
+            validate_safety_config({"context_mode": "sometimes"})
+        with pytest.raises(ValueError):
+            validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": "yes"}]})
+        with pytest.raises(ValueError):
+            validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": False}]})
+        out = validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": True}]})
+        assert out["context_mode"] == "conditional"
 
     def test_bad_transport_rejected(self):
         with pytest.raises(ValueError):

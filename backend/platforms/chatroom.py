@@ -634,6 +634,7 @@ class SimulationSession:
             enabled=enabled,
             user_name=self.state.user_name,
             seed_text=seed.get("body") or seed.get("agent_summary") or "",
+            context_mode=cfg.get("context_mode") or "conditional",
         )
 
     def _build_pipeline_orchestrators(self) -> List[Orchestrator]:
@@ -1443,6 +1444,14 @@ class SimulationSession:
         self._safety_tasks.add(safety_task)
         safety_task.add_done_callback(self._safety_tasks.discard)
 
+        # Screen the participant's own words after publication (flag only):
+        # a self-harm disclosure or a stated intent to harm someone must reach
+        # the reviewer even though the message itself is never withheld.
+        try:
+            await self.safety_screen.screen_participant(message)
+        except Exception as exc:
+            self.logger.log_error("screen_participant", str(exc))
+
     async def _run_participant_safety_check(
         self,
         message: Message,
@@ -1535,13 +1544,6 @@ class SimulationSession:
             await asyncio.sleep(0.5)
             await self.stop(reason="participant_safety")
 
-        # Screen the participant's own words after publication (flag only):
-        # a self-harm disclosure or a stated intent to harm someone must reach
-        # the reviewer even though the message itself is never withheld.
-        try:
-            await self.safety_screen.screen_participant(message)
-        except Exception as exc:
-            self.logger.log_error("screen_participant", str(exc))
 
     # ── Safety hold (researcher-initiated, from the Safety tab) ──────────────
 

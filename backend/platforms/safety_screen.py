@@ -20,12 +20,14 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 from db import connection as db_conn
 from db.repositories import safety_repo
 from models.message import Message
-from utils.safety import Category, SafetyClient, SafetyVerdict, render_prompt
+from utils.safety import NEUTRAL_USER_TURN, Category, SafetyClient, SafetyVerdict, render_prompt
+
+CONTEXT_MODES = ("none", "conditional", "always")
 
 
 @dataclass
@@ -48,6 +50,7 @@ class SafetyScreen:
         enabled: bool,
         user_name: str,
         seed_text: str = "",
+        context_mode: str = "conditional",
     ) -> None:
         self.session_id = session_id
         self.experiment_id = experiment_id
@@ -57,17 +60,34 @@ class SafetyScreen:
         self.enabled = bool(enabled and client is not None)
         self.user_name = user_name
         self.seed_text = (seed_text or "").strip()
+        if context_mode not in CONTEXT_MODES:
+            raise ValueError(f"unknown safety context_mode {context_mode!r}")
+        # How much of the participant's side the agent screen sees:
+        #   none         – never; the agent message is judged on its own
+        #   conditional  – only when the participant's last message was itself
+        #                  flagged (the case where endorsement matters)
+        #   always       – the participant's last message every time
+        self.context_mode = context_mode
+        # message_id -> verdict status of participant messages screened here.
+        self._participant_verdicts: Dict[str, str] = {}
 
     # ── conversation mapping ──────────────────────────────────────────────
 
-    def _latest_participant_text(self, state) -> str:
+    def _latest_participant(self, state) -> Optional[Message]:
         for m in reversed(getattr(state, "messages", []) or []):
             if m.sender == self.user_name and (m.content or "").strip():
-                return m.content
-        return self.seed_text or "(no participant message yet)"
+                return m
+        return None
 
     def _agent_conversation(self, message: Message, state) -> Tuple[List[Tuple[str, str]], str]:
-        user_turn = self._latest_participant_text(state)
+        last = self._latest_participant(state)
+        if self.context_mode == "always":
+            user_turn = last.content if last else (self.seed_text or NEUTRAL_USER_TURN)
+        elif self.context_mode == "conditional" and last is not None \
+                and self._participant_verdicts.get(last.message_id) == "unsafe":
+            user_turn = last.content
+        else:
+            user_turn = NEUTRAL_USER_TURN
         return [("user", user_turn), ("assistant", message.content)], user_turn
 
     # ── classification ────────────────────────────────────────────────────
@@ -159,6 +179,7 @@ class SafetyScreen:
             verdict = await self._classify([("user", message.content)])
         except Exception as exc:
             verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
+        self._participant_verdicts[message.message_id] = verdict.status
         try:
             pool = db_conn.get_pool()
             await safety_repo.set_message_safety_verdict(

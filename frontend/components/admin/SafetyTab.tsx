@@ -2,12 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
+  getSafetyPolicy,
   getSafetySummary,
   listSafetyFlags,
   reviewSafetyFlag,
   safetySessionAction,
+  saveSafetyPolicy,
 } from "../../lib/admin-api"
-import type { SafetyFlag, SafetySummary } from "../../lib/admin-types"
+import type { SafetyFlag, SafetyPolicy, SafetyPolicyCategory, SafetySummary } from "../../lib/admin-types"
 
 /* The Safety tab is the human-review side of the safety screen. Every flag
    the screen opens (an `unsafe` verdict on an agent or participant message,
@@ -362,6 +364,163 @@ function FlagRow({
   )
 }
 
+/* ── Screening policy panel ───────────────────────────────────────────── */
+
+const CONTEXT_MODE_HELP: Record<SafetyPolicy["context_mode"], string> = {
+  none: "Agent messages are judged on their own.",
+  conditional: "The participant's last message is included only when that message was itself flagged (catches agents endorsing a participant's hate or violence).",
+  always: "The participant's last message is always included (highest sensitivity; the model also reacts to what the participant said).",
+}
+
+function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentId: string }) {
+  const [policy, setPolicy] = useState<SafetyPolicy | null>(null)
+  const [draft, setDraft] = useState<SafetyPolicy | null>(null)
+  const [open, setOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null)
+
+  const load = useCallback(async () => {
+    try {
+      const p = await getSafetyPolicy(adminKey, experimentId)
+      setPolicy(p)
+      setDraft((prev) => (prev && prev.experiment_id === p.experiment_id && !saving ? prev : p))
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Failed to load policy" })
+    }
+  }, [adminKey, experimentId, saving])
+
+  useEffect(() => {
+    load()
+  }, [load])
+
+  if (!policy || !draft) return null
+
+  const dirty = JSON.stringify(draft.categories) !== JSON.stringify(policy.categories) || draft.context_mode !== policy.context_mode
+  const enabledCount = draft.categories.filter((c) => c.enabled).length
+
+  const setCat = (code: string, patch: Partial<SafetyPolicyCategory>) =>
+    setDraft({ ...draft, categories: draft.categories.map((c) => (c.code === code ? { ...c, ...patch } : c)) })
+
+  const save = async () => {
+    setSaving(true)
+    setMsg(null)
+    try {
+      const p = await saveSafetyPolicy(adminKey, experimentId, {
+        context_mode: draft.context_mode,
+        categories: draft.categories.map((c) => ({
+          code: c.code,
+          title: c.title,
+          enabled: c.enabled,
+          definition: c.definition.trim() || undefined,
+        })),
+      })
+      setPolicy(p)
+      setDraft(p)
+      setMsg({ kind: "ok", text: "Saved. Applies to sessions started from now on; live sessions keep the policy they started with." })
+    } catch (e) {
+      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Save failed" })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-admin-border bg-admin-surface">
+      <button
+        className="w-full flex items-center justify-between px-4 py-3 text-left"
+        onClick={() => setOpen((v) => !v)}
+      >
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-semibold text-admin-text">Screening policy</span>
+          <span className="text-xs text-admin-muted">
+            {experimentId} · {policy.enabled ? `${policy.categories.filter((c) => c.enabled).length}/14 categories · context: ${policy.context_mode}` : "screening disabled"}
+          </span>
+          {policy.locked && (
+            <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-pastel-amber text-admin-pastel-amber-text">locked</span>
+          )}
+        </div>
+        <span className="text-xs text-admin-faint">{open ? "hide" : "edit"}</span>
+      </button>
+
+      {open && (
+        <div className="px-4 pb-4 space-y-4 border-t border-admin-border pt-3">
+          {policy.locked && (
+            <p className="text-xs text-admin-pastel-amber-text">
+              This policy is locked for fieldwork. Changes require unlocking through the API.
+            </p>
+          )}
+
+          <div>
+            <label className="block text-xs font-medium text-admin-text mb-1">Participant context</label>
+            <select
+              value={draft.context_mode}
+              disabled={policy.locked}
+              onChange={(e) => setDraft({ ...draft, context_mode: e.target.value as SafetyPolicy["context_mode"] })}
+              className="border border-admin-border rounded px-2 py-1 text-xs bg-admin-bg text-admin-text"
+            >
+              <option value="none">none</option>
+              <option value="conditional">conditional</option>
+              <option value="always">always</option>
+            </select>
+            <p className="text-[11px] text-admin-faint mt-1">{CONTEXT_MODE_HELP[draft.context_mode]}</p>
+          </div>
+
+          <div>
+            <div className="text-xs font-medium text-admin-text mb-1">
+              Categories <span className="text-admin-faint font-normal">({enabledCount}/14 enabled; a disabled category is left out of the prompt entirely)</span>
+            </div>
+            <div className="space-y-1">
+              {draft.categories.map((c) => (
+                <div key={c.code} className={`grid grid-cols-[auto_9rem_1fr] gap-2 items-start py-1 ${c.enabled ? "" : "opacity-60"}`}>
+                  <input
+                    type="checkbox"
+                    className="mt-1"
+                    checked={c.enabled}
+                    disabled={policy.locked}
+                    onChange={(e) => setCat(c.code, { enabled: e.target.checked })}
+                  />
+                  <span className="text-xs text-admin-text pt-0.5">
+                    <span className="font-mono">{c.code}</span> {c.name}
+                  </span>
+                  <textarea
+                    value={c.definition}
+                    disabled={policy.locked || !c.enabled}
+                    onChange={(e) => setCat(c.code, { definition: e.target.value })}
+                    rows={c.definition ? 3 : 1}
+                    placeholder="optional description (blank = the model's default understanding of this category)"
+                    className="w-full border border-admin-border rounded px-2 py-1 text-xs bg-admin-bg text-admin-text resize-y"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {msg && (
+            <p className={`text-xs ${msg.kind === "ok" ? "text-admin-pastel-green-text" : "text-admin-danger-text"}`}>{msg.text}</p>
+          )}
+
+          <div className="flex items-center gap-2">
+            <button
+              disabled={policy.locked || !dirty || saving || enabledCount === 0}
+              onClick={save}
+              className="px-3 py-1 rounded text-xs font-medium bg-admin-accent text-white disabled:opacity-40"
+            >
+              {saving ? "Saving…" : "Save policy"}
+            </button>
+            <button
+              disabled={!dirty || saving}
+              onClick={() => setDraft(policy)}
+              className="px-3 py-1 rounded text-xs bg-admin-raised text-admin-muted disabled:opacity-40"
+            >
+              Discard changes
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /* ── Tab ──────────────────────────────────────────────────────────────── */
 
 export default function SafetyTab({ adminKey }: { adminKey: string }) {
@@ -457,6 +616,12 @@ export default function SafetyTab({ adminKey }: { adminKey: string }) {
   }, [flags, sessionFilter])
 
   const openCount = summary?.open_flags ?? 0
+  // The policy panel edits the live experiment (the one with sessions, else
+  // the first screening-enabled one).
+  const policyExperimentId = useMemo(() => {
+    const exps = summary?.experiments ?? []
+    return (exps.find((e) => e.live > 0) ?? exps.find((e) => e.screening_enabled) ?? exps[0])?.experiment_id ?? null
+  }, [summary])
 
   return (
     <div className="space-y-4">
@@ -471,6 +636,8 @@ export default function SafetyTab({ adminKey }: { adminKey: string }) {
       </div>
 
       <SummaryStrip summary={summary} now={now} />
+
+      {policyExperimentId && <PolicyPanel adminKey={adminKey} experimentId={policyExperimentId} />}
 
       {error && (
         <div className="rounded border border-admin-danger-border bg-admin-danger-soft text-admin-danger-text px-3 py-2 text-xs">

@@ -35,7 +35,7 @@ def _state(*messages):
     return SimpleNamespace(messages=list(messages), user_name="Paula")
 
 
-def _screen(client, enabled=True, seed="Artículo de prueba"):
+def _screen(client, enabled=True, seed="Artículo de prueba", context_mode="always"):
     logger = MagicMock()
     return SafetyScreen(
         session_id="sess",
@@ -46,6 +46,7 @@ def _screen(client, enabled=True, seed="Artículo de prueba"):
         enabled=enabled,
         user_name="Paula",
         seed_text=seed,
+        context_mode=context_mode,
     ), logger
 
 
@@ -134,6 +135,36 @@ class TestAgentPath:
         screen, _ = _screen(client, seed="Cuerpo del artículo")
         await screen.screen_agent(Message.create(sender="Carlos", content="resp"), _state())
         assert "User: Cuerpo del artículo\n\n" in client.prompts[0]
+
+    async def test_context_none_uses_neutral_turn(self, repo):
+        client = FakeClient(SafetyVerdict(status="safe"))
+        screen, _ = _screen(client, context_mode="none")
+        state = _state(Message.create(sender="Paula", content="los moros fuera"))
+        await screen.screen_agent(Message.create(sender="Carlos", content="resp"), state)
+        assert "User: (no participant message)\n\nAgent: resp" in client.prompts[0]
+        assert "moros" not in client.prompts[0]
+
+    async def test_context_conditional_only_after_unsafe_participant_turn(self, repo):
+        client = FakeClient(SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10"))
+        screen, _ = _screen(client, context_mode="conditional")
+        benign = Message.create(sender="Paula", content="hola a todos")
+        hateful = Message.create(sender="Paula", content="los moros fuera")
+        # Participant turn not yet screened -> neutral context.
+        await screen.screen_agent(Message.create(sender="Carlos", content="r1"), _state(benign))
+        assert "User: (no participant message)" in client.prompts[-1]
+        # Participant turn screened safe -> still neutral.
+        screen._participant_verdicts[benign.message_id] = "safe"
+        await screen.screen_agent(Message.create(sender="Carlos", content="r2"), _state(benign))
+        assert "User: (no participant message)" in client.prompts[-1]
+        # Participant turn screened unsafe -> included.
+        await screen.screen_participant(hateful)
+        assert screen._participant_verdicts[hateful.message_id] == "unsafe"
+        await screen.screen_agent(Message.create(sender="Carlos", content="r3"), _state(benign, hateful))
+        assert "User: los moros fuera\n\nAgent: r3" in client.prompts[-1]
+
+    def test_unknown_context_mode_rejected(self):
+        with pytest.raises(ValueError):
+            _screen(None, context_mode="sometimes")
 
     async def test_disabled_screen_publishes_and_writes_nothing(self, repo):
         screen, _ = _screen(None, enabled=False)

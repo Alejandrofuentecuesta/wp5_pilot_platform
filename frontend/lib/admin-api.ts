@@ -1,7 +1,7 @@
 /* Admin API client — all requests include X-Admin-Key header. */
 
 import { API_BASE } from "./constants"
-import type { AdminMeta, SafetyFlag, SafetySummary, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats, ProviderKeyStatus, ExperimentToken } from "./admin-types"
+import type { AdminMeta, SafetyFlag, SafetyPolicy, SafetySummary, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats, ProviderKeyStatus, ExperimentToken } from "./admin-types"
 
 async function adminFetch(
   path: string,
@@ -577,6 +577,28 @@ export async function safetySessionAction(
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: `${action} failed` }))
     throw new Error(err.detail || `${action} failed`)
+  }
+  return res.json()
+}
+
+export async function getSafetyPolicy(key: string, experimentId: string): Promise<SafetyPolicy> {
+  const res = await adminFetch(`/admin/safety/policy/${encodeURIComponent(experimentId)}`, key)
+  if (!res.ok) throw new Error("Failed to load screening policy")
+  return res.json()
+}
+
+export async function saveSafetyPolicy(
+  key: string,
+  experimentId: string,
+  body: { context_mode: SafetyPolicy["context_mode"]; categories: { code: string; title: string; enabled: boolean; definition?: string }[] },
+): Promise<SafetyPolicy> {
+  const res = await adminFetch(`/admin/safety/policy/${encodeURIComponent(experimentId)}`, key, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Save failed" }))
+    throw new Error(err.detail || "Save failed")
   }
   return res.json()
 }

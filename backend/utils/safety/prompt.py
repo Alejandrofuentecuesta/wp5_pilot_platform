@@ -66,13 +66,44 @@ CATEGORY_NAMES = {
 
 _ROLE_LABEL = {"user": "User", "assistant": "Agent"}
 
+# Stands in for the participant turn when the policy excludes context.
+NEUTRAL_USER_TURN = "(no participant message)"
+
+
+def full_policy(raw: Optional[Sequence[dict]]) -> List[dict]:
+    """All 14 categories with their enabled flag and description, for the admin panel."""
+    by_code = {str(e.get("code", "")).strip(): e for e in (raw or [])}
+    rows = []
+    for c in DEFAULT_CATEGORIES:
+        e = by_code.get(c.code, {})
+        rows.append({
+            "code": c.code,
+            "title": c.title,
+            "name": CATEGORY_NAMES.get(c.code, c.title),
+            "enabled": bool(e.get("enabled", True)) if raw else True,
+            "definition": e.get("definition") or "",
+        })
+    if raw:
+        # Codes omitted from a saved policy count as disabled.
+        saved = set(by_code)
+        for r in rows:
+            if r["code"] not in saved:
+                r["enabled"] = False
+    return rows
+
 
 def categories_from_config(raw: Optional[Sequence[dict]]) -> List[Category]:
-    """Build the category list from experiment config; default when absent."""
+    """Build the category list from experiment config; default when absent.
+
+    Entries with ``enabled: false`` are omitted from the prompt entirely, so
+    the model can neither see nor return that code.
+    """
     if not raw:
         return list(DEFAULT_CATEGORIES)
     out: List[Category] = []
     for entry in raw:
+        if entry.get("enabled", True) is False:
+            continue
         code = str(entry.get("code", "")).strip()
         title = str(entry.get("title", "")).strip()
         if not code or not title:

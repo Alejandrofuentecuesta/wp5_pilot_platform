@@ -93,6 +93,22 @@ class TestCustomCategories:
         assert categories_from_config(None) == DEFAULT_CATEGORIES
         assert categories_from_config([]) == DEFAULT_CATEGORIES
 
+    def test_disabled_entries_are_omitted(self):
+        cats = categories_from_config([
+            {"code": "S10", "title": "Hate", "enabled": True},
+            {"code": "S13", "title": "Elections", "enabled": False},
+        ])
+        assert [c.code for c in cats] == ["S10"]
+        out = render_prompt([("user", "x")], cats)
+        assert "S13" not in out
+
+    def test_full_policy_marks_omitted_codes_disabled(self):
+        from utils.safety.prompt import full_policy
+        rows = {r["code"]: r for r in full_policy([{"code": "S10", "title": "Hate", "definition": "d"}])}
+        assert rows["S10"]["enabled"] is True and rows["S10"]["definition"] == "d"
+        assert rows["S1"]["enabled"] is False
+        assert all(r["enabled"] for r in full_policy(None))
+
     def test_from_config_requires_code_and_title(self):
         with pytest.raises(ValueError):
             categories_from_config([{"code": "S1"}])

@@ -32,7 +32,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.safety import SafetyClient, render_prompt  # noqa: E402
+from utils.safety import NEUTRAL_USER_TURN, SafetyClient, render_prompt  # noqa: E402
 from utils.safety.prompt import categories_from_config  # noqa: E402
 
 PLACEHOLDER_USER_TURN = "(no participant message yet)"
@@ -59,7 +59,10 @@ async def main() -> int:
     ap.add_argument("output", type=Path)
     ap.add_argument("--mode", choices=("agent", "user"), default="agent")
     ap.add_argument("--concurrency", type=int, default=4)
-    ap.add_argument("--categories", type=Path, help="JSON list of {code,title,definition?}")
+    ap.add_argument("--categories", type=Path, help="JSON list of {code,title,definition?,enabled?}")
+    ap.add_argument("--policy", type=Path,
+                    help="a saved experimental.safety block (as returned by GET /admin/safety/policy); "
+                         "sets categories and context_mode, overriding --categories/--mode")
     args = ap.parse_args()
 
     cfg = {
@@ -69,9 +72,15 @@ async def main() -> int:
         "timeout_s": float(os.getenv("SAFETY_TIMEOUT_S", "30")),
     }
     client = SafetyClient.from_config(cfg)
-    categories = categories_from_config(
-        json.loads(args.categories.read_text()) if args.categories else None
-    )
+    context_mode = None
+    if args.policy:
+        policy = json.loads(args.policy.read_text())
+        categories = categories_from_config(policy.get("categories"))
+        context_mode = policy.get("context_mode", "conditional")
+    else:
+        categories = categories_from_config(
+            json.loads(args.categories.read_text()) if args.categories else None
+        )
 
     items = _load(args.input)
     done = set()
@@ -88,12 +97,21 @@ async def main() -> int:
     counts = Counter()
 
     async def one(item):
-        if args.mode == "agent":
-            conv = [("user", item["user_turn"] or PLACEHOLDER_USER_TURN), ("assistant", item["content"])]
-        else:
-            conv = [("user", item["content"])]
-        prompt = render_prompt(conv, categories)
+        user_turn = item["user_turn"] or PLACEHOLDER_USER_TURN
         async with sem:
+            if context_mode == "none":
+                conv = [("user", NEUTRAL_USER_TURN), ("assistant", item["content"])]
+            elif context_mode == "conditional":
+                # Mirror the live screen: include the participant turn only
+                # when that turn is itself unsafe under the same policy.
+                uv = await client.classify(render_prompt([("user", user_turn)], categories))
+                ctx = user_turn if uv.status == "unsafe" else NEUTRAL_USER_TURN
+                conv = [("user", ctx), ("assistant", item["content"])]
+            elif context_mode == "always" or args.mode == "agent":
+                conv = [("user", user_turn), ("assistant", item["content"])]
+            else:
+                conv = [("user", item["content"])]
+            prompt = render_prompt(conv, categories)
             v = await client.classify(prompt)
         row = {
             "id": item["id"],

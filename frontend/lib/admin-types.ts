@@ -288,3 +288,21 @@ export type SafetySummary = {
   experiments: { experiment_id: string; screening_enabled: boolean; live: number }[]
   category_names: Record<string, string>
 }
+
+export type SafetyPolicyCategory = {
+  code: string
+  title: string
+  name: string
+  enabled: boolean
+  definition: string
+}
+
+export type SafetyPolicy = {
+  experiment_id: string
+  enabled: boolean
+  locked: boolean
+  context_mode: "none" | "conditional" | "always"
+  categories: SafetyPolicyCategory[]
+  transport: string | null
+  model: string | null
+}

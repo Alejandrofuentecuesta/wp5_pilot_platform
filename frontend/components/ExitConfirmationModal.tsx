@@ -7,12 +7,20 @@ interface ExitConfirmationModalProps {
   onClose: () => void
 }
 
+const exitReasons = [
+  "Porque la conversación me ha resultado demasiado hostil",
+  "Porque la conversación me ha resultado demasiado monótona",
+  "Porque estoy aburrido",
+  "Porque no tengo tiempo",
+] as const
+
 export default function ExitConfirmationModal({
   onConfirm,
   onClose,
 }: ExitConfirmationModalProps) {
   const modalRef = useRef<HTMLDivElement>(null)
-  const [reason, setReason] = useState("")
+  const [selectedReason, setSelectedReason] = useState("")
+  const [otherReason, setOtherReason] = useState("")
 
   // Focus trap and Escape handling
   useEffect(() => {
@@ -23,7 +31,9 @@ export default function ExitConfirmationModal({
     return () => document.removeEventListener("keydown", handleKey)
   }, [onClose])
 
-  const canConfirm = reason.trim().length > 0
+  const isOther = selectedReason === "Otros"
+  const canConfirm = isOther ? otherReason.trim().length > 0 : selectedReason.length > 0
+  const submitReason = isOther ? `Otros: ${otherReason.trim()}` : selectedReason
 
   return (
     <div
@@ -52,17 +62,37 @@ export default function ExitConfirmationModal({
           <label className="block text-sm font-medium text-primary mb-1.5">
             ¿Por qué quieres salir? <span className="text-danger">*</span>
           </label>
-          <textarea
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            autoFocus
-            rows={3}
-            placeholder="Cuéntanos brevemente el motivo…"
-            className="w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-primary resize-none placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
-          />
+          <div className="space-y-2" role="radiogroup" aria-label="Motivo de salida">
+            {[...exitReasons, "Otros"].map((option) => (
+              <label
+                key={option}
+                className="flex cursor-pointer items-start gap-2 rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-primary transition-colors hover:border-accent/60"
+              >
+                <input
+                  type="radio"
+                  name="exit-reason"
+                  value={option}
+                  checked={selectedReason === option}
+                  onChange={() => setSelectedReason(option)}
+                  className="mt-0.5 accent-accent"
+                />
+                <span>{option}</span>
+              </label>
+            ))}
+          </div>
+          {isOther && (
+            <textarea
+              value={otherReason}
+              onChange={(e) => setOtherReason(e.target.value)}
+              autoFocus
+              rows={3}
+              placeholder="Cuéntanos brevemente el motivo…"
+              className="mt-3 w-full rounded-lg border border-border bg-bg-surface px-3 py-2 text-sm text-primary resize-none placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/20"
+            />
+          )}
           {!canConfirm && (
             <p className="text-xs text-tertiary mt-1.5">
-              Por favor, indica el motivo antes de salir.
+              Por favor, selecciona un motivo antes de salir.
             </p>
           )}
         </div>
@@ -74,7 +104,7 @@ export default function ExitConfirmationModal({
             Cancelar
           </button>
           <button
-            onClick={() => onConfirm(reason.trim())}
+            onClick={() => onConfirm(submitReason)}
             disabled={!canConfirm}
             className="px-4 py-2 text-sm rounded-lg bg-danger hover:bg-red-700 text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >

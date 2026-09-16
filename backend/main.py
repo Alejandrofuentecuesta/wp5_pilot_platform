@@ -1764,7 +1764,11 @@ async def admin_test_llm(body: TestLLMRequest, x_admin_key: str = Header(None)):
         response_text = None
         error_msg = str(e)
     else:
-        error_msg = None if response_text else "No response returned (model may be unavailable)"
+        if response_text:
+            error_msg = None
+        else:
+            client_error = getattr(client, "last_error", None)
+            error_msg = client_error or "No response returned (model may be unavailable)"
     finally:
         # Clean up client resources.
         if hasattr(client, "aclose"):

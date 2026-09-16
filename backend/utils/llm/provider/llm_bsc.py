@@ -30,22 +30,30 @@ def _is_transport_safe(url: str) -> bool:
     return lowered.startswith(("http://127.0.0.1", "http://localhost"))
 
 
-def _parse_base_urls(raw_value: Optional[str]) -> list[str]:
-    """Split a comma-separated env var into ordered candidate base URLs."""
+def _parse_base_urls_verbose(raw_value: Optional[str]) -> tuple[list[str], list[str]]:
+    """Split a comma-separated env var into (accepted, rejected) candidate base URLs."""
     if not raw_value:
-        return []
+        return [], []
 
     values = raw_value.replace("\n", ",").split(",")
     urls: list[str] = []
+    rejected: list[str] = []
     for value in values:
         stripped = value.strip().rstrip("/")
         if not stripped or stripped in urls:
             continue
         if not _is_transport_safe(stripped):
             print(f"[BSC] Ignoring insecure base URL (needs https or loopback): {stripped}")
+            rejected.append(stripped)
             continue
         urls.append(stripped)
-    return urls
+    return urls, rejected
+
+
+def _parse_base_urls(raw_value: Optional[str]) -> list[str]:
+    """Split a comma-separated env var into ordered candidate base URLs."""
+    accepted, _rejected = _parse_base_urls_verbose(raw_value)
+    return accepted
 
 
 def _resolve_base_urls() -> list[str]:
@@ -54,6 +62,14 @@ def _resolve_base_urls() -> list[str]:
     if configured:
         return configured
     return list(DEFAULT_BASE_URLS)
+
+
+def _resolve_base_urls_verbose() -> tuple[list[str], list[str]]:
+    """Like ``_resolve_base_urls``, but also returns URLs dropped as insecure."""
+    configured, rejected = _parse_base_urls_verbose(os.getenv("BSC_API_BASE_URL"))
+    if configured:
+        return configured, rejected
+    return list(DEFAULT_BASE_URLS), rejected
 
 
 def _load_api_key_from_keys_file(path: str) -> Optional[str]:
@@ -165,10 +181,13 @@ class BSCClient:
         self.top_p = top_p
         self.max_tokens = max_tokens
         self.bsc_model_version = bsc_model_version or "v1"  # Default to V1 (Gemma 4 30B)
-        self.base_urls = _resolve_base_urls()
+        self.base_urls, self.rejected_insecure_urls = _resolve_base_urls_verbose()
         self.base_url = self.base_urls[0]
         self.api_key = _resolve_api_key()
         self.retry_delay_seconds = 1.0
+        # Set on every failed call so callers (e.g. /admin/test-llm) can show
+        # the real cause instead of a generic "no response" message.
+        self.last_error: Optional[str] = None
 
         self.client = OpenAI(base_url=self.base_url, api_key=self.api_key)
 
@@ -209,6 +228,16 @@ class BSCClient:
                 seen.add(base_url)
                 yield base_url
 
+    def _set_last_error(self, message: Optional[str]) -> None:
+        """Record the failure reason, flagging when it's masking a dropped insecure URL."""
+        if message and self.rejected_insecure_urls:
+            message = (
+                f"{message} (configured BSC_API_BASE_URL rejected as insecure — "
+                f"HTTP on a non-loopback host isn't allowed: {', '.join(self.rejected_insecure_urls)}; "
+                f"falling back to {self.base_url})"
+            )
+        self.last_error = message
+
     def _is_retryable_error(self, error: Exception) -> bool:
         """Return True for transient API errors where another endpoint or retry may help."""
         if isinstance(error, APIConnectionError):
@@ -243,6 +272,7 @@ class BSCClient:
                     last_error = str(e)
                     if not self._is_retryable_error(e):
                         print(f"LLM call failed after {attempts + 1} attempts: {last_error}")
+                        self._set_last_error(last_error)
                         return None
                 finally:
                     if temp_client is not None:
@@ -256,6 +286,7 @@ class BSCClient:
                 time.sleep(self.retry_delay_seconds)
 
         print(f"LLM call failed after {max_retries + 1} attempts: {last_error}")
+        self._set_last_error(last_error)
         return None
 
     async def generate_response_async(
@@ -295,6 +326,7 @@ class BSCClient:
                     last_error = str(e)
                     if not self._is_retryable_error(e):
                         print(f"Async LLM call failed after {attempts + 1} attempts: {last_error}")
+                        self._set_last_error(last_error)
                         return None
                 finally:
                     if temp_client is not None:
@@ -308,6 +340,7 @@ class BSCClient:
                 await asyncio.sleep(self.retry_delay_seconds)
 
         print(f"Async LLM call failed after {max_retries + 1} attempts: {last_error}")
+        self._set_last_error(last_error)
         return None
 
     async def aclose(self) -> None:

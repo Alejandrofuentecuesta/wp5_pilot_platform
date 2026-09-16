@@ -1,5 +1,5 @@
 import { API_BASE } from "./constants"
-import type { AgentImpression, ParticipantStance, SessionIntakeResponse, SessionStartResponse, QueueJoinResponse } from "./types"
+import type { AgentImpression, FinalReportBlockSurvey, ParticipantStance, SessionIntakeResponse, SessionStartResponse, QueueJoinResponse } from "./types"
 
 export async function previewSessionIntake(
   token: string,
@@ -105,14 +105,14 @@ export async function likeMessage(sessionId: string, messageId: string) {
 export async function reportMessage(
   sessionId: string,
   messageId: string,
-  block: boolean,
+  options: { report: boolean; block: boolean },
 ) {
   const res = await fetch(
     `${API_BASE}/session/${sessionId}/message/${messageId}/report`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ block }),
+      body: JSON.stringify(options),
     },
   )
   if (!res.ok) throw new Error("Network error")
@@ -122,11 +122,12 @@ export async function reportMessage(
 export async function submitAgentImpressions(
   sessionId: string,
   ratings: AgentImpression[],
+  finalReportBlockSurvey?: FinalReportBlockSurvey,
 ): Promise<void> {
   const res = await fetch(`${API_BASE}/session/${sessionId}/agent-impressions`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ratings }),
+    body: JSON.stringify({ ratings, report_block_survey: finalReportBlockSurvey }),
   })
   if (!res.ok) throw new Error("Failed to save agent impressions")
 }

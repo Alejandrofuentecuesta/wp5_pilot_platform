@@ -17,7 +17,7 @@ import uuid
 from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv, set_key
 
 load_dotenv()
@@ -433,6 +433,7 @@ class LikeRequest(BaseModel):
 
 class ReportRequest(BaseModel):
     user: Optional[str] = None  # legacy, ignored (see LikeRequest)
+    report: Optional[bool] = True
     block: Optional[bool] = False
     reason: Optional[str] = None
 
@@ -443,8 +444,27 @@ class AgentImpressionRequest(BaseModel):
     comment: Optional[str] = None
 
 
+class FinalReportBlockExampleRequest(BaseModel):
+    message_id: str
+    sender: str
+    content: str
+
+
+class FinalReportBlockSurveyRequest(BaseModel):
+    reported_message_ids: List[str] = Field(default_factory=list)
+    reported_examples: List[FinalReportBlockExampleRequest] = Field(default_factory=list)
+    report_reasons: List[str] = Field(default_factory=list)
+    report_other: Optional[str] = None
+    tempted_to_report: Optional[bool] = None
+    blocked_agent_names: List[str] = Field(default_factory=list)
+    block_reasons: List[str] = Field(default_factory=list)
+    block_other: Optional[str] = None
+    tempted_to_block: Optional[bool] = None
+
+
 class AgentImpressionsRequest(BaseModel):
     ratings: List[AgentImpressionRequest]
+    report_block_survey: Optional[FinalReportBlockSurveyRequest] = None
 
 
 class ManualEvaluationRowRequest(BaseModel):
@@ -871,6 +891,44 @@ async def submit_agent_impressions(session_id: str, payload: AgentImpressionsReq
             detail="Ratings may only reference agents who posted in the session",
         )
 
+    report_block_survey = None
+    if payload.report_block_survey is not None:
+        survey = payload.report_block_survey
+        if len(survey.reported_message_ids) > 20:
+            raise HTTPException(status_code=422, detail="Too many reported message references")
+        if len(survey.reported_examples) > 2:
+            raise HTTPException(status_code=422, detail="Too many reported message examples")
+        if len(survey.blocked_agent_names) > 20:
+            raise HTTPException(status_code=422, detail="Too many blocked agent references")
+
+        valid_message_ids = {str(message["message_id"]) for message in messages}
+        reported_ids = [mid.strip() for mid in survey.reported_message_ids if mid.strip()]
+        if any(mid not in valid_message_ids for mid in reported_ids):
+            raise HTTPException(status_code=422, detail="Reported message reference not found")
+
+        normalized_examples = []
+        for example in survey.reported_examples:
+            message_id = example.message_id.strip()
+            if message_id and message_id not in valid_message_ids:
+                raise HTTPException(status_code=422, detail="Reported example reference not found")
+            normalized_examples.append({
+                "message_id": message_id,
+                "sender": example.sender.strip()[:100],
+                "content": example.content.strip()[:500],
+            })
+
+        report_block_survey = {
+            "reported_message_ids": reported_ids,
+            "reported_examples": normalized_examples,
+            "report_reasons": [reason.strip()[:200] for reason in survey.report_reasons if reason.strip()],
+            "report_other": (survey.report_other or "").strip()[:1000] or None,
+            "tempted_to_report": survey.tempted_to_report,
+            "blocked_agent_names": [name.strip()[:100] for name in survey.blocked_agent_names if name.strip()],
+            "block_reasons": [reason.strip()[:200] for reason in survey.block_reasons if reason.strip()],
+            "block_other": (survey.block_other or "").strip()[:1000] or None,
+            "tempted_to_block": survey.tempted_to_block,
+        }
+
     existing = await event_repo.get_session_events(
         pool,
         session_id,
@@ -889,6 +947,7 @@ async def submit_agent_impressions(session_id: str, payload: AgentImpressionsReq
             "skipped": len(normalized) == 0,
             "scale_min": 1,
             "scale_max": 5,
+            "report_block_survey": report_block_survey,
         },
     )
     return Response(status_code=204)
@@ -1209,17 +1268,20 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
         raise HTTPException(status_code=400, detail="Participants cannot report their own messages")
 
     user_id = PARTICIPANT_IDENTITY
-    if message.reported:
-        result = "reported"
-    else:
-        result = message.toggle_report()
+    wants_report = payload.report is not False
+    result = "not_reported"
+    if wants_report:
+        if message.reported:
+            result = "reported"
+        else:
+            result = message.toggle_report()
 
-    # Persist reported flag.
-    try:
-        pool = _get_pool()
-        await message_repo.update_message_reported(pool, message_id, message.reported)
-    except Exception as exc:
-        session.logger.log_error("persist_report", str(exc))
+        # Persist reported flag.
+        try:
+            pool = _get_pool()
+            await message_repo.update_message_reported(pool, message_id, message.reported)
+        except Exception as exc:
+            session.logger.log_error("persist_report", str(exc))
 
     blocked = None
     replacement_agent = None
@@ -1250,27 +1312,29 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
         })
         blocked = dict(session.state.blocked_agents)
 
-    session.logger.log_event("message_report", {
-        "message_id": message_id,
-        "user": user_id,
-        "action": result,
-        "blocked": blocked,
-        "replacement_agent": replacement_agent,
-        "reason": payload.reason,
-    })
+    if wants_report:
+        session.logger.log_event("message_report", {
+            "message_id": message_id,
+            "user": user_id,
+            "action": result,
+            "blocked": blocked,
+            "replacement_agent": replacement_agent,
+            "reason": payload.reason,
+        })
 
     # Broadcast via pub/sub.
     try:
         r = redis_client.get_redis()
-        await redis_client.publish_event(r, session_id, {
-            "event_type": "message_report",
-            "session_id": session_id,
-            "message_id": message_id,
-            "action": result,
-            "user": user_id,
-            "reported": message.reported,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        if wants_report:
+            await redis_client.publish_event(r, session_id, {
+                "event_type": "message_report",
+                "session_id": session_id,
+                "message_id": message_id,
+                "action": result,
+                "user": user_id,
+                "reported": message.reported,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            })
         if blocked is not None:
             await redis_client.publish_event(r, session_id, {
                 "event_type": "user_block",
@@ -2213,6 +2277,7 @@ async def admin_safety_review(
 
 
 class SafetyPolicyRequest(BaseModel):
+    enabled: Optional[bool] = None
     categories: List[Dict[str, Any]]
     context_mode: Literal["none", "conditional", "always"]
 
@@ -2262,6 +2327,8 @@ async def admin_safety_policy_put(
     safety = await _safety_block(pool, experiment_id)
     if safety.get("locked"):
         raise HTTPException(status_code=409, detail="Screening policy is locked")
+    if body.enabled is not None:
+        safety["enabled"] = body.enabled
     cats = []
     for c in body.categories:
         cats.append({

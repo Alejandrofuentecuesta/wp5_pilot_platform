@@ -107,3 +107,19 @@ class TestReportOneWay:
             if call.args and call.args[0] == "user_block"
         ]
         assert block_events and block_events[0][1]["by"] == "participant"
+    def test_block_without_report_does_not_mark_message_reported(self, client):
+        session, message = _fake_session()
+        with _patched(session):
+            response = client.post(
+                f"/session/{SESSION_ID}/message/{message.message_id}/report",
+                json={"block": True, "report": False},
+            )
+        assert response.status_code == 200
+        assert message.reported is False
+        assert response.json()["message"]["reported"] is False
+        assert "Lucía" in session.state.blocked_agents
+        report_events = [
+            call.args for call in session.logger.log_event.call_args_list
+            if call.args and call.args[0] == "message_report"
+        ]
+        assert report_events == []

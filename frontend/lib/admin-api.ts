@@ -590,7 +590,7 @@ export async function getSafetyPolicy(key: string, experimentId: string): Promis
 export async function saveSafetyPolicy(
   key: string,
   experimentId: string,
-  body: { context_mode: SafetyPolicy["context_mode"]; categories: { code: string; title: string; enabled: boolean; definition?: string }[] },
+  body: { enabled?: boolean; context_mode: SafetyPolicy["context_mode"]; categories: { code: string; title: string; enabled: boolean; definition?: string }[] },
 ): Promise<SafetyPolicy> {
   const res = await adminFetch(`/admin/safety/policy/${encodeURIComponent(experimentId)}`, key, {
     method: "PUT",

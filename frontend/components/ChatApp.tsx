@@ -51,6 +51,9 @@ export default function ChatApp() {
     return (
       <AgentImpressionSurvey
         agentNames={chat.sessionAgentNames}
+        reportedMessages={chat.finalReportedMessageExamples}
+        reportedMessageIds={chat.finalReportedMessageIds}
+        blockedAgentNames={chat.finalBlockedAgentNames}
         submitting={chat.agentImpressionsSubmitting}
         error={chat.agentImpressionsError}
         onSubmit={chat.submitAgentImpressions}

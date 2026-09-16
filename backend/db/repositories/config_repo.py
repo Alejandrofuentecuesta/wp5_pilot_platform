@@ -316,7 +316,7 @@ def validate_safety_config(raw: Any) -> Dict[str, Any]:
                 raise ValueError("'definition' of a safety category must be a string")
             if "enabled" in c and not isinstance(c["enabled"], bool):
                 raise ValueError("'enabled' of a safety category must be a boolean")
-        if not any(c.get("enabled", True) for c in cats):
+        if out["enabled"] and not any(c.get("enabled", True) for c in cats):
             raise ValueError("at least one safety category must be enabled")
     if "num_ctx" in out:
         try:

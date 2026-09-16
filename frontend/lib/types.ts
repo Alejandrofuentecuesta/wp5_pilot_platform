@@ -84,6 +84,24 @@ export interface AgentImpression {
   comment: string | null
 }
 
+export interface ReportBlockExample {
+  message_id: string
+  sender: string
+  content: string
+}
+
+export interface FinalReportBlockSurvey {
+  reported_message_ids: string[]
+  reported_examples: ReportBlockExample[]
+  report_reasons: string[]
+  report_other: string | null
+  tempted_to_report: boolean | null
+  blocked_agent_names: string[]
+  block_reasons: string[]
+  block_other: string | null
+  tempted_to_block: boolean | null
+}
+
 export interface QueueJoinResponse {
   position: number
   estimated_wait_minutes: number

@@ -181,8 +181,10 @@ class TestSafetyConfigValidation:
             validate_safety_config({"context_mode": "sometimes"})
         with pytest.raises(ValueError):
             validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": "yes"}]})
+        out = validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": False}]})
+        assert out["enabled"] is False
         with pytest.raises(ValueError):
-            validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": False}]})
+            validate_safety_config({"enabled": True, "categories": [{"code": "S1", "title": "x", "enabled": False}]})
         out = validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": True}]})
         assert out["context_mode"] == "conditional"
 

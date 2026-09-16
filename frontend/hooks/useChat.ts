@@ -24,6 +24,8 @@ import type {
   ParticipantStance,
   SessionIntakeResponse,
   AgentImpression,
+  FinalReportBlockSurvey,
+  ReportBlockExample,
   EmotionRating,
 } from "@/lib/types"
 
@@ -113,6 +115,37 @@ export function useChat() {
     [messages],
   )
 
+  const finalReportedMessages = useMemo(() => {
+    const byId = new Map<string, Message>()
+    for (const message of messages) {
+      const isSelfMessage = message.sender === username || message.sender === PARTICIPANT_SENDER
+      const isSystemMessage = message.sender.startsWith("[") || message.msg_type === "news_article"
+      if (!isSelfMessage && !isSystemMessage && message.reported) {
+        byId.set(message.message_id, message)
+      }
+    }
+    return [...byId.values()]
+  }, [messages, username])
+
+  const finalReportedMessageExamples = useMemo<ReportBlockExample[]>(
+    () =>
+      finalReportedMessages.slice(0, 2).map((message) => ({
+        message_id: message.message_id,
+        sender: message.sender,
+        content: message.content,
+      })),
+    [finalReportedMessages],
+  )
+
+  const finalReportedMessageIds = useMemo(
+    () => finalReportedMessages.map((message) => message.message_id),
+    [finalReportedMessages],
+  )
+
+  const finalBlockedAgentNames = useMemo(
+    () => Object.keys(blockedSenders),
+    [blockedSenders],
+  )
   // Derived: detected mentions from current input
   const detectedMentions = useMemo(
     () => detectMentions(inputValue, participants),
@@ -545,17 +578,27 @@ export function useChat() {
   }, [send])
 
   const submitAgentImpressions = useCallback(
-    async (ratings: AgentImpression[]) => {
+    async (ratings: AgentImpression[], finalReportBlockSurvey: FinalReportBlockSurvey) => {
       if (!sessionId) return
       setAgentImpressionsSubmitting(true)
       setAgentImpressionsError(null)
       try {
+        const mappedSurvey: FinalReportBlockSurvey = {
+          ...finalReportBlockSurvey,
+          report_other: finalReportBlockSurvey.report_other
+            ? mapperRef.current.outbound(finalReportBlockSurvey.report_other)
+            : null,
+          block_other: finalReportBlockSurvey.block_other
+            ? mapperRef.current.outbound(finalReportBlockSurvey.block_other)
+            : null,
+        }
         await apiSubmitAgentImpressions(
           sessionId,
           ratings.map((r) => ({
             ...r,
             comment: r.comment ? mapperRef.current.outbound(r.comment) : r.comment,
           })),
+          mappedSurvey,
         )
         setAgentImpressionSurveyOpen(false)
         // The comments above were the last thing that needed the outbound
@@ -632,16 +675,14 @@ export function useChat() {
   }
 
   // Report or block a message sender (with optimistic update + rollback).
-  // Both the report dialog and the participant options menu share this path,
-  // so blocking always keeps the existing backend event and replacement flow.
-  const reportOrBlock = async (target: Message, block: boolean) => {
+  const reportOrBlock = async (target: Message, report: boolean, block: boolean) => {
     if (!sessionId || reporting) return
     setReporting(true)
     const uid = PARTICIPANT_SENDER
     const messageId = target.message_id
     const sender = target.sender
 
-    // Prevent reporting yourself
+    // Prevent reporting or blocking yourself.
     if (sender === uid || sender === username) {
       setReporting(false)
       setReportModalOpen(false)
@@ -651,12 +692,13 @@ export function useChat() {
 
     const prevReported = target.reported || false
 
-    // Optimistic update
-    setMessages((prev) =>
-      prev.map((mm) =>
-        mm.message_id === messageId ? { ...mm, reported: true } : mm,
-      ),
-    )
+    if (report) {
+      setMessages((prev) =>
+        prev.map((mm) =>
+          mm.message_id === messageId ? { ...mm, reported: true } : mm,
+        ),
+      )
+    }
     if (block) {
       const nowIso = new Date().toISOString()
       setBlockedSenders((prev) => {
@@ -666,34 +708,36 @@ export function useChat() {
     }
 
     // The server may briefly wait for an in-flight agent turn before replacing
-    // a blocked identity. The report and block are already reflected
-    // optimistically, so close the modal now instead of leaving it disabled
-    // until that background work finishes.
+    // a blocked identity. The action is already reflected optimistically, so
+    // close the modal now instead of leaving it disabled during that work.
     setReportModalOpen(false)
     setReportTarget(null)
 
     try {
-      const data = await apiReportMessage(sessionId, messageId, block)
+      const data = await apiReportMessage(sessionId, messageId, { report, block })
       const serverMsg = data.message
-      setMessages((prev) =>
-        prev.map((mm) =>
-          mm.message_id === serverMsg.message_id
-            ? { ...mm, reported: serverMsg.reported }
-            : mm,
-        ),
-      )
+      if (report) {
+        setMessages((prev) =>
+          prev.map((mm) =>
+            mm.message_id === serverMsg.message_id
+              ? { ...mm, reported: serverMsg.reported }
+              : mm,
+          ),
+        )
+      }
       if (data.blocked && typeof data.blocked === "object") {
         setBlockedSenders(data.blocked)
       }
     } catch {
-      // Revert
-      setMessages((prev) =>
-        prev.map((mm) =>
-          mm.message_id === messageId
-            ? { ...mm, reported: prevReported }
-            : mm,
-        ),
-      )
+      if (report) {
+        setMessages((prev) =>
+          prev.map((mm) =>
+            mm.message_id === messageId
+              ? { ...mm, reported: prevReported }
+              : mm,
+          ),
+        )
+      }
       if (block) {
         setBlockedSenders((prev) => {
           const next = { ...prev }
@@ -708,13 +752,12 @@ export function useChat() {
 
   const performReport = async (block: boolean) => {
     if (!reportTarget) return
-    await reportOrBlock(reportTarget, block)
+    await reportOrBlock(reportTarget, true, block)
   }
 
   const blockUser = async (message: Message) => {
-    await reportOrBlock(message, true)
+    await reportOrBlock(message, false, true)
   }
-
   // Filtered messages (respecting blocked senders)
   const visibleMessages = useMemo(() => {
     return messages.filter((msg) => {
@@ -746,6 +789,9 @@ export function useChat() {
     // Messages
     visibleMessages,
     participants,
+    finalReportedMessageExamples,
+    finalReportedMessageIds,
+    finalBlockedAgentNames,
     // Input
     inputValue,
     setInputValue: handleInputChange,

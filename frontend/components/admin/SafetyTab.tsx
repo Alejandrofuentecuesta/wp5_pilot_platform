@@ -395,7 +395,7 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
 
   if (!policy || !draft) return null
 
-  const dirty = JSON.stringify(draft.categories) !== JSON.stringify(policy.categories) || draft.context_mode !== policy.context_mode
+  const dirty = draft.enabled !== policy.enabled || JSON.stringify(draft.categories) !== JSON.stringify(policy.categories) || draft.context_mode !== policy.context_mode
   const enabledCount = draft.categories.filter((c) => c.enabled).length
 
   const setCat = (code: string, patch: Partial<SafetyPolicyCategory>) =>
@@ -406,6 +406,7 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
     setMsg(null)
     try {
       const p = await saveSafetyPolicy(adminKey, experimentId, {
+        enabled: draft.enabled,
         context_mode: draft.context_mode,
         categories: draft.categories.map((c) => ({
           code: c.code,
@@ -449,6 +450,32 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
               This policy is locked for fieldwork. Changes require unlocking through the API.
             </p>
           )}
+
+          <div className={`rounded-lg border px-3 py-3 ${draft.enabled ? "border-admin-pastel-green bg-admin-pastel-green/20" : "border-admin-danger bg-admin-danger-soft/40"}`}>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-admin-text">
+                  LlamaGuard screening is {draft.enabled ? "enabled" : "disabled"}
+                </div>
+                <p className="mt-1 text-xs text-admin-muted">
+                  {draft.enabled
+                    ? "Agent messages are screened before reaching participants. If the model is unavailable, agent turns may be withheld."
+                    : "Agent messages are not screened by LlamaGuard. Use this when the safety model is unavailable or for local tests."}
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={policy.locked || saving}
+                onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}
+                className={`shrink-0 rounded px-3 py-1 text-xs font-medium text-white disabled:opacity-40 ${draft.enabled ? "bg-admin-danger" : "bg-admin-accent"}`}
+              >
+                {draft.enabled ? "Disable LlamaGuard" : "Enable LlamaGuard"}
+              </button>
+            </div>
+            <p className="mt-2 text-[11px] text-admin-faint">
+              This applies to sessions started after saving; live sessions keep the policy they started with.
+            </p>
+          </div>
 
           <div>
             <label className="block text-xs font-medium text-admin-text mb-1">Participant context</label>
@@ -501,7 +528,7 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
 
           <div className="flex items-center gap-2">
             <button
-              disabled={policy.locked || !dirty || saving || enabledCount === 0}
+              disabled={policy.locked || !dirty || saving || (draft.enabled && enabledCount === 0)}
               onClick={save}
               className="px-3 py-1 rounded text-xs font-medium bg-admin-accent text-white disabled:opacity-40"
             >

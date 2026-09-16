@@ -467,7 +467,11 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
                 type="button"
                 disabled={policy.locked || saving}
                 onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}
-                className={`shrink-0 rounded px-3 py-1 text-xs font-medium text-white disabled:opacity-40 ${draft.enabled ? "bg-admin-danger" : "bg-admin-accent"}`}
+                className={`shrink-0 rounded border px-3 py-1 text-xs font-medium shadow-sm disabled:opacity-40 ${
+                  draft.enabled
+                    ? "border-red-700 bg-red-600 text-white hover:bg-red-700"
+                    : "border-admin-accent bg-admin-accent text-white hover:bg-admin-accent-hover"
+                }`}
               >
                 {draft.enabled ? "Disable LlamaGuard" : "Enable LlamaGuard"}
               </button>

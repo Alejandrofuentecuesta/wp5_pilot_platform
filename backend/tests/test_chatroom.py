@@ -841,7 +841,7 @@ class TestDetachWebSocket:
 class TestHandleEmotionsCheckupResponse:
 
     @pytest.mark.asyncio
-    async def test_emotions_checkup_logs_event_with_reported_users(self):
+    async def test_emotions_checkup_logs_event_with_explanation(self):
         with _patch_externals():
             session, _ = _create_session()
             session.running = True
@@ -851,8 +851,7 @@ class TestHandleEmotionsCheckupResponse:
                         {"emotion": "Otra: frustrado/a", "intensity": 4},
                         {"emotion": "Enfado", "intensity": 2},
                     ],
-                    "tempted_to_report": True,
-                    "reported_users": ["Carlos", "Lucia"],
+                    "emotion_explanation": "Me ha molestado el tono de la conversación.",
                 })
                 mock_log.assert_called_once_with(
                     "emotions_checkup_response",
@@ -861,7 +860,6 @@ class TestHandleEmotionsCheckupResponse:
                             {"emotion": "Otra: frustrado/a", "intensity": 4},
                             {"emotion": "Enfado", "intensity": 2},
                         ],
-                        "tempted_to_report": True,
-                        "reported_users": ["Carlos", "Lucia"],
+                        "emotion_explanation": "Me ha molestado el tono de la conversación.",
                     }
                 )

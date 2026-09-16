@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 
 const MAX_CUSTOM_EMOTION_LENGTH = 300
+const MAX_EXPLANATION_LENGTH = 1000
 
 interface EmotionRating {
   emotion: string
@@ -10,18 +11,16 @@ interface EmotionRating {
 }
 
 interface EmotionsCheckupModalProps {
-  onSubmit: (emotions: EmotionRating[], temptedToReport: boolean, reportedUsers?: string[]) => void
-  participants: string[]
+  onSubmit: (emotions: EmotionRating[], explanation: string) => void
 }
 
 const INTENSITY_SCALE = [1, 2, 3, 4, 5]
 
-export default function EmotionsCheckupModal({ onSubmit, participants }: EmotionsCheckupModalProps) {
+export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalProps) {
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>([])
   const [intensities, setIntensities] = useState<Record<string, number>>({})
-  const [selectedTempted, setSelectedTempted] = useState<boolean | null>(null)
   const [customEmotion, setCustomEmotion] = useState<string>("")
-  const [selectedReportedUsers, setSelectedReportedUsers] = useState<string[]>([])
+  const [explanation, setExplanation] = useState<string>("")
   const modalRef = useRef<HTMLDivElement>(null)
 
   const toggleEmotion = (value: string) => {
@@ -39,10 +38,10 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
 
   const emotions = [
     { value: "Enfadado/a", label: "Enfadado/a", emoji: "😡" },
-    { value: "contento/a", label: "Contento/a", emoji: "😊" },
+    { value: "Contento/a", label: "Contento/a", emoji: "😊" },
     { value: "Triste", label: "Triste", emoji: "😢" },
     { value: "Aburrido/a", label: "Aburrido/a", emoji: "🥱" },
-    { value: "asustado/a", label: "Asustado/a", emoji: "😨" },
+    { value: "Asustado/a", label: "Asustado/a", emoji: "😨" },
     { value: "Otra", label: "Otra", emoji: "💭" },
   ]
 
@@ -52,11 +51,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
         emotion: value === "Otra" ? `Otra: ${customEmotion.trim()}` : value,
         intensity: intensities[value],
       }))
-      onSubmit(
-        finalEmotions,
-        selectedTempted!,
-        selectedTempted ? selectedReportedUsers : undefined
-      )
+      onSubmit(finalEmotions, explanation.trim())
     }
   }
 
@@ -64,8 +59,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
     selectedEmotions.length > 0 &&
     selectedEmotions.every((value) => intensities[value] !== undefined) &&
     (!selectedEmotions.includes("Otra") || customEmotion.trim().length > 0) &&
-    selectedTempted !== null &&
-    (selectedTempted === false || selectedReportedUsers.length > 0 || participants.length === 0)
+    explanation.trim().length > 0
 
   return (
     <div
@@ -179,73 +173,25 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
             )}
           </div>
 
-          {/* Question 2: Tempted to report? */}
-          <div className="space-y-3">
-            <label className="block text-sm font-semibold text-primary">
-              2. ¿Has tenido la tentación de reportar a algún usuario de la plataforma?
-            </label>
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 sm:gap-3">
-              <button
-                type="button"
-                onClick={() => setSelectedTempted(true)}
-                className={`p-3 rounded-xl border text-sm font-medium transition-all text-center ${
-                  selectedTempted === true
-                    ? "border-accent bg-accent-soft text-accent ring-2 ring-accent/30"
-                    : "border-border text-secondary hover:border-accent-hover hover:bg-bg-feed"
-                }`}
-              >
-                Sí, lo he pensado
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedTempted(false)}
-                className={`p-3 rounded-xl border text-sm font-medium transition-all text-center ${
-                  selectedTempted === false
-                    ? "border-accent bg-accent-soft text-accent ring-2 ring-accent/30"
-                    : "border-border text-secondary hover:border-accent-hover hover:bg-bg-feed"
-                }`}
-              >
-                No, en absoluto
-              </button>
+          {/* Question 2: Open explanation */}
+          {selectedEmotions.length > 0 && (
+            <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
+              <label className="block text-sm font-semibold text-primary">
+                2. ¿Por qué te sientes así?
+              </label>
+              <textarea
+                value={explanation}
+                onChange={(e) => setExplanation(e.target.value)}
+                placeholder="Puedes explicar brevemente qué te ha hecho sentir así durante la conversación."
+                rows={4}
+                className="w-full min-h-28 resize-y px-3 py-2 text-sm leading-relaxed rounded-xl border border-border focus:border-accent focus:ring-1 focus:ring-accent/20 outline-none"
+                maxLength={MAX_EXPLANATION_LENGTH}
+              />
+              <p className="text-right text-xs text-secondary" aria-live="polite">
+                {explanation.length}/{MAX_EXPLANATION_LENGTH} caracteres
+              </p>
             </div>
-
-            {selectedTempted === true && (
-              <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-1 duration-150">
-                <label className="block text-xs font-semibold text-secondary">
-                  ¿A quién? (Puedes seleccionar varios)
-                </label>
-                {participants.length === 0 ? (
-                  <p className="text-xs text-secondary italic">No hay otros participantes en la sesión todavía.</p>
-                ) : (
-                  <div className="max-h-40 overflow-y-auto border border-border rounded-xl p-3 space-y-2 bg-bg-surface">
-                    {participants.map((name) => {
-                      const isChecked = selectedReportedUsers.includes(name)
-                      return (
-                        <label
-                          key={name}
-                          className="flex items-center gap-2 text-sm font-medium text-primary cursor-pointer select-none"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={() => {
-                              setSelectedReportedUsers((prev) =>
-                                isChecked
-                                  ? prev.filter((n) => n !== name)
-                                  : [...prev, name]
-                              )
-                            }}
-                            className="rounded border-border text-accent focus:ring-accent w-4 h-4"
-                          />
-                          <span>{name}</span>
-                        </label>
-                      )
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Reminder box */}
           <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-bg-feed p-3 sm:p-4">
@@ -265,7 +211,7 @@ export default function EmotionsCheckupModal({ onSubmit, participants }: Emotion
               />
             </svg>
             <p className="text-xs leading-relaxed text-secondary">
-              <strong>Recordatorio:</strong> Si consideras inapropiado o molesto algún comentario, puedes reportarlo o bloquear al usuario directamente usando el botón <strong>&quot;Report&quot;</strong> que aparece debajo de su mensaje.
+              <strong>Recordatorio:</strong> Si consideras inapropiado o molesto algún comentario, puedes reportarlo o bloquear al usuario directamente usando los botones que aparecen debajo de cada mensaje.
             </p>
           </div>
         </div>

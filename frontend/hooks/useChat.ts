@@ -549,17 +549,16 @@ export function useChat() {
     setNewsArticleModalOpen(true)
   }, [])
 
-  const submitEmotionsCheckup = useCallback((emotions: EmotionRating[], temptedToReport: boolean, reportedUsers?: string[]) => {
+  const submitEmotionsCheckup = useCallback((emotions: EmotionRating[], explanation: string) => {
     send({
       type: "emotions_checkup_response",
-      // The free-text "other" emotion can contain the participant's own
+      // The free-text "other" emotion and explanation can contain the participant's own
       // name; predefined labels pass through the mapper unchanged.
       emotions: emotions.map((e) => ({
         ...e,
         emotion: mapperRef.current.outbound(e.emotion),
       })),
-      tempted_to_report: temptedToReport,
-      reported_users: reportedUsers,
+      emotion_explanation: mapperRef.current.outbound(explanation),
     } as any)
     setEmotionsCheckupOpen(false)
   }, [send])

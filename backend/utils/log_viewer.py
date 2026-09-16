@@ -834,18 +834,8 @@ def render_emotions_checkup_response(ev: dict) -> str:
     else:
         # Legacy single-emotion format from before multi-select + intensity was added.
         emotion = _esc(data.get("emotion", "?"))
-    tempted = "Sí" if data.get("tempted_to_report") else "No"
-    reported_users = data.get("reported_users")
-    
-    tempted_str = tempted
-    if data.get("tempted_to_report") and reported_users:
-        if isinstance(reported_users, list):
-            escaped_users = ", ".join(_esc(u) for u in reported_users)
-        else:
-            escaped_users = _esc(str(reported_users))
-        if escaped_users:
-            tempted_str += f" (a {escaped_users})"
-    
+    explanation = _esc(data.get("emotion_explanation") or "")
+
     return f"""\
 <div class="event ev-emotions_checkup_response">
   <div class="event-card" style="border-left: 4px solid var(--orange);">
@@ -855,7 +845,7 @@ def render_emotions_checkup_response(ev: dict) -> str:
     </div>
     <div style="font-size: 0.9rem; line-height: 1.5; margin-top: 0.5rem; color: var(--text);">
       <div><strong>¿Cómo te sientes en este momento?</strong> {emotion}</div>
-      <div style="margin-top: 0.25rem;"><strong>¿Has tenido la tentación de reportar a algún usuario de la plataforma?</strong> {tempted_str}</div>
+      <div style="margin-top: 0.25rem;"><strong>¿Por qué te sientes así?</strong> {explanation}</div>
     </div>
   </div>
 </div>"""

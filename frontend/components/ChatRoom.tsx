@@ -46,7 +46,7 @@ interface ChatRoomProps {
   submitInitialNewsMessage?: (initialMessage: string) => void
   participantStance: ParticipantStance | null
   emotionsCheckupOpen: boolean
-  onSubmitEmotionsCheckup: (emotions: EmotionRating[], tempted: boolean, reportedUsers?: string[]) => void
+  onSubmitEmotionsCheckup: (emotions: EmotionRating[], explanation: string) => void
   exitModalOpen: boolean
   openExitModal: () => void
   setExitModalOpen: (open: boolean) => void
@@ -162,7 +162,6 @@ export default function ChatRoom({
       {emotionsCheckupOpen && (
         <EmotionsCheckupModal
           onSubmit={onSubmitEmotionsCheckup}
-          participants={participants.filter((p) => p !== displayName)}
         />
       )}
 

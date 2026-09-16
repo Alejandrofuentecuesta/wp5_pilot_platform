@@ -1332,13 +1332,11 @@ class SimulationSession:
         if not self.running:
             return
         emotions = data.get("emotions")
-        tempted = bool(data.get("tempted_to_report", False))
-        reported_users = data.get("reported_users")
+        explanation = str(data.get("emotion_explanation") or "").strip()[:1000]
 
         self.logger.log_event("emotions_checkup_response", {
             "emotions": emotions,
-            "tempted_to_report": tempted,
-            "reported_users": reported_users,
+            "emotion_explanation": explanation,
         })
 
     # ── User message handling ─────────────────────────────────────────────────

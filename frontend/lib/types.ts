@@ -44,8 +44,7 @@ export interface EmotionRating {
 export interface EmotionsCheckupResponsePayload {
   type: "emotions_checkup_response"
   emotions: EmotionRating[]
-  tempted_to_report: boolean
-  reported_users?: string[]
+  emotion_explanation: string
 }
 
 export type UserMessagePayload =

@@ -46,6 +46,26 @@ DEFAULT_CATEGORIES: List[Category] = [
     Category("S14", "Code Interpreter Abuse"),
 ]
 
+# Political hostility, stereotypes and slurs are deliberate stimuli in this
+# experiment. Generic Hate, Defamation and Elections categories would mostly
+# create review work for intended content. Keep S10 only as the narrower
+# boundary already imposed on the Director and Performer: explicit
+# dehumanization. The remaining categories cover harms outside the treatment.
+_EXPLICIT_DEHUMANIZATION = Category(
+    "S10",
+    "Explicit Dehumanization",
+    "Classify as S10 only when the agent explicitly portrays an identity-based group "
+    "as non-human animals, vermin, disease, objects, or inherently less than human. "
+    "Do not classify political hostility, insults, slurs, derogatory labels, stereotypes, "
+    "prejudice, discriminatory generalizations, or terms such as moro, facha, progre, "
+    "zurdo or mena on their own; those are permitted experimental incivility.",
+)
+EXPERIMENT_DEFAULT_CATEGORIES: List[Category] = [
+    _EXPLICIT_DEHUMANIZATION if c.code == "S10" else c
+    for c in DEFAULT_CATEGORIES
+    if c.code not in {"S5", "S13"}
+]
+
 # Human-readable names for the dashboard (the model card's long titles).
 CATEGORY_NAMES = {
     "S1": "Violent Crimes",
@@ -73,15 +93,17 @@ NEUTRAL_USER_TURN = "(no participant message)"
 def full_policy(raw: Optional[Sequence[dict]]) -> List[dict]:
     """All 14 categories with their enabled flag and description, for the admin panel."""
     by_code = {str(e.get("code", "")).strip(): e for e in (raw or [])}
+    experiment_defaults = {c.code: c for c in EXPERIMENT_DEFAULT_CATEGORIES}
     rows = []
     for c in DEFAULT_CATEGORIES:
         e = by_code.get(c.code, {})
+        default = experiment_defaults.get(c.code)
         rows.append({
             "code": c.code,
-            "title": c.title,
+            "title": e.get("title") or (default.title if default else c.title),
             "name": CATEGORY_NAMES.get(c.code, c.title),
-            "enabled": bool(e.get("enabled", True)) if raw else True,
-            "definition": e.get("definition") or "",
+            "enabled": bool(e.get("enabled", True)) if raw else default is not None,
+            "definition": e.get("definition") or (default.definition if default else "") or "",
         })
     if raw:
         # Codes omitted from a saved policy count as disabled.
@@ -99,7 +121,7 @@ def categories_from_config(raw: Optional[Sequence[dict]]) -> List[Category]:
     the model can neither see nor return that code.
     """
     if not raw:
-        return list(DEFAULT_CATEGORIES)
+        return list(EXPERIMENT_DEFAULT_CATEGORIES)
     out: List[Category] = []
     for entry in raw:
         if entry.get("enabled", True) is False:

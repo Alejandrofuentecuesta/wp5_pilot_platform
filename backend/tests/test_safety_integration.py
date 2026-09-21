@@ -7,6 +7,7 @@ not lift it, resume credits time, end returns r=2).
 """
 from __future__ import annotations
 
+import asyncio
 import copy
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -98,6 +99,69 @@ class TestAgentManagerGate:
             redis.push_to_window = AsyncMock()
             await am._handle_message(TurnResult(action_type="message", agent_name="Alice", message=msg))
         assert msg in state.messages
+
+    async def test_unreviewed_withheld_turn_is_auto_released_after_timeout(self):
+        state = _make_state()
+        am = AgentManager(
+            state=state,
+            orchestrator=MagicMock(),
+            logger=MagicMock(),
+            session_id="s",
+            experiment_id="e",
+            session_active=lambda: True,
+            hold_active=lambda: False,
+            turn_lock=asyncio.Lock(),
+        )
+        am._handle_message = AsyncMock()
+        original = Message.create(sender="Alice", content="held")
+        outcome = ScreenOutcome(
+            publish=False,
+            verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
+            user_turn="",
+            flag_id="f1",
+        )
+        with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()) as sleep, \
+             patch("agents.agent_manager.db_conn.get_pool", return_value=MagicMock()), \
+             patch("agents.agent_manager.safety_repo.claim_flag_for_auto_release", new=AsyncMock(return_value=True)) as claim, \
+             patch("agents.agent_manager.safety_repo.set_message_safety_verdict", new=AsyncMock()) as set_verdict, \
+             patch("agents.agent_manager.safety_repo.mark_flag_published", new=AsyncMock()) as mark:
+            await am._auto_release_withheld(original, outcome)
+
+        sleep.assert_awaited_once_with(60)
+        claim.assert_awaited_once()
+        am._handle_message.assert_awaited_once()
+        assert am._handle_message.call_args.kwargs["skip_safety"] is True
+        released = am._handle_message.call_args.args[0].message
+        assert released.content == "held"
+        assert released.metadata["safety_review_override"]["reviewed_by"] == "automatic_timeout"
+        set_verdict.assert_awaited_once()
+        mark.assert_awaited_once()
+
+    async def test_human_review_wins_auto_release_race(self):
+        am = AgentManager(
+            state=_make_state(),
+            orchestrator=MagicMock(),
+            logger=MagicMock(),
+            session_id="s",
+            session_active=lambda: True,
+            hold_active=lambda: False,
+            turn_lock=asyncio.Lock(),
+        )
+        am._handle_message = AsyncMock()
+        outcome = ScreenOutcome(
+            publish=False,
+            verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
+            user_turn="",
+            flag_id="f1",
+        )
+        with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()), \
+             patch("agents.agent_manager.db_conn.get_pool", return_value=MagicMock()), \
+             patch("agents.agent_manager.safety_repo.claim_flag_for_auto_release", new=AsyncMock(return_value=False)), \
+             patch("agents.agent_manager.safety_repo.mark_flag_published", new=AsyncMock()) as mark:
+            await am._auto_release_withheld(Message.create(sender="Alice", content="held"), outcome)
+
+        am._handle_message.assert_not_awaited()
+        mark.assert_not_awaited()
 
 
 def _safety_config(enabled=True, **extra):

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import {
   getSafetyPolicy,
   getSafetySummary,
+  downloadReviewedSafetyFlags,
   listSafetyFlags,
   reviewSafetyFlag,
   safetySessionAction,
@@ -21,6 +22,8 @@ import type { SafetyFlag, SafetyPolicy, SafetyPolicyCategory, SafetySummary } fr
 
 const POLL_MS = 5000
 const REVIEWER_KEY = "wp5-safety-reviewer"
+const EXPERIMENT_DEHUMANIZATION_DEFINITION =
+  "Classify as S10 only when the agent explicitly portrays an identity-based group as non-human animals, vermin, disease, objects, or inherently less than human. Do not classify political hostility, insults, slurs, derogatory labels, stereotypes, prejudice, discriminatory generalizations, or terms such as moro, facha, progre, zurdo or mena on their own; those are permitted experimental incivility."
 
 type View = "open" | "reviewed"
 
@@ -226,6 +229,7 @@ function FlagRow({
   const [showContext, setShowContext] = useState(false)
   const isParticipant = flag.sender_type === "participant"
   const elapsed = flag.displayed_at ? now - new Date(flag.displayed_at).getTime() : null
+  const autoReleaseRemaining = Math.max(0, 60000 - (now - new Date(flag.created_at).getTime()))
   const paused = !!flag.safety_paused_at
   const canAct = flag.live && !!reviewer
   const canPublishWithheld =
@@ -251,7 +255,9 @@ function FlagRow({
             }`}
             title={elapsed === null ? "Never shown to the participant" : "Time since the participant saw this"}
           >
-            {elapsed === null ? "withheld" : `seen ${fmtElapsed(elapsed)} ago`}
+            {elapsed === null
+              ? `withheld · auto in ${fmtElapsed(autoReleaseRemaining)}`
+              : `seen ${fmtElapsed(elapsed)} ago`}
           </span>
           <button
             className="text-admin-accent hover:underline"
@@ -671,9 +677,34 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
           </div>
 
           <div>
-            <div className="text-xs font-medium text-admin-text mb-1">
-              Categories <span className="text-admin-faint font-normal">({enabledCount}/14 enabled; a disabled category is left out of the prompt entirely)</span>
+            <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+              <div className="text-xs font-medium text-admin-text">
+                Categories <span className="text-admin-faint font-normal">({enabledCount}/14 enabled; a disabled category is left out of the prompt entirely)</span>
+              </div>
+              <button
+                type="button"
+                disabled={policy.locked}
+                onClick={() =>
+                  setDraft({
+                    ...draft,
+                    categories: draft.categories.map((category) => ({
+                      ...category,
+                      enabled: !["S5", "S13"].includes(category.code),
+                      definition:
+                        category.code === "S10"
+                          ? EXPERIMENT_DEHUMANIZATION_DEFINITION
+                          : category.definition,
+                    })),
+                  })
+                }
+                className="rounded border border-admin-border bg-admin-bg px-2.5 py-1 text-[11px] font-medium text-admin-text hover:bg-admin-raised disabled:opacity-40"
+              >
+                Apply experiment safety profile
+              </button>
             </div>
+            <p className="mb-2 text-[11px] text-admin-faint">
+              Excludes Defamation and Elections; narrows Hate to explicit dehumanization so intended political slurs and hostility are not flagged.
+            </p>
             <div className="space-y-1">
               {draft.categories.map((c) => (
                 <div key={c.code} className={`grid grid-cols-[auto_9rem_1fr] gap-2 items-start py-1 ${c.enabled ? "" : "opacity-60"}`}>
@@ -736,6 +767,7 @@ export default function SafetyTab({ adminKey }: { adminKey: string }) {
   const [summary, setSummary] = useState<SafetySummary | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
+  const [exportBusy, setExportBusy] = useState<"json" | "csv" | null>(null)
   const [clockOffset, setClockOffset] = useState(0)
   const knownOpen = useRef<Set<string> | null>(null)
   const now = useNow() + clockOffset
@@ -755,6 +787,25 @@ export default function SafetyTab({ adminKey }: { adminKey: string }) {
       window.localStorage.setItem(REVIEWER_KEY, v)
     } catch {
       /* ignore */
+    }
+  }
+
+  const downloadReviewed = async (format: "json" | "csv") => {
+    setExportBusy(format)
+    try {
+      const { blob, filename } = await downloadReviewedSafetyFlags(adminKey, format)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = filename
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to export reviewed flags")
+    } finally {
+      setExportBusy(null)
     }
   }
 
@@ -834,7 +885,7 @@ export default function SafetyTab({ adminKey }: { adminKey: string }) {
         <div>
           <h2 className="text-sm font-semibold text-admin-text">Safety monitor</h2>
           <p className="text-xs text-admin-muted">
-            Every flagged message needs a named review. Agent rows are grey; participant rows are purple.
+            Withheld agent messages can be reviewed for 60 seconds, then publish automatically if no decision is recorded. Agent rows are grey; participant rows are purple.
           </p>
         </div>
         <ReviewerBar reviewer={reviewer} onChange={saveReviewer} />
@@ -874,6 +925,24 @@ export default function SafetyTab({ adminKey }: { adminKey: string }) {
             >
               Reviewed
             </button>
+            <span className="ml-auto flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => downloadReviewed("json")}
+                disabled={exportBusy !== null}
+                className="rounded border border-admin-border bg-admin-bg px-2.5 py-1 text-admin-text hover:bg-admin-raised disabled:opacity-40"
+              >
+                {exportBusy === "json" ? "Downloading…" : "Download JSON"}
+              </button>
+              <button
+                type="button"
+                onClick={() => downloadReviewed("csv")}
+                disabled={exportBusy !== null}
+                className="rounded border border-admin-border bg-admin-bg px-2.5 py-1 text-admin-text hover:bg-admin-raised disabled:opacity-40"
+              >
+                {exportBusy === "csv" ? "Downloading…" : "Download CSV"}
+              </button>
+            </span>
           </>
         )}
       </div>

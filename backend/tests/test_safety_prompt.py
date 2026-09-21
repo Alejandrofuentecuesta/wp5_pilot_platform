@@ -12,6 +12,7 @@ import pytest
 
 from utils.safety.prompt import (
     DEFAULT_CATEGORIES,
+    EXPERIMENT_DEFAULT_CATEGORIES,
     Category,
     categories_from_config,
     parse_verdict,
@@ -91,8 +92,13 @@ class TestCustomCategories:
         assert "S10: Hate.\nOnly slurs directed at the participant.\n<END UNSAFE" in out
 
     def test_from_config_defaults_when_absent(self):
-        assert categories_from_config(None) == DEFAULT_CATEGORIES
-        assert categories_from_config([]) == DEFAULT_CATEGORIES
+        assert categories_from_config(None) == EXPERIMENT_DEFAULT_CATEGORIES
+        assert categories_from_config([]) == EXPERIMENT_DEFAULT_CATEGORIES
+        by_code = {c.code: c for c in EXPERIMENT_DEFAULT_CATEGORIES}
+        assert "S5" not in by_code
+        assert "S13" not in by_code
+        assert by_code["S10"].title == "Explicit Dehumanization"
+        assert "Do not classify political hostility" in by_code["S10"].definition
 
     def test_disabled_entries_are_omitted(self):
         cats = categories_from_config([
@@ -108,7 +114,12 @@ class TestCustomCategories:
         rows = {r["code"]: r for r in full_policy([{"code": "S10", "title": "Hate", "definition": "d"}])}
         assert rows["S10"]["enabled"] is True and rows["S10"]["definition"] == "d"
         assert rows["S1"]["enabled"] is False
-        assert all(r["enabled"] for r in full_policy(None))
+        defaults = {r["code"]: r for r in full_policy(None)}
+        assert defaults["S5"]["enabled"] is False
+        assert defaults["S13"]["enabled"] is False
+        assert defaults["S10"]["enabled"] is True
+        assert defaults["S10"]["title"] == "Explicit Dehumanization"
+        assert "moro" in defaults["S10"]["definition"]
 
     def test_from_config_requires_code_and_title(self):
         with pytest.raises(ValueError):

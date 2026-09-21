@@ -533,6 +533,9 @@ class SimulationSession:
             experiment_id=experiment_id,
             safety_screen=self.safety_screen,
             hold_active=lambda: self.safety_held,
+            session_active=lambda: self.running,
+            turn_lock=self._turn_lock,
+            task_registry=self._safety_tasks,
         )
 
         # Researcher-initiated hold (Safety tab). Independent of the

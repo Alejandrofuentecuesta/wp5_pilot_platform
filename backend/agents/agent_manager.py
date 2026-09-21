@@ -1,9 +1,11 @@
+import asyncio
 from datetime import datetime, timezone
 
 from agents.STAGE.orchestrator import Orchestrator, TurnResult
 from db import connection as db_conn
-from db.repositories import message_repo
+from db.repositories import message_repo, safety_repo
 from cache import redis_client
+from models.message import Message
 
 
 class AgentManager:
@@ -24,6 +26,9 @@ class AgentManager:
         experiment_id: str = "default",
         safety_screen=None,
         hold_active=None,
+        session_active=None,
+        turn_lock=None,
+        task_registry=None,
     ) -> None:
         self.state = state
         self.orchestrator = orchestrator
@@ -37,6 +42,9 @@ class AgentManager:
         # Callable returning True while a researcher hold is in force. A turn
         # that was already in flight when the hold began must not publish.
         self.hold_active = hold_active
+        self.session_active = session_active
+        self.turn_lock = turn_lock
+        self.task_registry = task_registry
 
     async def _handle_message(self, result: TurnResult, *, skip_safety: bool = False) -> None:
         """Screen, persist and broadcast a generated agent message."""
@@ -52,6 +60,11 @@ class AgentManager:
         if self.safety_screen is not None and not skip_safety:
             outcome = await self.safety_screen.screen_agent(message, self.state)
             if not outcome.publish:
+                if outcome.flag_id:
+                    task = asyncio.create_task(self._auto_release_withheld(message, outcome))
+                    if self.task_registry is not None:
+                        self.task_registry.add(task)
+                        task.add_done_callback(self.task_registry.discard)
                 return
 
         # Add to in-memory state (for context window and message lookup).
@@ -109,6 +122,54 @@ class AgentManager:
             await redis_client.publish_event(r, self.session_id, message.to_dict())
         except Exception as exc:
             self.logger.log_error("publish_agent_message", str(exc))
+
+    async def _auto_release_withheld(self, original: Message, outcome) -> None:
+        """Publish a still-unreviewed held turn after the 60-second review window."""
+        await asyncio.sleep(60)
+        lock = self.turn_lock
+        if lock is None:
+            self.logger.log_error("safety_auto_release", "turn lock unavailable")
+            return
+        async with lock:
+            if self.session_active is not None and not self.session_active():
+                return
+            if self.hold_active is not None and self.hold_active():
+                return
+            try:
+                pool = db_conn.get_pool()
+                claimed = await safety_repo.claim_flag_for_auto_release(pool, outcome.flag_id)
+                if not claimed:
+                    return
+                message = Message.create(
+                    sender=original.sender,
+                    content=original.content,
+                    reply_to=original.reply_to,
+                    quoted_text=original.quoted_text,
+                    mentions=original.mentions,
+                    is_incivil=original.is_incivil,
+                    is_like_minded=original.is_like_minded,
+                    inferred_participant_stance=original.inferred_participant_stance,
+                    classification_rationale=original.classification_rationale,
+                )
+                message.metadata.update(original.metadata or {})
+                message.metadata["safety_review_override"] = {
+                    "flag_id": outcome.flag_id,
+                    "reviewed_by": "automatic_timeout",
+                }
+                await self._handle_message(
+                    TurnResult(action_type="message", agent_name=message.sender, message=message),
+                    skip_safety=True,
+                )
+                await safety_repo.set_message_safety_verdict(pool, message.message_id, outcome.verdict.status)
+                await safety_repo.mark_flag_published(pool, outcome.flag_id, message.message_id, message.timestamp)
+                self.logger.log_event(
+                    "safety_flag_auto_released",
+                    {"flag_id": outcome.flag_id, "message_id": message.message_id, "delay_seconds": 60},
+                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.logger.log_error("safety_auto_release", str(exc))
 
     async def _handle_like(self, result: TurnResult) -> None:
         """Process an agent 'like' action — update DB and broadcast."""

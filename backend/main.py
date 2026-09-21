@@ -2253,6 +2253,48 @@ async def admin_safety_flags(
     return {"flags": flags, "server_time": datetime.now(timezone.utc).isoformat()}
 
 
+@app.get("/admin/safety/flags/export")
+async def admin_safety_flags_export(
+    format: Literal["json", "csv"] = "json",
+    x_admin_key: str = Header(None),
+):
+    """Download every reviewed safety decision, including automatic releases."""
+    _require_admin(x_admin_key)
+    flags = await safety_repo.list_flags(_get_pool(), status="reviewed", limit=100000)
+    for flag in flags:
+        flag["category_names"] = [CATEGORY_NAMES.get(c, c) for c in flag.get("categories", [])]
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    if format == "json":
+        payload = json.dumps(flags, ensure_ascii=False, indent=2, default=str)
+        return Response(
+            content=payload,
+            media_type="application/json; charset=utf-8",
+            headers={"Content-Disposition": f'attachment; filename="safety-reviewed-{stamp}.json"'},
+        )
+
+    columns = [
+        "flag_id", "session_id", "experiment_id", "treatment_group", "user_name",
+        "sender_type", "sender", "content", "context_user_turn", "verdict",
+        "categories", "category_names", "rationale", "model", "unsafe_prob",
+        "latency_ms", "error", "displayed_at", "created_at", "reviewed_at",
+        "reviewed_by", "review_verdict", "review_note", "message_id", "seq",
+        "session_status", "started_at", "ended_at", "end_reason",
+    ]
+    output = io.StringIO()
+    writer = csv.DictWriter(output, fieldnames=columns, extrasaction="ignore")
+    writer.writeheader()
+    for flag in flags:
+        row = dict(flag)
+        row["categories"] = json.dumps(row.get("categories") or [], ensure_ascii=False)
+        row["category_names"] = json.dumps(row.get("category_names") or [], ensure_ascii=False)
+        writer.writerow(row)
+    return Response(
+        content="\ufeff" + output.getvalue(),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="safety-reviewed-{stamp}.csv"'},
+    )
+
+
 @app.post("/admin/safety/flags/{flag_id}/review")
 async def admin_safety_review(
     flag_id: str, body: SafetyReviewRequest, x_admin_key: str = Header(None)

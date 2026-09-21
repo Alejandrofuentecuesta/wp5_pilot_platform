@@ -29,6 +29,7 @@ def admin():
 @pytest.mark.parametrize("method,path", [
     ("get", "/admin/safety/summary"),
     ("get", "/admin/safety/flags"),
+    ("get", "/admin/safety/flags/export?format=json"),
     ("post", "/admin/safety/flags/abc/review"),
     ("post", "/admin/safety/sessions/abc/pause"),
     ("post", "/admin/safety/sessions/abc/resume"),
@@ -57,6 +58,23 @@ class TestFlags:
         assert flag["live"] is True
         assert flag["category_names"] == ["Hate", "Suicide & Self-Harm"]
         assert "server_time" in r.json()
+
+    @pytest.mark.parametrize("format,content_type", [("json", "application/json"), ("csv", "text/csv")])
+    def test_exports_reviewed_flags(self, client, format, content_type):
+        rows = [{
+            "flag_id": "f1", "session_id": "s1", "experiment_id": "e1",
+            "categories": ["S1"], "reviewed_by": "automatic_timeout",
+            "review_verdict": "no_concern", "content": "message",
+        }]
+        with patch.object(main, "_get_pool", return_value=MagicMock()), \
+             patch("main.safety_repo.list_flags", new=AsyncMock(return_value=rows)) as listed:
+            r = client.get(f"/admin/safety/flags/export?format={format}", headers=HDR)
+        assert r.status_code == 200
+        assert r.headers["content-type"].startswith(content_type)
+        assert "attachment" in r.headers["content-disposition"]
+        assert "automatic_timeout" in r.text
+        listed.assert_awaited_once()
+        assert listed.call_args.kwargs["status"] == "reviewed"
 
     def test_review_requires_reviewer_name(self, client):
         with patch.object(main, "_get_pool", return_value=MagicMock()):

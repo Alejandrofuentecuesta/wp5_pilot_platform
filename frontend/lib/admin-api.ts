@@ -547,6 +547,17 @@ export async function listSafetyFlags(
   return res.json()
 }
 
+export async function downloadReviewedSafetyFlags(
+  key: string,
+  format: "json" | "csv",
+): Promise<{ blob: Blob; filename: string }> {
+  const res = await adminFetch(`/admin/safety/flags/export?format=${format}`, key)
+  if (!res.ok) throw new Error(`Failed to export reviewed safety flags as ${format.toUpperCase()}`)
+  const disposition = res.headers.get("Content-Disposition") || ""
+  const filename = disposition.match(/filename="?([^";]+)"?/i)?.[1] || `safety-reviewed.${format}`
+  return { blob: await res.blob(), filename }
+}
+
 export async function reviewSafetyFlag(
   key: string,
   flagId: string,

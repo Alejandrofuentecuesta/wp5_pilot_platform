@@ -1,7 +1,7 @@
 """SafetyScreen policy: publish/withhold decisions and the flags they open.
 
 safe        → publish, verdict on message, no flag
-unsafe      → withheld and flagged for human review
+unsafe S1/S9 → withheld and flagged; other unsafe categories publish and flag
 unavailable → agent turn withheld and flagged (no message_id); participant
               message flagged only
 disabled    → nothing screened, nothing written
@@ -87,25 +87,26 @@ class TestAgentPath:
         repo.set_message_safety_verdict.assert_awaited_once_with(repo.set_message_safety_verdict.call_args[0][0], msg.message_id, "safe")
         repo.insert_flag.assert_not_awaited()
 
-    async def test_unsafe_hate_output_is_withheld_and_flagged(self, repo):
+    async def test_unsafe_hate_output_is_published_and_flagged(self, repo):
         v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10", model="g", prompt_hash="h")
         screen, logger = _screen(FakeClient(v))
         user = Message.create(sender="Paula", content="Los moros fuera")
         msg = Message.create(sender="Carlos", content="Eso, fuera todos")
         out = await screen.screen_agent(msg, _state(user))
-        assert out.publish is False
+        assert out.publish is True
+        await screen.after_publish(msg, out)
         kw = repo.insert_flag.call_args.kwargs
         assert kw["sender_type"] == "agent"
-        assert kw["message_id"] is None
+        assert kw["message_id"] == msg.message_id
         assert kw["verdict"] == "unsafe"
         assert kw["categories"] == ["S10"]
         assert kw["context_user_turn"] == "Los moros fuera"
-        assert kw["displayed_at"] is None
+        assert kw["displayed_at"] is not None
         assert kw["prompt_hash"] == "h"
-        assert logger.log_event.call_args[0][0] == "safety_turn_withheld"
+        assert logger.log_event.call_args[0][0] == "safety_flag_opened"
 
-    @pytest.mark.parametrize("category", ["S1", "S2", "S5", "S9", "S10", "S14"])
-    async def test_any_unsafe_category_is_withheld(self, repo, category):
+    @pytest.mark.parametrize("category", ["S1", "S9"])
+    async def test_violent_or_weapon_output_is_withheld(self, repo, category):
         v = SafetyVerdict(
             status="unsafe",
             categories=[category],

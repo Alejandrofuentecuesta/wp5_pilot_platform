@@ -5,7 +5,8 @@ broadcast, and every participant message passes through ``screen_participant``
 after it is posted. The policy:
 
 * ``safe``        — publish; verdict recorded on the message.
-* ``unsafe``      — agent turns are withheld and flagged for human review.
+* ``unsafe``      — violent/weapons agent turns (S1/S9) are withheld; other
+                    categories are published and flagged for human review.
 * ``unavailable`` — the classifier gave no verdict. An agent turn is withheld
                     (never published) and a flag records the withheld text; a
                     participant message is already in the room, so only a flag
@@ -35,6 +36,13 @@ from utils.safety import (
 )
 
 CONTEXT_MODES = ("none", "conditional", "always")
+# The simulation deliberately studies contentious and sometimes uncivil
+# political speech.  Withholding every Llama Guard category (notably S5/S10
+# and S13) can therefore suppress nearly the whole conversation.  Keep the
+# pre-publication hard block for the two categories that represent immediate
+# violent/weapons risk; all other unsafe verdicts remain visible to the human
+# reviewer through the normal post-publication flag path.
+BLOCKED_AGENT_CATEGORIES = frozenset({"S1", "S9"})
 
 
 @dataclass
@@ -133,7 +141,7 @@ class SafetyScreen:
         """Decide whether an agent message may be published.
 
         Returns ``publish=False`` when no verdict was obtained or when the
-        agent output falls under any unsafe safety category. The
+        agent output falls under a blocked violence/weapons category. The
         withheld text is retained in a flag for review but never published.
         """
         if not self.enabled:
@@ -145,8 +153,8 @@ class SafetyScreen:
             verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
             user_turn = ""
 
-        blocked_categories = set(verdict.categories) if verdict.status == "unsafe" else set()
-        if verdict.status in {"unsafe", "unavailable"}:
+        blocked_categories = BLOCKED_AGENT_CATEGORIES.intersection(verdict.categories)
+        if verdict.status == "unavailable" or blocked_categories:
             flag_id = await self._flag(
                 sender_type="agent",
                 sender=message.sender,

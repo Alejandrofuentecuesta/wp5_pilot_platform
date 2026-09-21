@@ -532,7 +532,7 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
                 </div>
                 <p className="mt-1 text-xs text-admin-muted">
                   {draft.enabled
-                    ? "Agent messages are screened before reaching participants. If the model is unavailable, agent turns may be withheld."
+                    ? "Agent messages are screened before reaching participants. Violence/weapons (S1/S9) and turns without a classifier verdict are withheld; other unsafe categories are published and flagged for review."
                     : "Agent messages are not screened by LlamaGuard. Use this when the safety model is unavailable or for local tests."}
                 </p>
               </div>

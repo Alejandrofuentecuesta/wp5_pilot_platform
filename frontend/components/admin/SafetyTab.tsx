@@ -410,6 +410,14 @@ function classifierKeyFor(transport: string | null): ClassifierKey {
   return transport === "anthropic_messages" ? "claude" : "llama_guard"
 }
 
+/* Human label for whatever is actually saved, e.g. "Claude (claude-haiku-4-5-20251001)"
+   or "Llama Guard 3 (self-hosted)" when no model override is saved. */
+function classifierSummary(transport: string | null, model: string | null): string {
+  const key = classifierKeyFor(transport)
+  const base = CLASSIFIER_OPTIONS.find((o) => o.key === key)!.label
+  return key === "claude" && model ? `Claude (${model})` : base
+}
+
 function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentId: string }) {
   const [policy, setPolicy] = useState<SafetyPolicy | null>(null)
   const [draft, setDraft] = useState<SafetyPolicy | null>(null)
@@ -476,7 +484,10 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
       })
       setPolicy(p)
       setDraft(p)
-      setMsg({ kind: "ok", text: "Saved. Applies to sessions started from now on; live sessions keep the policy they started with." })
+      setMsg({
+        kind: "ok",
+        text: `Saved — classifier: ${classifierSummary(p.transport, p.model)}. Applies to sessions started from now on; live sessions keep the policy they started with.`,
+      })
     } catch (e) {
       setMsg({ kind: "err", text: e instanceof Error ? e.message : "Save failed" })
     } finally {
@@ -493,7 +504,10 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-admin-text">Screening policy</span>
           <span className="text-xs text-admin-muted">
-            {experimentId} · {policy.enabled ? `${policy.categories.filter((c) => c.enabled).length}/14 categories · context: ${policy.context_mode}` : "screening disabled"}
+            {experimentId} ·{" "}
+            {policy.enabled
+              ? `${classifierSummary(policy.transport, policy.model)} · ${policy.categories.filter((c) => c.enabled).length}/14 categories · context: ${policy.context_mode}`
+              : "screening disabled"}
           </span>
           {policy.locked && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-pastel-amber text-admin-pastel-amber-text">locked</span>
@@ -542,6 +556,12 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
 
           <div>
             <label className="block text-xs font-medium text-admin-text mb-1">Classifier model</label>
+            <p className="text-[11px] text-admin-faint mb-1.5">
+              Currently saved: <span className="font-medium text-admin-text">{classifierSummary(policy.transport, policy.model)}</span>
+              {(draft.transport !== policy.transport || draft.model !== policy.model) && (
+                <span className="text-admin-pastel-amber-text"> — unsaved change, click &quot;Save policy&quot; below to apply</span>
+              )}
+            </p>
             <div className="flex flex-wrap gap-2">
               {CLASSIFIER_OPTIONS.map((opt) => {
                 const active = classifierKeyFor(draft.transport) === opt.key

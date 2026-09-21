@@ -230,7 +230,7 @@ function FlagRow({
     !isParticipant &&
     !flag.displayed_at &&
     flag.verdict === "unsafe" &&
-    flag.categories.some((category) => category === "S1" || category === "S9")
+    flag.categories.length > 0
 
   return (
     <div

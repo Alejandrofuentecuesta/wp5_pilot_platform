@@ -105,7 +105,7 @@ class TestFlags:
             "sender": "Carlos",
             "content": "mensaje revisado",
             "verdict": "unsafe",
-            "categories": ["S1"],
+            "categories": ["S10"],
         })
         pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
         pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)

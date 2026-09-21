@@ -5,8 +5,7 @@ broadcast, and every participant message passes through ``screen_participant``
 after it is posted. The policy:
 
 * ``safe``        — publish; verdict recorded on the message.
-* ``unsafe``      — S1/S9 agent turns are withheld; other categories publish
-                    with a flag for human review.
+* ``unsafe``      — agent turns are withheld and flagged for human review.
 * ``unavailable`` — the classifier gave no verdict. An agent turn is withheld
                     (never published) and a flag records the withheld text; a
                     participant message is already in the room, so only a flag
@@ -29,7 +28,6 @@ from models.message import Message
 from utils.safety import NEUTRAL_USER_TURN, Category, SafetyClient, SafetyVerdict, render_prompt
 
 CONTEXT_MODES = ("none", "conditional", "always")
-BLOCKED_AGENT_CATEGORIES = frozenset({"S1", "S9"})
 
 
 @dataclass
@@ -120,7 +118,7 @@ class SafetyScreen:
         """Decide whether an agent message may be published.
 
         Returns ``publish=False`` when no verdict was obtained or when the
-        agent output falls under a blocked violence/weapons category. The
+        agent output falls under any unsafe safety category. The
         withheld text is retained in a flag for review but never published.
         """
         if not self.enabled:
@@ -132,8 +130,8 @@ class SafetyScreen:
             verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
             user_turn = ""
 
-        blocked_categories = BLOCKED_AGENT_CATEGORIES.intersection(verdict.categories)
-        if verdict.status == "unavailable" or blocked_categories:
+        blocked_categories = set(verdict.categories) if verdict.status == "unsafe" else set()
+        if verdict.status in {"unsafe", "unavailable"}:
             flag_id = await self._flag(
                 sender_type="agent",
                 sender=message.sender,

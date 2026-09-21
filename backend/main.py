@@ -2279,7 +2279,7 @@ async def admin_safety_review(
         body.verdict == "no_concern"
         and row["sender_type"] == "agent"
         and row["verdict"] == "unsafe"
-        and bool({"S1", "S9"}.intersection(row["categories"] or []))
+        and bool(row["categories"])
         and row["message_id"] is None
         and row["displayed_at"] is None
     )

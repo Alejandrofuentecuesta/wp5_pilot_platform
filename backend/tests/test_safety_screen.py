@@ -1,7 +1,7 @@
 """SafetyScreen policy: publish/withhold decisions and the flags they open.
 
 safe        → publish, verdict on message, no flag
-unsafe      → publish, verdict on message, flag with displayed_at
+unsafe S1/S9 → withheld and flagged; other unsafe categories publish and flag
 unavailable → agent turn withheld and flagged (no message_id); participant
               message flagged only
 disabled    → nothing screened, nothing written
@@ -87,6 +87,28 @@ class TestAgentPath:
         assert kw["displayed_at"] is not None
         assert kw["prompt_hash"] == "h"
         assert logger.log_event.call_args[0][0] == "safety_flag_opened"
+
+    @pytest.mark.parametrize("category", ["S1", "S9"])
+    async def test_violent_or_weapon_output_is_withheld(self, repo, category):
+        v = SafetyVerdict(
+            status="unsafe",
+            categories=[category],
+            raw=f"unsafe\n{category}",
+            model="g",
+            prompt_hash="h",
+        )
+        screen, logger = _screen(FakeClient(v))
+        msg = Message.create(sender="Carlos", content="contenido violento")
+
+        out = await screen.screen_agent(msg, _state())
+
+        assert out.publish is False
+        kw = repo.insert_flag.call_args.kwargs
+        assert kw["verdict"] == "unsafe"
+        assert kw["categories"] == [category]
+        assert kw["message_id"] is None
+        assert kw["displayed_at"] is None
+        assert logger.log_event.call_args[0][0] == "safety_turn_withheld"
 
     async def test_unavailable_withholds_and_flags(self, repo):
         v = SafetyVerdict(status="unavailable", error="ConnectError: refused")

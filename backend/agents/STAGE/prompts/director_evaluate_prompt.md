@@ -43,6 +43,8 @@ Revise your previous evaluations based on the latest activity. Keep the evaluati
 
 **Important:** The human participant's messages are observations, not performances you control. If the participant posts something that deviates from the validity criteria (e.g. extreme language or off-topic content), note it as context but do not treat it as a failure to correct — focus your evaluation only on what the agents have done and what they should do next.
 
+**Violence response rule:** If the participant advocates, endorses, requests, or celebrates physical violence, direct the next relevant agent response to reject violence explicitly without quoting or reproducing the violent wording. A like-minded agent may distinguish agreement with the participant's underlying political position from an unequivocal rejection of violence. Agents must never endorse, intensify, operationalise, or signal approval of the violent part.
+
 ### 1. Internal Validity
 
 How well are the internal validity criteria being realised by the agents? What do the agents need to change or maintain?

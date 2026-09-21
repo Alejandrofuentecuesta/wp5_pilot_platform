@@ -29,6 +29,15 @@ import type {
   EmotionRating,
 } from "@/lib/types"
 
+function mergeUniqueNames(current: string[], additions: string[]) {
+  const seen = new Set(current.map((name) => name.trim()).filter(Boolean))
+  for (const name of additions) {
+    const clean = name.trim()
+    if (clean) seen.add(clean)
+  }
+  return Array.from(seen)
+}
+
 export function useChat() {
   // Session state
   const [sessionId, setSessionId] = useLocalStorage<string | null>(
@@ -51,6 +60,13 @@ export function useChat() {
   const [blockedSenders, setBlockedSenders] = useLocalStorage<BlockedSenders>(
     blockedKey,
     {},
+  )
+  const surveyBlockedKey = sessionId
+    ? `wp5_survey_blocked_agents:${sessionId}`
+    : "wp5_survey_blocked_agents"
+  const [surveyBlockedAgentNames, setSurveyBlockedAgentNames] = useLocalStorage<string[]>(
+    surveyBlockedKey,
+    [],
   )
   // The backend-assigned alias this session runs under. The typed name never
   // leaves the browser; the mapper below swaps the two at the boundary.
@@ -143,8 +159,8 @@ export function useChat() {
   )
 
   const finalBlockedAgentNames = useMemo(
-    () => Object.keys(blockedSenders),
-    [blockedSenders],
+    () => mergeUniqueNames(surveyBlockedAgentNames, Object.keys(blockedSenders)),
+    [surveyBlockedAgentNames, blockedSenders],
   )
   // Derived: detected mentions from current input
   const detectedMentions = useMemo(
@@ -240,6 +256,7 @@ export function useChat() {
       const evt = obj as unknown as BlockEvent
       if (evt.blocked && typeof evt.blocked === "object") {
         setBlockedSenders(evt.blocked)
+        setSurveyBlockedAgentNames((prev) => mergeUniqueNames(prev, Object.keys(evt.blocked)))
       }
     } else if (obj && obj.event_type === "emotions_checkup_trigger") {
       setEmotionsCheckupOpen(true)
@@ -291,7 +308,7 @@ export function useChat() {
         return [...prev, message]
       })
     }
-  }, [sessionId, setBlockedSenders, concludeSession, setAlias, setUsername])
+  }, [sessionId, setBlockedSenders, setSurveyBlockedAgentNames, concludeSession, setAlias, setUsername])
 
   const handleSessionInvalid = useCallback(() => {
     setSessionId(null)
@@ -704,6 +721,7 @@ export function useChat() {
         if (prev[sender]) return prev
         return { ...prev, [sender]: nowIso }
       })
+      setSurveyBlockedAgentNames((prev) => mergeUniqueNames(prev, [sender]))
     }
 
     // The server may briefly wait for an in-flight agent turn before replacing
@@ -726,6 +744,7 @@ export function useChat() {
       }
       if (data.blocked && typeof data.blocked === "object") {
         setBlockedSenders(data.blocked)
+        setSurveyBlockedAgentNames((prev) => mergeUniqueNames(prev, Object.keys(data.blocked)))
       }
     } catch {
       if (report) {
@@ -743,6 +762,7 @@ export function useChat() {
           delete next[sender]
           return next
         })
+        setSurveyBlockedAgentNames((prev) => prev.filter((name) => name !== sender))
       }
     } finally {
       setReporting(false)

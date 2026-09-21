@@ -5,7 +5,8 @@ broadcast, and every participant message passes through ``screen_participant``
 after it is posted. The policy:
 
 * ``safe``        — publish; verdict recorded on the message.
-* ``unsafe``      — publish; verdict recorded; a flag is opened for human review.
+* ``unsafe``      — S1/S9 agent turns are withheld; other categories publish
+                    with a flag for human review.
 * ``unavailable`` — the classifier gave no verdict. An agent turn is withheld
                     (never published) and a flag records the withheld text; a
                     participant message is already in the room, so only a flag
@@ -28,6 +29,7 @@ from models.message import Message
 from utils.safety import NEUTRAL_USER_TURN, Category, SafetyClient, SafetyVerdict, render_prompt
 
 CONTEXT_MODES = ("none", "conditional", "always")
+BLOCKED_AGENT_CATEGORIES = frozenset({"S1", "S9"})
 
 
 @dataclass
@@ -117,8 +119,9 @@ class SafetyScreen:
     async def screen_agent(self, message: Message, state) -> ScreenOutcome:
         """Decide whether an agent message may be published.
 
-        Returns ``publish=False`` only when no verdict was obtained; in that
-        case the withheld text has already been flagged for review.
+        Returns ``publish=False`` when no verdict was obtained or when the
+        agent output falls under a blocked violence/weapons category. The
+        withheld text is retained in a flag for review but never published.
         """
         if not self.enabled:
             return ScreenOutcome(publish=True, verdict=SafetyVerdict(status="unscreened"), user_turn="")
@@ -129,7 +132,8 @@ class SafetyScreen:
             verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
             user_turn = ""
 
-        if verdict.status == "unavailable":
+        blocked_categories = BLOCKED_AGENT_CATEGORIES.intersection(verdict.categories)
+        if verdict.status == "unavailable" or blocked_categories:
             flag_id = await self._flag(
                 sender_type="agent",
                 sender=message.sender,
@@ -139,7 +143,14 @@ class SafetyScreen:
                 message_id=None,
                 displayed_at=None,
             )
-            self._event("safety_turn_withheld", {"sender": message.sender, "error": verdict.error})
+            self._event(
+                "safety_turn_withheld",
+                {
+                    "sender": message.sender,
+                    "error": verdict.error,
+                    "categories": sorted(blocked_categories),
+                },
+            )
             return ScreenOutcome(publish=False, verdict=verdict, user_turn=user_turn, flag_id=flag_id)
 
         return ScreenOutcome(publish=True, verdict=verdict, user_turn=user_turn)

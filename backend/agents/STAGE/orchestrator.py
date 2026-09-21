@@ -43,6 +43,11 @@ from agents.STAGE.classifier import (
     build_classifier_user_prompt,
     parse_classifier_response,
 )
+from utils.violence_guard import (
+    contains_explicit_violence_cue,
+    explicitly_rejects_violence,
+    signals_violence_endorsement,
+)
 
 
 MAX_PERFORMER_RETRIES = 3
@@ -2312,6 +2317,22 @@ class Orchestrator:
 
         # 5. Performer → Moderator loop (max MAX_PERFORMER_RETRIES attempts)
         performer_instruction = action_data.get("performer_instruction", {})
+        instruction_text = " ".join(
+            str(performer_instruction.get(key, ""))
+            for key in ("objective", "motivation", "directive")
+        ).lower()
+        latest_room_message = self.state.messages[-1] if self.state.messages else None
+        fresh_participant_violence = bool(
+            latest_room_message
+            and latest_room_message.sender == self.state.user_name
+            and contains_explicit_violence_cue(latest_room_message.content)
+            and not explicitly_rejects_violence(latest_room_message.content)
+        )
+        instructed_violence_rejection = bool(
+            "violence" in instruction_text
+            and re.search(r"\b(?:reject|condemn|never acceptable|must not endorse)\b", instruction_text)
+        )
+        violence_rejection_required = fresh_participant_violence or instructed_violence_rejection
 
         # Get the selected agent's profile.
         agent_profile = self.agent_profiles.get(agent_name, "")
@@ -2525,8 +2546,10 @@ class Orchestrator:
             candidate_content = re.sub(r"(?:\.{3,}|…+)", ".", candidate_content)
             candidate_content = candidate_content.strip()
 
-            if action_type == "reply" and target_message:
-                candidate_content = _strip_target_quote_echo(candidate_content, target_message)
+            candidate_content = _strip_target_quote_echo(
+                candidate_content,
+                target_message if action_type == "reply" else None,
+            )
 
             if action_type == "@mention" and target_user:
                 candidate_content = re.sub(
@@ -2571,6 +2594,27 @@ class Orchestrator:
                 target_agent_for_validation = target_user
             elif target_message and target_message.sender != self.state.user_name:
                 target_agent_for_validation = target_message.sender
+
+            if violence_rejection_required and (
+                not explicitly_rejects_violence(candidate_content)
+                or signals_violence_endorsement(candidate_content)
+            ):
+                self.logger.log_error(
+                    "performer_violence_rejection_retry",
+                    f"Generated message for '{agent_name}' did not clearly reject recent violence; retrying",
+                    context={"action_type": action_type},
+                )
+                performer_user_prompt = (
+                    f"{base_performer_user_prompt}\n\n"
+                    "Important safety correction:\n"
+                    "The latest violent suggestion must be rejected clearly and explicitly. "
+                    "State naturally in Spanish that violence is never an acceptable solution. "
+                    "Do not begin with agreement words such as 'exacto' or 'claro que si', do not use "
+                    "'mano dura', and do not repeat, paraphrase, endorse, or soften the violent wording. "
+                    "You may keep your political position, but the rejection of violence must be unmistakable."
+                )
+                content = None
+                continue
 
             if (
                 target_agent_for_validation

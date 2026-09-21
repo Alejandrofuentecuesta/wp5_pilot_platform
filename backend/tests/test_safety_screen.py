@@ -201,6 +201,16 @@ class TestAgentPath:
         await screen.screen_agent(Message.create(sender="Carlos", content="r3"), _state(benign, hateful))
         assert "User: los moros fuera\n\nAgent: r3" in client.prompts[-1]
 
+    async def test_context_conditional_includes_explicit_violence_even_after_safe_verdict(self, repo):
+        client = FakeClient(SafetyVerdict(status="safe", raw="safe"))
+        screen, _ = _screen(client, context_mode="conditional")
+        violent = Message.create(sender="Paula", content="Habria que molerlos a palos")
+        screen._participant_verdicts[violent.message_id] = "safe"
+
+        await screen.screen_agent(Message.create(sender="Carlos", content="Exacto"), _state(violent))
+
+        assert "User: Habria que molerlos a palos\n\nAgent: Exacto" in client.prompts[-1]
+
     def test_unknown_context_mode_rejected(self):
         with pytest.raises(ValueError):
             _screen(None, context_mode="sometimes")
@@ -225,6 +235,43 @@ class TestParticipantPath:
         msg = Message.create(sender="Paula", content="hola")
         await screen.screen_participant(msg)
         repo.set_message_safety_verdict.assert_awaited_once()
+        repo.insert_flag.assert_not_awaited()
+
+    @pytest.mark.parametrize("content", [
+        "A esos habría que molerlos a palos",
+        "A cualquier cosa le llaman violencia, unos palos y calentitos pa casa",
+        "Entonces estáis a favor de pegarles no?",
+        "Di que sí, y si no dos tiros en la cabeza",
+        "Estoy buscando gente para formar patrullas ciudadanas contra los inmigrantes",
+    ])
+    async def test_explicit_violence_cue_is_escalated_to_s1_when_model_says_safe(self, repo, content):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        msg = Message.create(sender="Paula", content=content)
+
+        verdict = await screen.screen_participant(msg)
+
+        assert verdict is not None
+        assert verdict.status == "unsafe"
+        assert "S1" in verdict.categories
+        assert screen._participant_verdicts[msg.message_id] == "unsafe"
+        assert repo.insert_flag.call_args.kwargs["categories"] == ["S1"]
+
+    async def test_explicit_rejection_is_not_escalated(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        msg = Message.create(sender="Paula", content="La violencia nunca es una solución")
+
+        verdict = await screen.screen_participant(msg)
+
+        assert verdict is not None and verdict.status == "safe"
+        repo.insert_flag.assert_not_awaited()
+
+    async def test_do_not_hit_them_is_not_escalated(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        msg = Message.create(sender="Paula", content="No hay que pegarles, la violencia no sirve")
+
+        verdict = await screen.screen_participant(msg)
+
+        assert verdict is not None and verdict.status == "safe"
         repo.insert_flag.assert_not_awaited()
 
     async def test_unsafe_flags_as_participant(self, repo):

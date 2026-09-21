@@ -609,6 +609,33 @@ class TestExecuteTurnMessage:
         assert result.message.content == "Hello everyone!"
 
     @pytest.mark.asyncio
+    async def test_explicit_participant_violence_requires_clear_performer_rejection(self):
+        state = _make_state()
+        state.add_message(Message.create(
+            sender="participant",
+            content="Habría que molerlos a palos",
+        ))
+        orch, logger = _make_orchestrator(state=state)
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message")
+        )
+        orch.performer_llm.generate_response = AsyncMock(side_effect=[
+            "Exacto, hace falta mano dura.",
+            "La violencia nunca es una solución, aunque haya que debatir el problema.",
+        ])
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.message.content.startswith("La violencia nunca")
+        assert orch.performer_llm.generate_response.call_count == 2
+        logger.log_error.assert_any_call(
+            "performer_violence_rejection_retry",
+            "Generated message for 'Alice' did not clearly reject recent violence; retrying",
+            context={"action_type": "message"},
+        )
+
+    @pytest.mark.asyncio
     async def test_cross_cell_validation_reply_retries_and_rewrites(self):
         state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob")])
         target = Message.create(sender="Bob", content="Esto es una farsa total.")

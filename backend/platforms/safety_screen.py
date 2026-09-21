@@ -34,6 +34,7 @@ from utils.safety import (
     render_chat_prompt,
     render_prompt,
 )
+from utils.violence_guard import contains_explicit_violence_cue, explicitly_rejects_violence
 
 CONTEXT_MODES = ("none", "conditional", "always")
 # The simulation deliberately studies contentious and sometimes uncivil
@@ -98,8 +99,10 @@ class SafetyScreen:
         last = self._latest_participant(state)
         if self.context_mode == "always":
             user_turn = last.content if last else (self.seed_text or NEUTRAL_USER_TURN)
-        elif self.context_mode == "conditional" and last is not None \
-                and self._participant_verdicts.get(last.message_id) == "unsafe":
+        elif self.context_mode == "conditional" and last is not None and (
+            self._participant_verdicts.get(last.message_id) == "unsafe"
+            or contains_explicit_violence_cue(last.content)
+        ):
             user_turn = last.content
         else:
             user_turn = NEUTRAL_USER_TURN
@@ -211,6 +214,19 @@ class SafetyScreen:
             verdict = await self._classify([("user", message.content)])
         except Exception as exc:
             verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
+        if contains_explicit_violence_cue(message.content) and not explicitly_rejects_violence(message.content):
+            categories = list(dict.fromkeys([*verdict.categories, "S1"]))
+            verdict = SafetyVerdict(
+                status="unsafe",
+                categories=categories,
+                raw=verdict.raw,
+                model=verdict.model,
+                latency_ms=verdict.latency_ms,
+                unsafe_prob=verdict.unsafe_prob,
+                error=verdict.error,
+                prompt_hash=verdict.prompt_hash,
+                rationale=verdict.rationale,
+            )
         self._participant_verdicts[message.message_id] = verdict.status
         try:
             pool = db_conn.get_pool()

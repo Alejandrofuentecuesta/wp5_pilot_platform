@@ -963,6 +963,22 @@ class TestExecuteTurnReply:
         assert result.message.content == "I agree!"
 
     @pytest.mark.asyncio
+    async def test_message_strips_internal_message_id_prefix(self):
+        state = _make_state()
+        orch, _ = _make_orchestrator(state=state)
+
+        action_resp = _action_json(next_performer="Alice", action_type="message")
+        orch.director_llm.generate_response = AsyncMock(return_value=action_resp)
+        orch.performer_llm.generate_response = AsyncMock(
+            return_value="> [7245c11c] Este es el mensaje visible"
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.message.content == "Este es el mensaje visible"
+
+    @pytest.mark.asyncio
     async def test_reply_retries_when_moderator_output_looks_truncated(self):
         state = _make_state()
         state.add_message(Message.create(sender="Bob", content="What do you think?"))

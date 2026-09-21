@@ -81,10 +81,24 @@ class TurnResult:
 
 def _strip_target_quote_echo(content: str, target_message: Optional[Message]) -> str:
     """Remove a copied target message prefix when the moderator echoes quoted text."""
-    if not content or not target_message or not target_message.content:
+    if not content:
         return content
 
     cleaned = content.strip()
+    # Models occasionally imitate the Director's internal chat-log notation,
+    # e.g. ``> [7245c11c] message``.  Message IDs are UI metadata and must
+    # never leak into the visible message body.
+    cleaned = re.sub(
+        r"^\s*>\s*\[[0-9a-f-]{8,36}\]\s*",
+        "",
+        cleaned,
+        count=1,
+        flags=re.IGNORECASE,
+    ).strip()
+
+    if not target_message or not target_message.content:
+        return cleaned
+
     target_text = target_message.content.strip()
     sender_prefix = f"{target_message.sender}:"
 

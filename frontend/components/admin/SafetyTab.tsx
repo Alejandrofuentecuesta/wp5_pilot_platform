@@ -8,7 +8,9 @@ import {
   reviewSafetyFlag,
   safetySessionAction,
   saveSafetyPolicy,
+  testSafetyClassifier,
 } from "../../lib/admin-api"
+import type { SafetyClassifierTestResult } from "../../lib/admin-api"
 import type { SafetyFlag, SafetyPolicy, SafetyPolicyCategory, SafetySummary } from "../../lib/admin-types"
 
 /* The Safety tab is the human-review side of the safety screen. Every flag
@@ -414,6 +416,8 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
   const [open, setOpen] = useState(false)
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<SafetyClassifierTestResult | null>(null)
 
   const load = useCallback(async () => {
     try {
@@ -441,6 +445,18 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
 
   const setCat = (code: string, patch: Partial<SafetyPolicyCategory>) =>
     setDraft({ ...draft, categories: draft.categories.map((c) => (c.code === code ? { ...c, ...patch } : c)) })
+
+  const runTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      setTestResult(await testSafetyClassifier(adminKey, experimentId))
+    } catch (e) {
+      setTestResult({ ok: false, error: e instanceof Error ? e.message : "Test failed" })
+    } finally {
+      setTesting(false)
+    }
+  }
 
   const save = async () => {
     setSaving(true)
@@ -570,6 +586,53 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
                 ? "Uses the Anthropic API (ANTHROPIC_API_KEY) with a prompt built to return the same safe/unsafe + categories verdict as Llama Guard, plus a one-sentence rationale shown on each flag."
                 : "Uses the self-hosted Llama Guard 3 endpoint (SAFETY_BASE_URL / SAFETY_MODEL, or this experiment's own override once set)."}
             </p>
+
+            <div className="mt-2">
+              <button
+                type="button"
+                disabled={testing || !policy.enabled || dirty}
+                onClick={runTest}
+                title={dirty ? "Save your changes first — this tests the saved config, not the draft." : undefined}
+                className="rounded border border-admin-border bg-admin-bg px-3 py-1.5 text-xs font-medium text-admin-text shadow-sm hover:bg-admin-raised disabled:opacity-40"
+              >
+                {testing ? "Testing…" : "Test classifier"}
+              </button>
+              {dirty && policy.enabled && (
+                <span className="ml-2 text-[11px] text-admin-faint">save first to test the new config</span>
+              )}
+              {!policy.enabled && <span className="ml-2 text-[11px] text-admin-faint">enable screening first</span>}
+
+              {testResult && (
+                <div
+                  className={`mt-2 rounded border px-3 py-2 text-xs ${
+                    testResult.ok
+                      ? "border-admin-pastel-green bg-admin-pastel-green/20 text-admin-pastel-green-text"
+                      : "border-admin-danger bg-admin-danger-soft/40 text-admin-danger-text"
+                  }`}
+                >
+                  {testResult.error ? (
+                    <p className="font-medium">{testResult.error}</p>
+                  ) : (
+                    <>
+                      <p className="font-medium">
+                        {testResult.status === "unavailable"
+                          ? "No verdict — the classifier did not answer usably."
+                          : `Verdict: ${testResult.status}${testResult.categories?.length ? ` (${testResult.categories.join(", ")})` : ""}`}
+                        {typeof testResult.latency_ms === "number" && (
+                          <span className="ml-2 font-normal text-admin-faint">{testResult.latency_ms}ms</span>
+                        )}
+                      </p>
+                      {testResult.rationale && <p className="mt-1 italic">&ldquo;{testResult.rationale}&rdquo;</p>}
+                    </>
+                  )}
+                  {(testResult.transport || testResult.model) && (
+                    <p className="mt-1 text-admin-faint">
+                      {testResult.transport} · {testResult.base_url} · {testResult.model}
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           <div>

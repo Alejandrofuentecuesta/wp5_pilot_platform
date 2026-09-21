@@ -608,3 +608,27 @@ export async function saveSafetyPolicy(
   }
   return res.json()
 }
+
+export type SafetyClassifierTestResult = {
+  ok: boolean
+  transport?: string
+  base_url?: string
+  model?: string
+  status?: "safe" | "unsafe" | "unavailable"
+  categories?: string[]
+  rationale?: string | null
+  raw?: string
+  latency_ms?: number
+  error?: string | null
+}
+
+export async function testSafetyClassifier(key: string, experimentId: string): Promise<SafetyClassifierTestResult> {
+  const res = await adminFetch(`/admin/safety/policy/${encodeURIComponent(experimentId)}/test`, key, {
+    method: "POST",
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Test failed" }))
+    throw new Error(err.detail || "Test failed")
+  }
+  return res.json()
+}

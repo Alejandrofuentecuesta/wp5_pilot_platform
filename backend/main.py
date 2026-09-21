@@ -2413,6 +2413,58 @@ async def admin_safety_policy_put(
     return _policy_view(experiment_id, safety)
 
 
+@app.post("/admin/safety/policy/{experiment_id}/test")
+async def admin_safety_policy_test(experiment_id: str, x_admin_key: str = Header(None)):
+    """Send one harmless test message through this experiment's saved classifier config.
+
+    Every agent turn without a verdict is withheld and never published, so a
+    misconfigured or unreachable classifier silently blocks the whole chat
+    with no visible error anywhere else. This is the only way to see the
+    real failure (bad model id, unreachable host, expired key, timeout)
+    instead of just "no verdict — turn withheld" on every flag.
+    """
+    _require_admin(x_admin_key)
+    pool = _get_pool()
+    safety = await _safety_block(pool, experiment_id)
+    if not safety.get("enabled"):
+        return {"ok": False, "error": "Screening is disabled for this experiment; nothing to test."}
+
+    from utils.safety import SafetyClient, categories_from_config, render_chat_prompt, render_prompt
+
+    try:
+        client = SafetyClient.from_config(safety)
+    except Exception as e:
+        return {"ok": False, "error": f"Client creation failed: {e}"}
+
+    categories = categories_from_config(safety.get("categories"))
+    conversation = [
+        ("user", "(no participant message)"),
+        ("assistant", "This is a harmless test message to verify the safety classifier is reachable."),
+    ]
+    try:
+        if client.transport == "anthropic_messages":
+            system, user = render_chat_prompt(conversation, categories)
+            verdict = await client.classify_chat(system, user)
+        else:
+            prompt = render_prompt(conversation, categories)
+            verdict = await client.classify(prompt)
+    except Exception as e:
+        return {"ok": False, "error": f"Call failed: {e}"}
+
+    return {
+        "ok": verdict.status != "unavailable",
+        "transport": client.transport,
+        "base_url": client.base_url,
+        "model": client.model,
+        "status": verdict.status,
+        "categories": verdict.categories,
+        "rationale": verdict.rationale,
+        "raw": verdict.raw,
+        "latency_ms": verdict.latency_ms,
+        "error": verdict.error,
+    }
+
+
 @app.post("/admin/safety/policy/{experiment_id}/lock")
 async def admin_safety_policy_lock(
     experiment_id: str, body: SafetyLockRequest, x_admin_key: str = Header(None)

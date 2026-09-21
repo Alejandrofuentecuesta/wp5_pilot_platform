@@ -47,15 +47,23 @@ export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is define
 
 - Threats to Democratic Freedoms:
   Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism.
-  This includes restricting freedoms, delegitimizing elections or institutions, promoting autocratic rule, or using authoritarian patriotic slogans in an endorsing way.
+  This includes restricting freedoms, delegitimizing elections or courts, promoting autocratic rule, suspending constitutions, or using authoritarian patriotic slogans.
   Do not code this dimension if the message only describes, reports on, or analyses threats to democracy without endorsing them.
-  Examples: "Todo el proceso electoral es una farsa. Nuestros votos no importan", "No necesitamos elecciones, necesitamos un lider fuerte que sepa lo que nos conviene", "Con Franco se vivia mejor", "¡Arriba España!", "El sistema del 78 es una farsa monárquica y el Parlamento un circo. Los votos no cambian nada", "La judicatura y los partidos de derechas son golpistas. Habría que ilegalizarlos y gobernar por decreto", "En la República faltó mano dura contra la Iglesia y la burguesía", "las revoluciones no se hacen pidiendo perdón", "ni un paso atrás".
+  Examples by topic and stance:
+  - [Clima · Izquierda]: "Comité de científicos y gobernar por decreto ya", "Ilegalizar a los partidos negacionistas de inmediato", "Cierre forzoso y cárcel para medios que nieguen el cambio climático", "Expropiación forzosa de la industria contaminante sin indemnización".
+  - [Clima · Derecha]: "Romper unilateralmente con Bruselas y desobedecer sus leyes verdes", "Ilegalizar a las organizaciones ecologistas por terroristas", "Esto con Franco no pasaba, ¡Arriba España y fuera la Agenda 2030!", "Disolver el Parlamento y echar a los burócratas verdes por la fuerza".
+  - [Inmigración · Izquierda]: "Ilegalizar a Vox y a los partidos racistas por decreto", "El gobierno debe desobedecer a los jueces que ordenen expulsiones", "Derribar las vallas fronterizas por la fuerza y abolir extranjería", "Cerrar por orden gubernamental a los medios que critiquen la inmigración".
+  - [Inmigración · Derecha]: "Con Franco no entraba ni un ilegal, ¡Arriba España!", "Militarizar la frontera y suspender el derecho de asilo por decreto", "Estado de excepción en Ceuta y expulsiones masivas sin juicio", "Hace falta un caudillo militar que limpie las calles sin jueces".
 
 - Hate Speech and Stereotyping:
-  Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or racist insults is included.
-  Groups may be defined by gender, race, religion, nationality, sexuality, ideology, disability, or similar social identity markers.
+  Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or derogatory labels is included.
+  Groups may be defined by race, nationality, religion, ideology, social class, age, or political camp.
   This also includes fake claims used to dehumanize or discriminate against identity-based groups.
-  Examples that count: "Conducia una mujer?", "Los zurdos son la verguenza de nuestra nacion", "Los moros simpatizan con los terroristas", "Todos los hombres son violadores", "todos los conservadores son unos fachas", "los fachas son patriotas de pacotilla", "los fachas sois paranoicos", "los inmigrantes dependen de ayudas sociales", "los inmigrantes traen la delincuencia", "Votar a la derecha te convierte en una basura miserable sin empatía", "Todos los empresarios son unos explotadores y unos parásitos sociales", "Habría que colgar a los ricos en las plazas públicas", "Los blancos occidentales solo saben colonizar, expoliar y destruir", "La policía solo recluta a psicópatas y maltratadores".
+  Examples by topic and stance:
+  - [Clima · Izquierda]: "Los negacionistas sois psicópatas sin empatía", "Los empresarios son parásitos que destruyen el planeta", "La generación boomer es un cáncer egoísta", "Los fachas sois ignorantes que aplaudís que arda el mundo".
+  - [Clima · Derecha]: "Los ecologistas sois unos vagos perroflautas sin oficio", "La juventud progre son tarados histéricos", "Los burócratas del clima son parásitos chiringuiteros", "Los zurdos sois una secta fanática y enferma".
+  - [Inmigración · Izquierda]: "Los racistas de este país sois escoria sin humanidad", "Votar a la derecha te hace cómplice de asesinatos en el mar", "La policía de fronteras son sádicos torturadores", "Los de Vox sois una panda de matones xenófobos".
+  - [Inmigración · Derecha]: "Los menas son delincuentes y navajeros que vienen a violar", "Los moros solo vienen a chupar de paguitas y del cuento", "Los musulmanes son incompatibles con nuestra civilización", "Las ONGs pro-inmigración son mafias negreras".
  
 
 Treatment interpretation rules:

@@ -2405,6 +2405,11 @@ async def admin_safety_policy_put(
     # never having set it.
     safety["transport"] = (body.transport or "").strip() or None
     safety["model"] = (body.model or "").strip() or None
+    # ``base_url`` belongs to the self-hosted Llama Guard transport. An old
+    # per-experiment value must not follow the policy when switching to
+    # Claude, whose client uses ANTHROPIC_BASE_URL or the official API host.
+    if safety["transport"] == "anthropic_messages":
+        safety.pop("base_url", None)
     try:
         safety = config_repo.validate_safety_config(safety)
         await config_repo.update_safety_block(pool, experiment_id, safety)

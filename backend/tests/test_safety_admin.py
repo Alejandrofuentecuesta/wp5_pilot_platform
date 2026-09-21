@@ -192,6 +192,23 @@ class TestPolicyEndpoints:
         assert saved["categories"][0] == {"code": "S10", "title": "Hate", "enabled": True, "definition": "d"}
         assert "definition" not in saved["categories"][1]
 
+    def test_put_anthropic_transport_clears_stale_llama_guard_base_url(self, client):
+        cfg = self._cfg()
+        cfg["experimental"]["safety"]["base_url"] = "https://whatif.inf.uni-konstanz.de"
+        with patch.object(main, "_get_pool", return_value=MagicMock()), \
+             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=cfg)), \
+             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
+            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
+                "context_mode": "always",
+                "transport": "anthropic_messages",
+                "model": "claude-haiku-4-5-20251001",
+                "categories": [{"code": "S10", "title": "Hate", "enabled": True}],
+            })
+        assert r.status_code == 200, r.text
+        saved = upd.call_args[0][2]
+        assert saved["transport"] == "anthropic_messages"
+        assert "base_url" not in saved
+
     def test_put_refused_when_locked(self, client):
         with patch.object(main, "_get_pool", return_value=MagicMock()), \
              patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg(locked=True))), \

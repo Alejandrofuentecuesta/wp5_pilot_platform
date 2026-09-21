@@ -217,11 +217,19 @@ class TestConstruction:
         c = SafetyClient.from_config({"enabled": True, "transport": "anthropic_messages", "model": "claude-haiku-4-5-20251001"})
         assert c.api_key == "sk-ant-shared"
 
-    def test_safety_api_key_takes_priority_over_anthropic_api_key(self, monkeypatch):
-        monkeypatch.setenv("SAFETY_API_KEY", "safety-specific")
+    def test_anthropic_transport_does_not_reuse_llama_guard_host_or_key(self, monkeypatch):
+        monkeypatch.setenv("SAFETY_BASE_URL", "https://whatif.inf.uni-konstanz.de")
+        monkeypatch.setenv("SAFETY_API_KEY", "konstanz-key")
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-shared")
         c = SafetyClient.from_config({"enabled": True, "transport": "anthropic_messages", "model": "claude-haiku-4-5-20251001"})
-        assert c.api_key == "safety-specific"
+        assert c.base_url == "https://api.anthropic.com"
+        assert c.api_key == "sk-ant-shared"
+
+    def test_anthropic_transport_uses_provider_specific_base_url(self, monkeypatch):
+        monkeypatch.setenv("SAFETY_BASE_URL", "https://whatif.inf.uni-konstanz.de")
+        monkeypatch.setenv("ANTHROPIC_BASE_URL", "https://anthropic-proxy.example/")
+        c = SafetyClient.from_config({"enabled": True, "transport": "anthropic_messages", "model": "claude-haiku-4-5-20251001"})
+        assert c.base_url == "https://anthropic-proxy.example"
 
 
 class TestFirstTokenProb:

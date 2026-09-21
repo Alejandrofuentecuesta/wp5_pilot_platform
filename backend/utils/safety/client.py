@@ -97,17 +97,20 @@ class SafetyClient:
     def from_config(cls, cfg: dict) -> "SafetyClient":
         """Build from ``experimental.safety`` with environment fallbacks."""
         transport = cfg.get("transport") or os.getenv("SAFETY_TRANSPORT", "openai_completions")
-        # The generic SAFETY_API_KEY takes priority everywhere. For the
-        # Anthropic transport specifically, also fall back to the same
-        # ANTHROPIC_API_KEY already used for the Director/Performer/etc., so
-        # picking "Claude Haiku" as the classifier works without duplicating
-        # a key that's usually already set.
-        api_key = os.getenv("SAFETY_API_KEY", "")
-        if not api_key and transport == "anthropic_messages":
-            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+        if transport == "anthropic_messages":
+            # SAFETY_BASE_URL/API_KEY normally identify the self-hosted Llama
+            # Guard service. Reusing them for Claude routes /v1/messages to
+            # the vLLM host and can also leak the wrong credential. Anthropic
+            # therefore has provider-specific fallbacks and otherwise uses
+            # the official API host filled in by __init__.
+            base_url = os.getenv("ANTHROPIC_BASE_URL", "")
+            api_key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("SAFETY_API_KEY", "")
+        else:
+            base_url = cfg.get("base_url") or os.getenv("SAFETY_BASE_URL", "")
+            api_key = os.getenv("SAFETY_API_KEY", "")
         return cls(
             transport=transport,
-            base_url=cfg.get("base_url") or os.getenv("SAFETY_BASE_URL", ""),
+            base_url=base_url,
             model=cfg.get("model") or os.getenv("SAFETY_MODEL", ""),
             api_key=api_key or None,
             timeout_s=float(cfg.get("timeout_s", 8.0)),

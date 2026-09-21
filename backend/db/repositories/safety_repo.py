@@ -89,6 +89,28 @@ async def set_flag_seq(pool: asyncpg.Pool, flag_id: str, message_id: str) -> Non
         )
 
 
+async def mark_flag_published(
+    pool: asyncpg.Pool, flag_id: str, message_id: str, displayed_at: datetime
+) -> None:
+    """Link a reviewer-approved withheld flag to its newly published message."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            """
+            UPDATE safety_flags f
+            SET    message_id = $2,
+                   displayed_at = $3,
+                   seq = m.seq
+            FROM   messages m
+            WHERE  f.flag_id = $1
+              AND  f.message_id IS NULL
+              AND  m.message_id = $2
+            """,
+            flag_id,
+            message_id,
+            displayed_at,
+        )
+
+
 async def review_flag(
     pool: asyncpg.Pool,
     *,

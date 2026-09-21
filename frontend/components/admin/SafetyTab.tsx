@@ -226,6 +226,11 @@ function FlagRow({
   const elapsed = flag.displayed_at ? now - new Date(flag.displayed_at).getTime() : null
   const paused = !!flag.safety_paused_at
   const canAct = flag.live && !!reviewer
+  const canPublishWithheld =
+    !isParticipant &&
+    !flag.displayed_at &&
+    flag.verdict === "unsafe" &&
+    flag.categories.some((category) => category === "S1" || category === "S9")
 
   return (
     <div
@@ -344,12 +349,18 @@ function FlagRow({
             className="flex-1 min-w-[160px] border border-admin-border rounded px-2 py-1 text-xs bg-admin-bg text-admin-text"
           />
           <button
-            disabled={!reviewer || busy}
+            disabled={!reviewer || busy || (canPublishWithheld && (!flag.live || paused))}
             onClick={() => onReview(flag, "no_concern", note)}
             className="px-3 py-1 rounded text-xs font-medium bg-admin-pastel-green text-admin-pastel-green-text disabled:opacity-40"
-            title={reviewer ? "" : "Enter your name above first"}
+            title={
+              !reviewer
+                ? "Enter your name above first"
+                : canPublishWithheld
+                  ? "Approve and publish this withheld agent message"
+                  : "Mark this flag as no concern"
+            }
           >
-            No concern
+            {canPublishWithheld ? "No concern & publish" : "No concern"}
           </button>
           <button
             disabled={!reviewer || busy}

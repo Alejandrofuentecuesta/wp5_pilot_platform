@@ -38,7 +38,7 @@ class AgentManager:
         # that was already in flight when the hold began must not publish.
         self.hold_active = hold_active
 
-    async def _handle_message(self, result: TurnResult) -> None:
+    async def _handle_message(self, result: TurnResult, *, skip_safety: bool = False) -> None:
         """Screen, persist and broadcast a generated agent message."""
         message = result.message
         if not message:
@@ -49,7 +49,7 @@ class AgentManager:
             return
 
         outcome = None
-        if self.safety_screen is not None:
+        if self.safety_screen is not None and not skip_safety:
             outcome = await self.safety_screen.screen_agent(message, self.state)
             if not outcome.publish:
                 return

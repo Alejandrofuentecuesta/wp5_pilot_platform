@@ -23,6 +23,7 @@ from dotenv import load_dotenv, set_key
 load_dotenv()
 
 from platforms import SimulationSession
+from agents.STAGE.orchestrator import TurnResult
 from platforms.chatroom import _parse_target_percentage
 from models import Message
 from utils.session_manager import session_manager
@@ -2256,28 +2257,81 @@ async def admin_safety_flags(
 async def admin_safety_review(
     flag_id: str, body: SafetyReviewRequest, x_admin_key: str = Header(None)
 ):
-    """Record the human review of one flag. Re-reviewing overwrites."""
+    """Record a review; approving a withheld agent turn publishes it once."""
     _require_admin(x_admin_key)
     reviewer = _reviewer_name(body.reviewer)
     pool = _get_pool()
+
+    async with pool.acquire() as conn:
+        row = await conn.fetchrow(
+            """
+            SELECT session_id, experiment_id, message_id, displayed_at,
+                   sender_type, sender, content, verdict, categories
+            FROM safety_flags
+            WHERE flag_id = $1
+            """,
+            flag_id,
+        )
+    if not row:
+        raise HTTPException(status_code=404, detail="flag not found")
+
+    publish_withheld = (
+        body.verdict == "no_concern"
+        and row["sender_type"] == "agent"
+        and row["verdict"] == "unsafe"
+        and bool({"S1", "S9"}.intersection(row["categories"] or []))
+        and row["message_id"] is None
+        and row["displayed_at"] is None
+    )
+    session = None
+    if publish_withheld:
+        session = await session_manager.get_session(str(row["session_id"]))
+        if not session or not session.running:
+            raise HTTPException(status_code=409, detail="The withheld message can only be approved while its session is live")
+        if getattr(session, "safety_held", False):
+            raise HTTPException(status_code=409, detail="Resume the paused session before approving this message")
+
     ok = await safety_repo.review_flag(
         pool, flag_id=flag_id, verdict=body.verdict, reviewer=reviewer, note=body.note
     )
     if not ok:
         raise HTTPException(status_code=404, detail="flag not found")
-    async with pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT session_id, experiment_id FROM safety_flags WHERE flag_id = $1", flag_id
-        )
-    if row:
-        await event_repo.insert_event(
-            pool,
-            session_id=str(row["session_id"]),
-            experiment_id=row["experiment_id"],
-            event_type="safety_flag_reviewed",
-            data={"flag_id": flag_id, "verdict": body.verdict, "by": reviewer, "note": body.note},
-        )
-    return {"status": "reviewed", "flag_id": flag_id}
+
+    published_message_id = None
+    if publish_withheld and session is not None:
+        message = Message.create(sender=row["sender"], content=row["content"])
+        message.metadata["safety_review_override"] = {
+            "flag_id": flag_id,
+            "reviewed_by": reviewer,
+        }
+        async with session._turn_lock:
+            await session.agent_manager._handle_message(
+                TurnResult(action_type="message", agent_name=message.sender, message=message),
+                skip_safety=True,
+            )
+        await safety_repo.set_message_safety_verdict(pool, message.message_id, row["verdict"])
+        await safety_repo.mark_flag_published(pool, flag_id, message.message_id, message.timestamp)
+        published_message_id = message.message_id
+
+    await event_repo.insert_event(
+        pool,
+        session_id=str(row["session_id"]),
+        experiment_id=row["experiment_id"],
+        event_type="safety_flag_reviewed",
+        data={
+            "flag_id": flag_id,
+            "verdict": body.verdict,
+            "by": reviewer,
+            "note": body.note,
+            "published_message_id": published_message_id,
+        },
+    )
+    return {
+        "status": "reviewed",
+        "flag_id": flag_id,
+        "published": published_message_id is not None,
+        "message_id": published_message_id,
+    }
 
 
 class SafetyPolicyRequest(BaseModel):

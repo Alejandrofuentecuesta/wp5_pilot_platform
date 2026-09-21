@@ -65,11 +65,17 @@ class TestFlags:
         assert r.status_code == 422
 
     def test_review_unknown_flag_is_404(self, client):
-        with patch.object(main, "_get_pool", return_value=MagicMock()), \
-             patch("main.safety_repo.review_flag", new=AsyncMock(return_value=False)):
+        pool = MagicMock()
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value=None)
+        pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
+        pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+        with patch.object(main, "_get_pool", return_value=pool), \
+             patch("main.safety_repo.review_flag", new=AsyncMock(return_value=False)) as review:
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
                             json={"verdict": "no_concern", "reviewer": "Laia"})
         assert r.status_code == 404
+        review.assert_not_awaited()
 
     def test_review_records_and_logs(self, client):
         pool = MagicMock()
@@ -86,6 +92,47 @@ class TestFlags:
         assert rv.call_args.kwargs["verdict"] == "concern"
         assert ev.call_args.kwargs["event_type"] == "safety_flag_reviewed"
         assert ev.call_args.kwargs["data"]["by"] == "Laia"
+
+    def test_no_concern_publishes_withheld_agent_message(self, client):
+        pool = MagicMock()
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value={
+            "session_id": "s1",
+            "experiment_id": "e1",
+            "message_id": None,
+            "displayed_at": None,
+            "sender_type": "agent",
+            "sender": "Carlos",
+            "content": "mensaje revisado",
+            "verdict": "unsafe",
+            "categories": ["S1"],
+        })
+        pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
+        pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+        session = MagicMock()
+        session.running = True
+        session.safety_held = False
+        session._turn_lock.__aenter__ = AsyncMock(return_value=None)
+        session._turn_lock.__aexit__ = AsyncMock(return_value=False)
+        session.agent_manager._handle_message = AsyncMock()
+
+        with patch.object(main, "_get_pool", return_value=pool), \
+             patch("main.session_manager.get_session", new=AsyncMock(return_value=session)), \
+             patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
+             patch("main.safety_repo.set_message_safety_verdict", new=AsyncMock()) as set_verdict, \
+             patch("main.safety_repo.mark_flag_published", new=AsyncMock()) as mark_published, \
+             patch("main.event_repo.insert_event", new=AsyncMock()):
+            r = client.post("/admin/safety/flags/f1/review", headers=HDR,
+                            json={"verdict": "no_concern", "reviewer": "Laia"})
+
+        assert r.status_code == 200
+        assert r.json()["published"] is True
+        call = session.agent_manager._handle_message.call_args
+        assert call.kwargs["skip_safety"] is True
+        assert call.args[0].message.sender == "Carlos"
+        assert call.args[0].message.content == "mensaje revisado"
+        set_verdict.assert_awaited_once()
+        mark_published.assert_awaited_once()
 
 
 class TestSessionActions:

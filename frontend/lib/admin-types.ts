@@ -256,6 +256,7 @@ export type SafetyFlag = {
   categories: string[]
   category_names: string[]
   raw_output: string | null
+  rationale: string | null
   model: string | null
   prompt_hash: string
   unsafe_prob: number | null

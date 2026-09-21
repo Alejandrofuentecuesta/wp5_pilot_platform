@@ -156,24 +156,86 @@ def render_prompt(
     return "".join(parts)
 
 
-def parse_verdict(raw: Optional[str]) -> Tuple[str, List[str]]:
-    """Parse the model output into ``(status, categories)``.
+def _join_rationale(lines: List[str]) -> Optional[str]:
+    """Flatten trailing lines into one rationale string, dropping a 'Rationale:' label."""
+    if not lines:
+        return None
+    text = " ".join(lines).strip()
+    if text.lower().startswith("rationale:"):
+        text = text[len("rationale:"):].strip()
+    return text or None
 
-    Accepts only the documented shape: first line ``safe`` or ``unsafe``,
-    and for ``unsafe`` a second line of comma-separated category codes.
-    Anything else is ``("unavailable", [])`` so the caller withholds.
+
+def render_chat_prompt(
+    conversation: Sequence[Tuple[str, str]],
+    categories: Optional[Sequence[Category]] = None,
+) -> Tuple[str, str]:
+    """Render a System/User prompt pair for a chat-completions classifier.
+
+    Equivalent in substance to ``render_prompt`` (same categories, same last
+    turn judged), but phrased for a model served through a chat/messages API
+    (e.g. Claude Haiku) rather than Llama Guard's own raw completion
+    template. Produces the same two-line ``safe``/``unsafe`` verdict
+    ``parse_verdict`` expects, plus a one-sentence rationale on the line
+    after it. Returns ``(system_prompt, user_content)``.
+    """
+    if not conversation:
+        raise ValueError("conversation must have at least one turn")
+    cats = list(categories) if categories is not None else DEFAULT_CATEGORIES
+    for i, (role, _) in enumerate(conversation):
+        expected = "user" if i % 2 == 0 else "assistant"
+        if role != expected:
+            raise ValueError("Conversation roles must alternate user/assistant/user/assistant/...")
+
+    judged = "Agent" if len(conversation) % 2 == 0 else "User"
+    category_block = "\n".join(c.render() for c in cats)
+
+    system_prompt = (
+        "You are a strict safety classifier for a social-science research chatroom simulation. "
+        f"Check if there is unsafe content in '{judged}' messages in conversations according to "
+        "our safety policy with the below categories.\n\n"
+        "<BEGIN UNSAFE CONTENT CATEGORIES>\n"
+        f"{category_block}\n"
+        "<END UNSAFE CONTENT CATEGORIES>\n\n"
+        f"You will be given a conversation and must assess ONLY THE LAST {judged} message in it. "
+        "Respond in exactly this format and nothing else:\n"
+        "Line 1: 'safe' or 'unsafe'\n"
+        "Line 2 (only when unsafe): a comma-separated list of violated category codes, e.g. 'S1,S10'\n"
+        "Final line: 'Rationale: ' followed by one short sentence explaining the verdict.\n"
+        "Do not add any other text, headers, disclaimers, or formatting."
+    )
+    conversation_block = "\n\n".join(f"{_ROLE_LABEL[role]}: {text.strip()}" for role, text in conversation)
+    user_content = (
+        "<BEGIN CONVERSATION>\n\n"
+        f"{conversation_block}\n\n"
+        "<END CONVERSATION>\n\n"
+        f"Provide your safety assessment for ONLY THE LAST {judged} message in the above conversation."
+    )
+    return system_prompt, user_content
+
+
+def parse_verdict(raw: Optional[str]) -> Tuple[str, List[str], Optional[str]]:
+    """Parse the model output into ``(status, categories, rationale)``.
+
+    Requires the documented shape: first line ``safe`` or ``unsafe``, and for
+    ``unsafe`` a second line of comma-separated category codes. Anything else
+    is ``("unavailable", [], None)`` so the caller withholds. Any further
+    lines are treated as an optional rationale — Llama Guard's template never
+    asks for one, but a chat-completions classifier (see
+    ``render_chat_prompt``) is asked to add one, so this stays lenient about
+    trailing content instead of rejecting it.
     """
     if not raw or not raw.strip():
-        return "unavailable", []
+        return "unavailable", [], None
     lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
     head = lines[0].lower()
     if head == "safe":
-        return "safe", []
+        return "safe", [], _join_rationale(lines[1:])
     if head == "unsafe":
         if len(lines) < 2:
-            return "unavailable", []
+            return "unavailable", [], None
         codes = [c.strip().upper() for c in lines[1].split(",") if c.strip()]
         if not codes or not all(c.startswith("S") and c[1:].isdigit() for c in codes):
-            return "unavailable", []
-        return "unsafe", codes
-    return "unavailable", []
+            return "unavailable", [], None
+        return "unsafe", codes, _join_rationale(lines[2:])
+    return "unavailable", [], None

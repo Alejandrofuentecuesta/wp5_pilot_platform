@@ -25,7 +25,14 @@ from typing import Dict, List, Optional, Tuple
 from db import connection as db_conn
 from db.repositories import safety_repo
 from models.message import Message
-from utils.safety import NEUTRAL_USER_TURN, Category, SafetyClient, SafetyVerdict, render_prompt
+from utils.safety import (
+    NEUTRAL_USER_TURN,
+    Category,
+    SafetyClient,
+    SafetyVerdict,
+    render_chat_prompt,
+    render_prompt,
+)
 
 CONTEXT_MODES = ("none", "conditional", "always")
 
@@ -93,12 +100,20 @@ class SafetyScreen:
     # ── classification ────────────────────────────────────────────────────
 
     async def _classify(self, conversation: List[Tuple[str, str]]) -> SafetyVerdict:
+        # The Anthropic transport takes a chat-style system/user pair and its
+        # own natural-language prompt instead of Llama Guard's raw template;
+        # every other transport keeps using the single rendered prompt.
+        chat_mode = getattr(self.client, "transport", None) == "anthropic_messages"
         try:
-            prompt = render_prompt(conversation, self.categories)
+            if chat_mode:
+                system, user = render_chat_prompt(conversation, self.categories)
+                prompt = f"{system}\n\n{user}"
+            else:
+                prompt = render_prompt(conversation, self.categories)
         except Exception as exc:
             return SafetyVerdict(status="unavailable", error=f"render: {exc}")
         try:
-            verdict = await self.client.classify(prompt)
+            verdict = await (self.client.classify_chat(system, user) if chat_mode else self.client.classify(prompt))
         except Exception as exc:  # the client should never raise; belt and braces
             verdict = SafetyVerdict(status="unavailable", error=f"client: {exc}")
         try:
@@ -244,6 +259,7 @@ class SafetyScreen:
                 verdict=verdict.status,
                 categories=verdict.categories,
                 raw_output=verdict.raw or None,
+                rationale=verdict.rationale,
                 model=verdict.model or None,
                 prompt_hash=verdict.prompt_hash,
                 unsafe_prob=verdict.unsafe_prob,

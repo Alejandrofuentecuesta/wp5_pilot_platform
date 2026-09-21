@@ -2338,6 +2338,10 @@ class SafetyPolicyRequest(BaseModel):
     enabled: Optional[bool] = None
     categories: List[Dict[str, Any]]
     context_mode: Literal["none", "conditional", "always"]
+    # Which model classifies messages. None/empty falls back to the
+    # SAFETY_TRANSPORT / SAFETY_MODEL env vars (self-hosted Llama Guard).
+    transport: Optional[str] = None
+    model: Optional[str] = None
 
 
 class SafetyLockRequest(BaseModel):
@@ -2397,6 +2401,10 @@ async def admin_safety_policy_put(
         })
     safety["categories"] = cats
     safety["context_mode"] = body.context_mode
+    # Empty string clears back to the SAFETY_* env-var default, same as
+    # never having set it.
+    safety["transport"] = (body.transport or "").strip() or None
+    safety["model"] = (body.model or "").strip() or None
     try:
         safety = config_repo.validate_safety_config(safety)
         await config_repo.update_safety_block(pool, experiment_id, safety)

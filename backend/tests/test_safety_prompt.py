@@ -15,6 +15,7 @@ from utils.safety.prompt import (
     Category,
     categories_from_config,
     parse_verdict,
+    render_chat_prompt,
     render_prompt,
 )
 
@@ -117,16 +118,63 @@ class TestCustomCategories:
 class TestParseVerdict:
     @pytest.mark.parametrize("raw", ["safe", "safe\n", "  Safe  ", "safe\n\n"])
     def test_safe(self, raw):
-        assert parse_verdict(raw) == ("safe", [])
+        assert parse_verdict(raw) == ("safe", [], None)
 
     def test_unsafe_with_categories(self):
-        assert parse_verdict("unsafe\nS10,S1") == ("unsafe", ["S10", "S1"])
-        assert parse_verdict("unsafe\nS11") == ("unsafe", ["S11"])
-        assert parse_verdict("unsafe\n s10 , s1 \n") == ("unsafe", ["S10", "S1"])
+        assert parse_verdict("unsafe\nS10,S1") == ("unsafe", ["S10", "S1"], None)
+        assert parse_verdict("unsafe\nS11") == ("unsafe", ["S11"], None)
+        assert parse_verdict("unsafe\n s10 , s1 \n") == ("unsafe", ["S10", "S1"], None)
 
     @pytest.mark.parametrize(
         "raw",
         [None, "", "   ", "unsafe", "unsafe\nhate", "maybe", "safe unsafe", "unsafe\n", "I think it's safe"],
     )
     def test_anything_else_is_unavailable(self, raw):
-        assert parse_verdict(raw) == ("unavailable", [])
+        assert parse_verdict(raw) == ("unavailable", [], None)
+
+    def test_unsafe_rationale_is_captured_and_label_stripped(self):
+        status, cats, rationale = parse_verdict("unsafe\nS1,S9\nRationale: it endorses armed violence.")
+        assert (status, cats) == ("unsafe", ["S1", "S9"])
+        assert rationale == "it endorses armed violence."
+
+    def test_safe_rationale_is_captured(self):
+        status, cats, rationale = parse_verdict("safe\nRationale: no policy is violated.")
+        assert (status, cats) == ("safe", [])
+        assert rationale == "no policy is violated."
+
+    def test_no_trailing_lines_means_no_rationale(self):
+        assert parse_verdict("unsafe\nS1")[2] is None
+
+
+class TestRenderChatPrompt:
+    def test_system_prompt_contains_categories_and_format_instructions(self):
+        system, _ = render_chat_prompt([("user", "a"), ("assistant", "b")])
+        assert "S1: Violent Crimes." in system
+        assert "S14: Code Interpreter Abuse." in system
+        assert "'safe' or 'unsafe'" in system
+        assert "Rationale:" in system
+
+    def test_judges_agent_on_even_turn_count(self):
+        system, user = render_chat_prompt([("user", "a"), ("assistant", "b")])
+        assert "unsafe content in 'Agent' messages" in system
+        assert "LAST Agent message" in user
+
+    def test_judges_user_on_single_turn(self):
+        system, user = render_chat_prompt([("user", "Quiero matar a mi vecino")])
+        assert "unsafe content in 'User' messages" in system
+        assert "LAST User message" in user
+        assert "Quiero matar a mi vecino" in user
+
+    def test_custom_categories_included(self):
+        cats = [Category("S10", "Hate", "Only slurs directed at the participant.")]
+        system, _ = render_chat_prompt([("user", "x")], cats)
+        assert "S10: Hate.\nOnly slurs directed at the participant." in system
+        assert "S1: Violent Crimes" not in system
+
+    def test_roles_must_alternate(self):
+        with pytest.raises(ValueError):
+            render_chat_prompt([("assistant", "x")])
+
+    def test_empty_conversation_rejected(self):
+        with pytest.raises(ValueError):
+            render_chat_prompt([])

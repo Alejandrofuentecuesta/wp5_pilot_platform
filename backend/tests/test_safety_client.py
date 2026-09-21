@@ -122,6 +122,61 @@ class TestOllamaRaw:
         assert v.unsafe_prob is None
 
 
+class TestAnthropicMessages:
+    async def test_safe_verdict_and_request_shape(self):
+        seen = {}
+
+        def handler(request: httpx.Request):
+            seen["url"] = str(request.url)
+            seen["api_key_header"] = request.headers.get("x-api-key")
+            seen["version_header"] = request.headers.get("anthropic-version")
+            seen["body"] = json.loads(request.content)
+            return httpx.Response(200, json={"content": [{"type": "text", "text": "safe"}]})
+
+        c = _client("anthropic_messages", handler)
+        v = await c.classify_chat("system instructions", "judge this message")
+        assert v.status == "safe" and v.categories == []
+        assert seen["url"] == "https://host.example/v1/messages"
+        assert seen["api_key_header"] == "k"
+        assert seen["version_header"]
+        assert seen["body"]["model"] == "guard"
+        assert seen["body"]["system"] == "system instructions"
+        assert seen["body"]["messages"] == [{"role": "user", "content": "judge this message"}]
+        assert v.prompt_hash and v.model == "guard"
+
+    async def test_unsafe_with_rationale(self):
+        def handler(request):
+            return httpx.Response(
+                200,
+                json={"content": [{"type": "text", "text": "unsafe\nS1,S9\nRationale: it endorses violence."}]},
+            )
+
+        v = await _client("anthropic_messages", handler).classify_chat("sys", "usr")
+        assert v.status == "unsafe" and v.categories == ["S1", "S9"]
+        assert v.rationale == "it endorses violence."
+
+    async def test_persistent_failure_is_unavailable_not_exception(self):
+        def handler(request):
+            raise httpx.ConnectError("refused")
+
+        v = await _client("anthropic_messages", handler).classify_chat("sys", "usr")
+        assert v.status == "unavailable"
+        assert "ConnectError" in (v.error or "")
+
+    async def test_default_base_url_when_not_configured(self):
+        def handler(request):
+            return httpx.Response(200, json={"content": [{"type": "text", "text": "safe"}]})
+
+        c = SafetyClient(
+            transport="anthropic_messages",
+            base_url="",
+            model="claude-haiku-4-5-20251001",
+            api_key="k",
+            transport_layer=httpx.MockTransport(handler),
+        )
+        assert c.base_url == "https://api.anthropic.com"
+
+
 class TestConstruction:
     def test_unknown_transport_rejected(self):
         with pytest.raises(ValueError):
@@ -130,6 +185,13 @@ class TestConstruction:
     def test_missing_base_url_rejected(self):
         with pytest.raises(ValueError):
             SafetyClient(transport="ollama_raw", base_url="", model="y")
+
+    def test_anthropic_transport_does_not_require_base_url(self):
+        SafetyClient(transport="anthropic_messages", base_url="", model="claude-haiku-4-5-20251001")
+
+    def test_missing_model_rejected(self):
+        with pytest.raises(ValueError):
+            SafetyClient(transport="anthropic_messages", base_url="", model="")
 
     def test_from_config_env_fallback(self, monkeypatch):
         monkeypatch.setenv("SAFETY_BASE_URL", "https://env.example/")
@@ -148,6 +210,18 @@ class TestConstruction:
             {"enabled": True, "base_url": "https://cfg.example", "model": "m", "transport": "openai_completions"}
         )
         assert c.base_url == "https://cfg.example"
+
+    def test_anthropic_transport_falls_back_to_anthropic_api_key(self, monkeypatch):
+        monkeypatch.delenv("SAFETY_API_KEY", raising=False)
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-shared")
+        c = SafetyClient.from_config({"enabled": True, "transport": "anthropic_messages", "model": "claude-haiku-4-5-20251001"})
+        assert c.api_key == "sk-ant-shared"
+
+    def test_safety_api_key_takes_priority_over_anthropic_api_key(self, monkeypatch):
+        monkeypatch.setenv("SAFETY_API_KEY", "safety-specific")
+        monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-shared")
+        c = SafetyClient.from_config({"enabled": True, "transport": "anthropic_messages", "model": "claude-haiku-4-5-20251001"})
+        assert c.api_key == "safety-specific"
 
 
 class TestFirstTokenProb:

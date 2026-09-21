@@ -7,5 +7,6 @@ from utils.safety.prompt import (  # noqa: F401
     Category,
     categories_from_config,
     parse_verdict,
+    render_chat_prompt,
     render_prompt,
 )

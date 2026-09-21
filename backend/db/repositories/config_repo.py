@@ -266,7 +266,7 @@ def validate_experimental_config(
     return out
 
 
-SAFETY_TRANSPORTS = ("openai_completions", "ollama_raw")
+SAFETY_TRANSPORTS = ("openai_completions", "ollama_raw", "anthropic_messages")
 SAFETY_CONTEXT_MODES = ("none", "conditional", "always")
 
 

@@ -176,6 +176,10 @@ CREATE TABLE IF NOT EXISTS safety_flags (
     verdict           TEXT        NOT NULL,
     categories        TEXT[]      NOT NULL DEFAULT '{}',
     raw_output        TEXT,
+    -- One-sentence explanation, when the classifier provides one (chat
+    -- classifiers like Claude Haiku always do; Llama Guard's own template
+    -- never does, so this stays NULL for those verdicts).
+    rationale         TEXT,
     model             TEXT,
     prompt_hash       TEXT        NOT NULL DEFAULT '',
     unsafe_prob       DOUBLE PRECISION,
@@ -195,3 +199,7 @@ CREATE INDEX IF NOT EXISTS idx_safety_flags_open
     ON safety_flags(created_at) WHERE reviewed_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_safety_flags_session
     ON safety_flags(session_id, created_at);
+DO $$ BEGIN
+    ALTER TABLE safety_flags ADD COLUMN rationale TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;

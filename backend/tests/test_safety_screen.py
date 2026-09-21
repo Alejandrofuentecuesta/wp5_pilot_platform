@@ -31,6 +31,23 @@ class FakeClient:
         return self.verdict
 
 
+class FakeChatClient:
+    """Stands in for the anthropic_messages transport (system/user, not one raw prompt)."""
+
+    transport = "anthropic_messages"
+
+    def __init__(self, verdict: SafetyVerdict):
+        self.verdict = verdict
+        self.calls = []
+
+    async def classify_chat(self, system, user):
+        self.calls.append((system, user))
+        return self.verdict
+
+    async def classify(self, prompt):  # pragma: no cover - must never be used in chat mode
+        raise AssertionError("classify() called instead of classify_chat() for anthropic_messages transport")
+
+
 def _state(*messages):
     return SimpleNamespace(messages=list(messages), user_name="Paula")
 
@@ -235,3 +252,32 @@ class TestParticipantPath:
         screen, _ = _screen(None, enabled=False)
         assert await screen.screen_participant(Message.create(sender="Paula", content="x")) is None
         repo.insert_flag.assert_not_awaited()
+
+
+class TestAnthropicTransport:
+    """SafetyScreen must route to classify_chat(), not classify(), for this transport."""
+
+    async def test_safe_uses_classify_chat_not_classify(self, repo):
+        client = FakeChatClient(SafetyVerdict(status="safe", raw="safe"))
+        screen, _ = _screen(client)
+        msg = Message.create(sender="Carlos", content="Hola")
+        out = await screen.screen_agent(msg, _state())
+        assert out.publish is True
+        assert len(client.calls) == 1
+        system, user = client.calls[0]
+        assert "safety classifier" in system.lower()
+        assert "LAST Agent message" in user
+
+    async def test_unsafe_rationale_reaches_the_flag(self, repo):
+        v = SafetyVerdict(
+            status="unsafe",
+            categories=["S10"],
+            raw="unsafe\nS10\nRationale: targets an identity group.",
+            rationale="targets an identity group.",
+        )
+        screen, _ = _screen(FakeChatClient(v))
+        msg = Message.create(sender="Carlos", content="x")
+        out = await screen.screen_agent(msg, _state())
+        await screen.after_publish(msg, out)
+        kw = repo.insert_flag.call_args.kwargs
+        assert kw["rationale"] == "targets an identity group."

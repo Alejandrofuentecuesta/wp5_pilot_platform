@@ -145,7 +145,7 @@ export interface SafetyCategory {
 
 export interface SafetyConfig {
   enabled: boolean
-  transport?: "openai_completions" | "ollama_raw"
+  transport?: "openai_completions" | "ollama_raw" | "anthropic_messages"
   base_url?: string
   model?: string
   timeout_s?: number

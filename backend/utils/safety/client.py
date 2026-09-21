@@ -39,6 +39,8 @@ from utils.safety.prompt import parse_verdict
 TRANSPORTS = ("openai_completions", "ollama_raw", "anthropic_messages")
 ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
+KONSTANZ_DEFAULT_BASE_URL = "https://whatif.inf.uni-konstanz.de/v1"
+LLAMA_GUARD_DEFAULT_MODEL = "meta-llama/Llama-Guard-3-8B"
 
 
 @dataclass
@@ -81,7 +83,14 @@ class SafetyClient:
         if not base_url and transport != "anthropic_messages":
             raise ValueError("safety client needs base_url and model")
         self.transport = transport
-        self.base_url = (base_url or (ANTHROPIC_DEFAULT_BASE_URL if transport == "anthropic_messages" else "")).rstrip("/")
+        normalized_base_url = base_url.rstrip("/")
+        # The shared Konstanz/OpenAI client is configured with a /v1 base,
+        # while this raw-completions client appends /v1/completions itself.
+        if transport == "openai_completions" and normalized_base_url.endswith("/v1"):
+            normalized_base_url = normalized_base_url[:-3]
+        self.base_url = normalized_base_url or (
+            ANTHROPIC_DEFAULT_BASE_URL if transport == "anthropic_messages" else ""
+        )
         self.model = model
         self.api_key = api_key if api_key is not None else os.getenv("SAFETY_API_KEY", "")
         self.timeout_s = timeout_s
@@ -106,12 +115,20 @@ class SafetyClient:
             base_url = os.getenv("ANTHROPIC_BASE_URL", "")
             api_key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("SAFETY_API_KEY", "")
         else:
-            base_url = cfg.get("base_url") or os.getenv("SAFETY_BASE_URL", "")
-            api_key = os.getenv("SAFETY_API_KEY", "")
+            base_url = (
+                cfg.get("base_url")
+                or os.getenv("SAFETY_BASE_URL", "")
+                or os.getenv("KONSTANZ_BASE_URL", KONSTANZ_DEFAULT_BASE_URL)
+            )
+            api_key = os.getenv("SAFETY_API_KEY", "") or os.getenv("KONSTANZ_API_KEY", "")
         return cls(
             transport=transport,
             base_url=base_url,
-            model=cfg.get("model") or os.getenv("SAFETY_MODEL", ""),
+            model=(
+                cfg.get("model")
+                or os.getenv("SAFETY_MODEL", "")
+                or (LLAMA_GUARD_DEFAULT_MODEL if transport == "openai_completions" else "")
+            ),
             api_key=api_key or None,
             timeout_s=float(cfg.get("timeout_s", 8.0)),
             num_ctx=int(cfg.get("num_ctx", 4096)),

@@ -556,6 +556,8 @@ export default function AdminPanel() {
       key="llm"
       config={simulation}
       onChange={handleSimChange}
+      safety={experimental.safety ?? { enabled: false }}
+      onSafetyChange={(safety) => setExperimental((prev) => ({ ...prev, safety }))}
       llmProviders={meta.llm_providers}
       providerModels={meta.provider_models}
       providerParams={meta.provider_params ?? {}}

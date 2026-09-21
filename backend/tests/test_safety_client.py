@@ -211,6 +211,28 @@ class TestConstruction:
         )
         assert c.base_url == "https://cfg.example"
 
+    def test_llama_guard_reuses_konstanz_configuration(self, monkeypatch):
+        monkeypatch.delenv("SAFETY_BASE_URL", raising=False)
+        monkeypatch.delenv("SAFETY_MODEL", raising=False)
+        monkeypatch.delenv("SAFETY_API_KEY", raising=False)
+        monkeypatch.setenv("KONSTANZ_BASE_URL", "https://new-konstanz.example/v1")
+        monkeypatch.setenv("KONSTANZ_API_KEY", "konstanz-key")
+        c = SafetyClient.from_config({"enabled": True, "transport": "openai_completions"})
+        assert c.base_url == "https://new-konstanz.example"
+        assert c.model == "meta-llama/Llama-Guard-3-8B"
+        assert c.api_key == "konstanz-key"
+
+    def test_safety_overrides_take_priority_over_konstanz(self, monkeypatch):
+        monkeypatch.setenv("KONSTANZ_BASE_URL", "https://konstanz.example/v1")
+        monkeypatch.setenv("KONSTANZ_API_KEY", "konstanz-key")
+        monkeypatch.setenv("SAFETY_BASE_URL", "https://dedicated-safety.example/v1")
+        monkeypatch.setenv("SAFETY_MODEL", "custom-guard")
+        monkeypatch.setenv("SAFETY_API_KEY", "safety-key")
+        c = SafetyClient.from_config({"enabled": True, "transport": "openai_completions"})
+        assert c.base_url == "https://dedicated-safety.example"
+        assert c.model == "custom-guard"
+        assert c.api_key == "safety-key"
+
     def test_anthropic_transport_falls_back_to_anthropic_api_key(self, monkeypatch):
         monkeypatch.delenv("SAFETY_API_KEY", raising=False)
         monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-ant-shared")

@@ -2380,10 +2380,18 @@ class SafetyPolicyRequest(BaseModel):
     enabled: Optional[bool] = None
     categories: List[Dict[str, Any]]
     context_mode: Literal["none", "conditional", "always"]
-    # Which model classifies messages. None/empty falls back to the
-    # SAFETY_TRANSPORT / SAFETY_MODEL env vars (self-hosted Llama Guard).
+    # Which model classifies messages. None/empty falls back to SAFETY_*
+    # overrides and then to the shared Konstanz Llama Guard configuration.
     transport: Optional[str] = None
     model: Optional[str] = None
+
+
+class SafetyClassifierTestRequest(BaseModel):
+    enabled: bool = True
+    transport: Optional[str] = None
+    base_url: Optional[str] = None
+    model: Optional[str] = None
+    timeout_s: float = 8.0
 
 
 class SafetyLockRequest(BaseModel):
@@ -2443,15 +2451,15 @@ async def admin_safety_policy_put(
         })
     safety["categories"] = cats
     safety["context_mode"] = body.context_mode
-    # Empty string clears back to the SAFETY_* env-var default, same as
-    # never having set it.
-    safety["transport"] = (body.transport or "").strip() or None
-    safety["model"] = (body.model or "").strip() or None
-    # ``base_url`` belongs to the self-hosted Llama Guard transport. An old
-    # per-experiment value must not follow the policy when switching to
-    # Claude, whose client uses ANTHROPIC_BASE_URL or the official API host.
-    if safety["transport"] == "anthropic_messages":
-        safety.pop("base_url", None)
+    # Only touch model routing when the caller explicitly sends it. The
+    # Safety tab edits policy fields, while LLM Pipeline owns these settings.
+    if "transport" in body.model_fields_set:
+        safety["transport"] = (body.transport or "").strip() or None
+    if "model" in body.model_fields_set:
+        safety["model"] = (body.model or "").strip() or None
+    # Keep any per-experiment Llama Guard base URL while Claude is selected.
+    # The Anthropic client ignores it, and preserving it makes switching back
+    # to the self-hosted classifier lossless.
     try:
         safety = config_repo.validate_safety_config(safety)
         await config_repo.update_safety_block(pool, experiment_id, safety)
@@ -2460,19 +2468,8 @@ async def admin_safety_policy_put(
     return _policy_view(experiment_id, safety)
 
 
-@app.post("/admin/safety/policy/{experiment_id}/test")
-async def admin_safety_policy_test(experiment_id: str, x_admin_key: str = Header(None)):
-    """Send one harmless test message through this experiment's saved classifier config.
-
-    Every agent turn without a verdict is withheld and never published, so a
-    misconfigured or unreachable classifier silently blocks the whole chat
-    with no visible error anywhere else. This is the only way to see the
-    real failure (bad model id, unreachable host, expired key, timeout)
-    instead of just "no verdict — turn withheld" on every flag.
-    """
-    _require_admin(x_admin_key)
-    pool = _get_pool()
-    safety = await _safety_block(pool, experiment_id)
+async def _test_safety_classifier_config(safety: Dict[str, Any]) -> Dict[str, Any]:
+    """Run the harmless connectivity test through the real safety transport."""
     if not safety.get("enabled"):
         return {"ok": False, "error": "Screening is disabled for this experiment; nothing to test."}
 
@@ -2510,6 +2507,27 @@ async def admin_safety_policy_test(experiment_id: str, x_admin_key: str = Header
         "latency_ms": verdict.latency_ms,
         "error": verdict.error,
     }
+
+
+@app.post("/admin/safety/test")
+async def admin_safety_draft_test(
+    body: SafetyClassifierTestRequest, x_admin_key: str = Header(None)
+):
+    """Test an unsaved wizard configuration without persisting it."""
+    _require_admin(x_admin_key)
+    try:
+        safety = config_repo.validate_safety_config(body.model_dump(exclude_none=True))
+    except ValueError as exc:
+        return {"ok": False, "error": f"Invalid safety configuration: {exc}"}
+    return await _test_safety_classifier_config(safety)
+
+
+@app.post("/admin/safety/policy/{experiment_id}/test")
+async def admin_safety_policy_test(experiment_id: str, x_admin_key: str = Header(None)):
+    """Test the classifier configuration saved for an experiment."""
+    _require_admin(x_admin_key)
+    safety = await _safety_block(_get_pool(), experiment_id)
+    return await _test_safety_classifier_config(safety)
 
 
 @app.post("/admin/safety/policy/{experiment_id}/lock")

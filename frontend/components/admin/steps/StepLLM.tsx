@@ -1,15 +1,18 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import type { SimulationConfig, ProviderParamsMeta, TestLLMResult, HumanizeRules, WordSub } from "../../../lib/admin-types"
+import type { SimulationConfig, ProviderParamsMeta, TestLLMResult, HumanizeRules, WordSub, SafetyConfig } from "../../../lib/admin-types"
 import { DEFAULT_WORD_SUBS } from "../../../lib/admin-types"
-import { testLlm, fetchPromptDefaults } from "../../../lib/admin-api"
+import { testLlm, fetchPromptDefaults, testSafetyDraft } from "../../../lib/admin-api"
+import type { SafetyClassifierTestResult } from "../../../lib/admin-api"
 
 export type LLMTestResults = Record<Role, boolean>
 
 interface StepLLMProps {
   config: SimulationConfig
   onChange: (updates: Partial<SimulationConfig>) => void
+  safety: SafetyConfig
+  onSafetyChange: (safety: SafetyConfig) => void
   llmProviders: string[]
   providerModels: Record<string, string[]>
   providerParams: Record<string, ProviderParamsMeta>
@@ -355,6 +358,136 @@ function LLMRoleConfig({
   )
 }
 
+const SAFETY_MODELS = {
+  konstanz: "meta-llama/Llama-Guard-3-8B",
+  anthropic: "claude-haiku-4-5-20251001",
+} as const
+
+function SafetyRoleConfig({
+  safety,
+  onChange,
+  expanded,
+  onToggle,
+  adminKey,
+}: {
+  safety: SafetyConfig
+  onChange: (safety: SafetyConfig) => void
+  expanded: boolean
+  onToggle: () => void
+  adminKey: string
+}) {
+  const provider = safety.transport === "anthropic_messages" ? "anthropic" : "konstanz"
+  const model = safety.model || SAFETY_MODELS[provider]
+  const [testing, setTesting] = useState(false)
+  const [testResult, setTestResult] = useState<SafetyClassifierTestResult | null>(null)
+  const set = (patch: Partial<SafetyConfig>) => {
+    onChange({ ...safety, ...patch })
+    setTestResult(null)
+  }
+  const changeProvider = (next: "konstanz" | "anthropic") => {
+    set({
+      transport: next === "anthropic" ? "anthropic_messages" : "openai_completions",
+      model: SAFETY_MODELS[next],
+    })
+  }
+  const runTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      setTestResult(await testSafetyDraft(adminKey, {
+        enabled: safety.enabled,
+        transport: safety.transport || "openai_completions",
+        base_url: safety.base_url,
+        model,
+        timeout_s: safety.timeout_s ?? 8,
+      }))
+    } catch (e) {
+      setTestResult({ ok: false, error: e instanceof Error ? e.message : "Safety test failed" })
+    } finally {
+      setTesting(false)
+    }
+  }
+
+  return (
+    <div className="bg-admin-surface rounded-lg border border-admin-border overflow-hidden">
+      <button onClick={onToggle} className="w-full flex items-center justify-between px-5 py-3 hover:bg-admin-raised transition-colors">
+        <div className="text-left">
+          <span className="text-sm font-semibold text-admin-text">Safety</span>
+          <span className="text-xs text-admin-faint ml-2">
+            {safety.enabled ? `${provider} / ${model}` : "disabled"}
+          </span>
+        </div>
+        <span className="text-admin-faint text-sm">{expanded ? "\u25B2" : "\u25BC"}</span>
+      </button>
+      {expanded && (
+        <div className="px-5 pb-4 border-t border-admin-border pt-3 space-y-3">
+          <div className="flex items-start justify-between gap-4">
+            <p className="text-xs text-admin-muted">
+              Screens messages before publication. Categories and review behaviour are managed in the Safety tab.
+            </p>
+            <label className="flex items-center gap-2 text-xs text-admin-text shrink-0">
+              <input type="checkbox" checked={safety.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
+              Enabled
+            </label>
+          </div>
+          {safety.enabled && (
+            <>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-admin-muted mb-1">Provider</label>
+                  <select value={provider} onChange={(e) => changeProvider(e.target.value as "konstanz" | "anthropic")} className={inputClass}>
+                    <option value="konstanz">konstanz</option>
+                    <option value="anthropic">anthropic</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-admin-muted mb-1">Model</label>
+                  <input value={model} onChange={(e) => set({ model: e.target.value })} className={inputClass} />
+                </div>
+                {provider === "konstanz" && (
+                  <div>
+                    <label className="block text-xs font-medium text-admin-muted mb-1">Base URL override</label>
+                    <input
+                      value={safety.base_url ?? ""}
+                      onChange={(e) => set({ base_url: e.target.value || undefined })}
+                      placeholder="KONSTANZ_BASE_URL"
+                      className={inputClass}
+                    />
+                  </div>
+                )}
+                <div>
+                  <label className="block text-xs font-medium text-admin-muted mb-1">Timeout (seconds)</label>
+                  <input
+                    type="number" min={1} step={1}
+                    value={safety.timeout_s ?? 8}
+                    onChange={(e) => set({ timeout_s: Number(e.target.value) || 8 })}
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              <div>
+                <button type="button" onClick={runTest} disabled={testing || !model.trim()} className="px-3 py-1.5 text-xs font-medium rounded-md border border-admin-border text-admin-text hover:bg-admin-raised disabled:opacity-50">
+                  {testing ? "Testing..." : "Test Safety"}
+                </button>
+                {testResult && (
+                  <div className={`mt-2 rounded-lg border p-3 text-xs ${testResult.ok ? "border-green-600/30 bg-green-950/20" : "border-red-600/30 bg-red-950/20"}`}>
+                    <p className={testResult.ok ? "text-green-400" : "text-red-400"}>
+                      {testResult.ok ? `Success: ${testResult.status}` : `Failed: ${testResult.error || "no usable verdict"}`}
+                    </p>
+                    {(testResult.base_url || testResult.model) && (
+                      <p className="mt-1 text-admin-faint">{testResult.transport} · {testResult.base_url} · {testResult.model}</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
 const HUMANIZE_FIELDS: { key: keyof HumanizeRules; label: string; desc: string; def: number }[] = [
   { key: "strip_hashtags",       label: "Strip hashtags",           desc: "Removes #hashtag tokens",                        def: 100 },
   { key: "strip_inverted_punct", label: "Remove ¿ / ¡",             desc: "Drops Spanish inverted punctuation",              def: 100 },
@@ -524,8 +657,8 @@ function HumanizeRulesEditor({
   )
 }
 
-export default function StepLLM({ config, onChange, llmProviders, providerModels, providerParams, adminKey, onTestResult }: StepLLMProps) {
-  const [expanded, setExpanded] = useState<Role | null>("director")
+export default function StepLLM({ config, onChange, safety, onSafetyChange, llmProviders, providerModels, providerParams, adminKey, onTestResult }: StepLLMProps) {
+  const [expanded, setExpanded] = useState<Role | "safety" | null>("director")
   const [promptDefaults, setPromptDefaults] = useState<Record<string, string>>({})
   useEffect(() => {
     fetchPromptDefaults(adminKey).then(setPromptDefaults).catch(() => {})
@@ -556,7 +689,7 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
       <div>
         <h2 className="text-lg font-semibold text-admin-text">LLM Pipeline</h2>
         <p className="text-sm text-admin-muted mt-1">
-          Configure the Director, Performer, Moderator, and Classifier models.
+          Configure the Director, Performer, Moderator, Classifier, and Safety models.
         </p>
       </div>
 
@@ -578,6 +711,13 @@ export default function StepLLM({ config, onChange, llmProviders, providerModels
             promptKey={ROLE_PROMPT_KEY[role] as string}
           />
         ))}
+        <SafetyRoleConfig
+          safety={safety}
+          onChange={onSafetyChange}
+          expanded={expanded === "safety"}
+          onToggle={() => setExpanded(expanded === "safety" ? null : "safety")}
+          adminKey={adminKey}
+        />
       </div>
 
       <div className="flex items-center gap-3">

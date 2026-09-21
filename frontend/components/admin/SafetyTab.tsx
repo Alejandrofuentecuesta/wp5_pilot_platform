@@ -398,17 +398,17 @@ const CONTEXT_MODE_HELP: Record<SafetyPolicy["context_mode"], string> = {
   always: "The participant's last message is always included (highest sensitivity; the model also reacts to what the participant said).",
 }
 
-/* Classifier model: which LLM screens messages. "Llama Guard" leaves
-   transport/model unset so the experiment falls back to the self-hosted
-   SAFETY_TRANSPORT / SAFETY_BASE_URL / SAFETY_MODEL env vars, unchanged from
-   before this selector existed. "Claude" routes through the
+/* Classifier model: which LLM screens messages. "Llama Guard" explicitly
+   selects the Konstanz OpenAI-compatible transport and model. The backend
+   reuses KONSTANZ_BASE_URL / KONSTANZ_API_KEY unless dedicated SAFETY_*
+   overrides are configured. "Claude" routes through the
    anthropic_messages transport with its own prompt (utils.safety.prompt's
    render_chat_prompt) that returns the same safe/unsafe + categories verdict
    plus a one-sentence rationale. */
 type ClassifierKey = "llama_guard" | "claude"
 
 const CLASSIFIER_OPTIONS: { key: ClassifierKey; label: string; defaultModel: string }[] = [
-  { key: "llama_guard", label: "Llama Guard 3 (self-hosted)", defaultModel: "" },
+  { key: "llama_guard", label: "Llama Guard 3 (Konstanz)", defaultModel: "meta-llama/Llama-Guard-3-8B" },
   { key: "claude", label: "Claude (Anthropic API)", defaultModel: "claude-haiku-4-5-20251001" },
 ]
 
@@ -421,7 +421,7 @@ function classifierKeyFor(transport: string | null): ClassifierKey {
 function classifierSummary(transport: string | null, model: string | null): string {
   const key = classifierKeyFor(transport)
   const base = CLASSIFIER_OPTIONS.find((o) => o.key === key)!.label
-  return key === "claude" && model ? `Claude (${model})` : base
+  return model ? `${base} (${model})` : base
 }
 
 function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentId: string }) {
@@ -450,11 +450,8 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
   if (!policy || !draft) return null
 
   const dirty =
-    draft.enabled !== policy.enabled ||
     JSON.stringify(draft.categories) !== JSON.stringify(policy.categories) ||
-    draft.context_mode !== policy.context_mode ||
-    draft.transport !== policy.transport ||
-    draft.model !== policy.model
+    draft.context_mode !== policy.context_mode
   const enabledCount = draft.categories.filter((c) => c.enabled).length
 
   const setCat = (code: string, patch: Partial<SafetyPolicyCategory>) =>
@@ -477,7 +474,6 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
     setMsg(null)
     try {
       const p = await saveSafetyPolicy(adminKey, experimentId, {
-        enabled: draft.enabled,
         context_mode: draft.context_mode,
         categories: draft.categories.map((c) => ({
           code: c.code,
@@ -485,8 +481,6 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
           enabled: c.enabled,
           definition: c.definition.trim() || undefined,
         })),
-        transport: draft.transport,
-        model: draft.model,
       })
       setPolicy(p)
       setDraft(p)
@@ -530,87 +524,11 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
             </p>
           )}
 
-          <div className={`rounded-lg border px-3 py-3 ${draft.enabled ? "border-admin-pastel-green bg-admin-pastel-green/20" : "border-admin-danger bg-admin-danger-soft/40"}`}>
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <div className="text-sm font-semibold text-admin-text">
-                  LlamaGuard screening is {draft.enabled ? "enabled" : "disabled"}
-                </div>
-                <p className="mt-1 text-xs text-admin-muted">
-                  {draft.enabled
-                    ? "Agent messages are screened before reaching participants. Violence/weapons (S1/S9) and turns without a classifier verdict are withheld; other unsafe categories are published and flagged for review."
-                    : "Agent messages are not screened by LlamaGuard. Use this when the safety model is unavailable or for local tests."}
-                </p>
-              </div>
-              <button
-                type="button"
-                disabled={policy.locked || saving}
-                onClick={() => setDraft({ ...draft, enabled: !draft.enabled })}
-                className={`shrink-0 rounded border px-3 py-1 text-xs font-medium shadow-sm disabled:opacity-40 ${
-                  draft.enabled
-                    ? "border-red-700 bg-red-600 text-white hover:bg-red-700"
-                    : "border-admin-accent bg-admin-accent text-white hover:bg-admin-accent-hover"
-                }`}
-              >
-                {draft.enabled ? "Disable LlamaGuard" : "Enable LlamaGuard"}
-              </button>
-            </div>
-            <p className="mt-2 text-[11px] text-admin-faint">
-              This applies to sessions started after saving; live sessions keep the policy they started with.
-            </p>
-          </div>
-
           <div>
             <label className="block text-xs font-medium text-admin-text mb-1">Classifier model</label>
-            <p className="text-[11px] text-admin-faint mb-1.5">
-              Currently saved: <span className="font-medium text-admin-text">{classifierSummary(policy.transport, policy.model)}</span>
-              {(draft.transport !== policy.transport || draft.model !== policy.model) && (
-                <span className="text-admin-pastel-amber-text"> — unsaved change, click &quot;Save policy&quot; below to apply</span>
-              )}
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {CLASSIFIER_OPTIONS.map((opt) => {
-                const active = classifierKeyFor(draft.transport) === opt.key
-                return (
-                  <button
-                    key={opt.key}
-                    type="button"
-                    disabled={policy.locked}
-                    onClick={() =>
-                      setDraft({
-                        ...draft,
-                        transport: opt.key === "llama_guard" ? null : "anthropic_messages",
-                        model: opt.key === "llama_guard" ? null : draft.model || opt.defaultModel,
-                      })
-                    }
-                    className={`rounded border px-3 py-1.5 text-xs font-medium shadow-sm disabled:opacity-40 ${
-                      active
-                        ? "border-admin-accent bg-admin-accent text-white"
-                        : "border-admin-border bg-admin-bg text-admin-text hover:bg-admin-raised"
-                    }`}
-                  >
-                    {opt.label}
-                  </button>
-                )
-              })}
-            </div>
-            {classifierKeyFor(draft.transport) === "claude" && (
-              <div className="mt-2">
-                <label className="block text-[11px] text-admin-faint mb-1">Model id</label>
-                <input
-                  type="text"
-                  disabled={policy.locked}
-                  value={draft.model || ""}
-                  onChange={(e) => setDraft({ ...draft, model: e.target.value })}
-                  placeholder="claude-haiku-4-5-20251001"
-                  className="w-full max-w-xs border border-admin-border rounded px-2 py-1 text-xs bg-admin-bg text-admin-text"
-                />
-              </div>
-            )}
-            <p className="text-[11px] text-admin-faint mt-1">
-              {classifierKeyFor(draft.transport) === "claude"
-                ? "Uses the Anthropic API (ANTHROPIC_API_KEY) with a prompt built to return the same safe/unsafe + categories verdict as Llama Guard, plus a one-sentence rationale shown on each flag."
-                : "Uses the self-hosted Llama Guard 3 endpoint (SAFETY_BASE_URL / SAFETY_MODEL, or this experiment's own override once set)."}
+            <p className="text-xs text-admin-muted">
+              <span className="font-medium text-admin-text">{classifierSummary(policy.transport, policy.model)}</span>
+              {policy.enabled ? " is enabled." : " is disabled."} Configure the provider, model, endpoint, and timeout in LLM Pipeline.
             </p>
 
             <div className="mt-2">

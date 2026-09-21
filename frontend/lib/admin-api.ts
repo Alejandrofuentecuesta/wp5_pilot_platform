@@ -643,3 +643,24 @@ export async function testSafetyClassifier(key: string, experimentId: string): P
   }
   return res.json()
 }
+
+export async function testSafetyDraft(
+  key: string,
+  safety: {
+    enabled: boolean
+    transport?: string
+    base_url?: string
+    model?: string
+    timeout_s?: number
+  },
+): Promise<SafetyClassifierTestResult> {
+  const res = await adminFetch("/admin/safety/test", key, {
+    method: "POST",
+    body: JSON.stringify(safety),
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Safety test failed" }))
+    throw new Error(err.detail || "Safety test failed")
+  }
+  return res.json()
+}

@@ -1,6 +1,7 @@
 "use client"
 
-import type { Message } from "@/lib/types"
+import { useState } from "react"
+import type { Message, MessageReaction } from "@/lib/types"
 import { getSenderColor, PARTICIPANT_SENDER } from "@/lib/constants"
 import { formatMessageTime } from "@/lib/dates"
 import ReplyQuote from "./ReplyQuote"
@@ -13,10 +14,20 @@ interface MessageBubbleProps {
   displayName: string
   onReply: (msg: Message) => void
   onLike: (msg: Message) => void
+  onReaction: (msg: Message, reaction: MessageReaction) => void
   onMention: (sender: string) => void
   onReport: (msg: Message) => void
   onBlock: (msg: Message) => void
 }
+
+const REACTION_OPTIONS: Array<{ value: MessageReaction; emoji: string; label: string }> = [
+  { value: "laugh", emoji: "😂", label: "Risa" },
+  { value: "angry", emoji: "😡", label: "Enfado" },
+  { value: "sad", emoji: "😢", label: "Tristeza" },
+  { value: "bored", emoji: "🥱", label: "Aburrimiento" },
+  { value: "afraid", emoji: "😨", label: "Asustado/a" },
+  { value: "dislike", emoji: "👎", label: "No me gusta" },
+]
 
 function renderContent(content: string, mentions?: string[]) {
   if (!mentions || mentions.length === 0) {
@@ -51,10 +62,12 @@ export default function MessageBubble({
   displayName,
   onReply,
   onLike,
+  onReaction,
   onMention,
   onReport,
   onBlock,
 }: MessageBubbleProps) {
+  const [reactionPickerOpen, setReactionPickerOpen] = useState(false)
   // The backend stores the participant's chosen display name as sender, while
   // older sessions may still use the canonical "participant" value.
   const messageIsSelf =
@@ -72,6 +85,10 @@ export default function MessageBubble({
   const senderColor = getSenderColor(senderLabel)
   const likesCount = message.likes_count || 0
   const isLiked = (message.liked_by || []).includes(PARTICIPANT_SENDER)
+  const selectedReaction = message.reactions?.[PARTICIPANT_SENDER]
+  const selectedReactionOption = REACTION_OPTIONS.find(
+    (option) => option.value === selectedReaction,
+  )
 
   const quotedSender = message.reply_to
     ? allMessages.find((m) => m.message_id === message.reply_to)?.sender ?? ""
@@ -129,17 +146,17 @@ export default function MessageBubble({
         </p>
 
         {/* Action buttons row */}
-        <div className="flex items-center gap-1 mt-1.5 -mb-0.5">
+        <div className="relative flex flex-wrap items-center gap-1 mt-1.5 -mb-0.5">
           <button
             onClick={() => onReply(message)}
             className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] text-secondary hover:bg-accent-soft hover:text-accent transition-colors"
-            aria-label="Reply to this message"
+            aria-label="Responder a este mensaje"
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <polyline points="9 17 4 12 9 7" />
               <path d="M20 18v-2a4 4 0 00-4-4H4" />
             </svg>
-            Reply
+            Responder
           </button>
 
           <button
@@ -149,25 +166,57 @@ export default function MessageBubble({
                 ? "bg-red-50 text-danger"
                 : "text-secondary hover:bg-red-50 hover:text-danger"
             }`}
-            aria-label={isLiked ? "Unlike this message" : "Like this message"}
+            aria-label={isLiked ? "Quitar Me gusta" : "Marcar Me gusta"}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill={isLiked ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" aria-hidden="true">
               <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
             </svg>
-            {likesCount > 0 ? likesCount : "Like"}
+            Me gusta{likesCount > 0 ? ` ${likesCount}` : ""}
           </button>
+
+          <div className="relative">
+            <button
+              onClick={() => setReactionPickerOpen((open) => !open)}
+              className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors ${selectedReaction ? "bg-accent-soft text-accent" : "text-secondary hover:bg-accent-soft hover:text-accent"}`}
+              aria-label="Reaccionar al mensaje"
+              aria-expanded={reactionPickerOpen}
+            >
+              <span aria-hidden="true">{selectedReactionOption?.emoji || "☺"}</span>
+              Reaccionar
+            </button>
+            {reactionPickerOpen && (
+              <div className="absolute bottom-full left-0 z-20 mb-1 flex gap-1 rounded-lg border border-border bg-white p-1.5 shadow-lg" role="menu" aria-label="Elegir reacción">
+                {REACTION_OPTIONS.map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    title={option.label}
+                    aria-label={option.label}
+                    aria-pressed={selectedReaction === option.value}
+                    onClick={() => {
+                      onReaction(message, option.value)
+                      setReactionPickerOpen(false)
+                    }}
+                    className={`flex h-8 w-8 items-center justify-center rounded text-lg transition-colors hover:bg-bg-feed ${selectedReaction === option.value ? "bg-accent-soft ring-1 ring-accent" : ""}`}
+                  >
+                    {option.emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
 
           {!messageIsSelf && (
             <button
               onClick={() => onMention(message.sender)}
               className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] text-secondary hover:bg-accent-soft hover:text-accent transition-colors"
-              aria-label={`Mention ${message.sender}`}
+              aria-label={`Mencionar a ${message.sender}`}
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <circle cx="12" cy="12" r="4" />
                 <path d="M16 8v5a3 3 0 006 0v-1a10 10 0 10-3.92 7.94" />
               </svg>
-              Mention
+              Mencionar
             </button>
           )}
 
@@ -179,13 +228,13 @@ export default function MessageBubble({
                   ? "bg-red-50 text-danger"
                   : "text-secondary hover:text-danger hover:bg-red-50"
               }`}
-              aria-label="Report this message"
+              aria-label="Reportar este mensaje"
             >
               <svg width="12" height="12" viewBox="0 0 24 24" fill={message.reported ? "currentColor" : "none"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                 <line x1="4" y1="22" x2="4" y2="15" />
               </svg>
-              Report
+              Reportar
             </button>
           )}
 
@@ -193,7 +242,7 @@ export default function MessageBubble({
             <button
               onClick={() => onBlock(message)}
               className="inline-flex items-center gap-1 px-2 py-1 rounded text-[11px] text-secondary hover:text-danger hover:bg-red-50 transition-colors"
-              aria-label={`Block ${message.sender}`}
+              aria-label={`Bloquear a ${message.sender}`}
             >
               <svg
                 width="12"
@@ -209,7 +258,7 @@ export default function MessageBubble({
                 <circle cx="12" cy="12" r="9" />
                 <line x1="5.6" y1="18.4" x2="18.4" y2="5.6" />
               </svg>
-              Block
+              Bloquear
             </button>
           )}
         </div>

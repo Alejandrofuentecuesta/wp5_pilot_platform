@@ -1,12 +1,10 @@
 "use client"
 
 import { useMemo, useState } from "react"
-import type { AgentImpression, FinalReportBlockSurvey, ReportBlockExample } from "@/lib/types"
+import type { AgentImpression, FinalReportBlockSurvey } from "@/lib/types"
 
 interface AgentImpressionSurveyProps {
   agentNames: string[]
-  reportedMessages: ReportBlockExample[]
-  reportedMessageIds: string[]
   blockedAgentNames: string[]
   submitting: boolean
   error: string | null
@@ -21,16 +19,6 @@ const RATING_LABELS: Record<(typeof RATING_SCORES)[number], string> = {
   4: "Bien",
   5: "Muy bien",
 }
-
-const REPORT_REASONS = [
-  "Porque contiene insultos u ofensas",
-  "Porque era hostil o atacaba personalmente a alguien",
-  "Porque contiene odio o discriminación hacia un grupo",
-  "Porque difundía información falsa",
-  "Porque promueve violencia o daño",
-  "Porque me resulta molesto o incómodo",
-  "No representa bien la posición que quiero defender",
-] as const
 
 const BLOCK_REASONS = [
   "Porque sus mensajes contenían insultos u ofensas",
@@ -109,8 +97,6 @@ function toggleReason(current: string[], reason: string) {
 
 export default function AgentImpressionSurvey({
   agentNames,
-  reportedMessages,
-  reportedMessageIds,
   blockedAgentNames,
   submitting,
   error,
@@ -119,9 +105,6 @@ export default function AgentImpressionSurvey({
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [ratings, setRatings] = useState<Record<string, AgentImpression["rating"]>>({})
   const [comments, setComments] = useState<Record<string, string>>({})
-  const [reportReasons, setReportReasons] = useState<string[]>([])
-  const [reportOther, setReportOther] = useState("")
-  const [temptedToReport, setTemptedToReport] = useState<boolean | null>(null)
   const [blockReasons, setBlockReasons] = useState<string[]>([])
   const [blockOther, setBlockOther] = useState("")
   const [temptedToBlock, setTemptedToBlock] = useState<boolean | null>(null)
@@ -132,26 +115,21 @@ export default function AgentImpressionSurvey({
   )
 
   const agentRatingsComplete = selectedNames.every((name) => ratings[name] !== undefined)
-  const hasReports = reportedMessageIds.length > 0
   const hasBlocks = blockedAgentNames.length > 0
-  const reportOtherComplete = !reportReasons.includes(OTHER_REASON) || reportOther.trim().length > 0
   const blockOtherComplete = !blockReasons.includes(OTHER_REASON) || blockOther.trim().length > 0
-  const reportSectionComplete = hasReports
-    ? reportReasons.length > 0 && reportOtherComplete
-    : temptedToReport === false || (temptedToReport === true && reportReasons.length > 0 && reportOtherComplete)
   const blockSectionComplete = hasBlocks
     ? blockReasons.length > 0 && blockOtherComplete
     : temptedToBlock === false || (temptedToBlock === true && blockReasons.length > 0 && blockOtherComplete)
-  const complete = agentRatingsComplete && reportSectionComplete && blockSectionComplete
+  const complete = agentRatingsComplete && blockSectionComplete
 
   const submitSelected = () => {
     if (!complete) return
     const finalReportBlockSurvey: FinalReportBlockSurvey = {
-      reported_message_ids: reportedMessageIds,
-      reported_examples: reportedMessages,
-      report_reasons: hasReports || temptedToReport ? reportReasons : [],
-      report_other: reportReasons.includes(OTHER_REASON) ? reportOther.trim() || null : null,
-      tempted_to_report: hasReports ? null : temptedToReport,
+      reported_message_ids: [],
+      reported_examples: [],
+      report_reasons: [],
+      report_other: null,
+      tempted_to_report: null,
       blocked_agent_names: blockedAgentNames,
       block_reasons: hasBlocks || temptedToBlock ? blockReasons : [],
       block_other: blockReasons.includes(OTHER_REASON) ? blockOther.trim() || null : null,
@@ -183,72 +161,6 @@ export default function AgentImpressionSurvey({
         </div>
 
         <div className="space-y-5 px-4 py-4 sm:px-6">
-          <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
-            <h2 className="m-0 text-base font-semibold text-primary">Mensajes reportados</h2>
-            {hasReports ? (
-              <>
-                <p className="mt-1 text-sm leading-6 text-secondary">
-                  {reportedMessageIds.length > 2
-                    ? "Has reportado mensajes como estos. ¿Por qué los has reportado?"
-                    : "Has reportado estos mensajes. ¿Por qué los has reportado?"}
-                </p>
-                <div className="my-3 space-y-2">
-                  {reportedMessages.map((message) => (
-                    <blockquote
-                      key={message.message_id}
-                      className="rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm leading-6 text-primary"
-                    >
-                      <strong className="mr-1 text-secondary">{message.sender}:</strong>
-                      {message.content}
-                    </blockquote>
-                  ))}
-                </div>
-                <ReasonChecklist
-                  title="Selecciona todos los motivos que correspondan."
-                  reasons={REPORT_REASONS}
-                  selectedReasons={reportReasons}
-                  otherValue={reportOther}
-                  onToggle={(reason) => setReportReasons((current) => toggleReason(current, reason))}
-                  onOtherChange={setReportOther}
-                />
-              </>
-            ) : (
-              <>
-                <p className="mt-1 text-sm leading-6 text-secondary">
-                  No has reportado ningún mensaje. ¿Te has sentido tentado/a de reportar alguno?
-                </p>
-                <div className="mt-3 flex gap-2">
-                  {[{ label: "Sí", value: true }, { label: "No", value: false }].map((option) => (
-                    <button
-                      key={option.label}
-                      type="button"
-                      onClick={() => setTemptedToReport(option.value)}
-                      className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
-                        temptedToReport === option.value
-                          ? "border-accent bg-accent text-white"
-                          : "border-border bg-bg-surface text-primary hover:border-accent"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                {temptedToReport && (
-                  <div className="mt-4">
-                    <ReasonChecklist
-                      title="¿Por qué te has sentido tentado/a?"
-                      reasons={REPORT_REASONS}
-                      selectedReasons={reportReasons}
-                      otherValue={reportOther}
-                      onToggle={(reason) => setReportReasons((current) => toggleReason(current, reason))}
-                      onOtherChange={setReportOther}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
           <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
             <h2 className="m-0 text-base font-semibold text-primary">Usuarios bloqueados</h2>
             {hasBlocks ? (
@@ -435,7 +347,7 @@ export default function AgentImpressionSurvey({
           </button>
           {!complete && (
             <p className="mt-2 text-center text-xs text-tertiary">
-              Responde las preguntas sobre reportes y bloqueos antes de finalizar.
+              Responde la pregunta sobre bloqueos antes de finalizar.
             </p>
           )}
         </div>

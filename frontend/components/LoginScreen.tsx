@@ -297,6 +297,17 @@ export default function LoginScreen({
                   <li className="flex gap-3 items-start">
                     <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
                     <span className="inline-flex items-center flex-wrap gap-1.5">
+                      <strong>Reaccionar a los mensajes</strong>
+                      <span className="inline-flex items-center gap-1 rounded bg-accent-soft px-1.5 py-0.5 text-xs font-medium text-accent">
+                        <span aria-hidden="true">😂 😡 😢 🥱 😨 👎</span>
+                        Reaccionar
+                      </span>
+                      para expresar cómo te hacen sentir.
+                    </span>
+                  </li>
+                  <li className="flex gap-3 items-start">
+                    <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
+                    <span className="inline-flex items-center flex-wrap gap-1.5">
                       <strong>Reportar:</strong>
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-red-50 text-danger font-medium">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

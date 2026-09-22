@@ -5,8 +5,8 @@ broadcast, and every participant message passes through ``screen_participant``
 after it is posted. The policy:
 
 * ``safe``        — publish; verdict recorded on the message.
-* ``unsafe``      — violent/weapons agent turns (S1/S9) are withheld; other
-                    categories are published and flagged for human review.
+* ``unsafe``      — agent turns are withheld until a human marks them as
+                    ``no_concern``; ``concern`` keeps them out of the chat.
 * ``unavailable`` — the classifier gave no verdict. An agent turn is withheld
                     (never published) and a flag records the withheld text; a
                     participant message is already in the room, so only a flag
@@ -37,15 +37,6 @@ from utils.safety import (
 from utils.violence_guard import contains_explicit_violence_cue, explicitly_rejects_violence
 
 CONTEXT_MODES = ("none", "conditional", "always")
-# The simulation deliberately studies contentious and sometimes uncivil
-# political speech.  Withholding every Llama Guard category (notably S5/S10
-# and S13) can therefore suppress nearly the whole conversation.  Keep the
-# pre-publication hard block for the two categories that represent immediate
-# violent/weapons risk; all other unsafe verdicts remain visible to the human
-# reviewer through the normal post-publication flag path.
-BLOCKED_AGENT_CATEGORIES = frozenset({"S1", "S9"})
-
-
 @dataclass
 class ScreenOutcome:
     publish: bool
@@ -143,9 +134,8 @@ class SafetyScreen:
     async def screen_agent(self, message: Message, state) -> ScreenOutcome:
         """Decide whether an agent message may be published.
 
-        Returns ``publish=False`` when no verdict was obtained or when the
-        agent output falls under a blocked violence/weapons category. The
-        withheld text is retained in a flag for review but never published.
+        Returns ``publish=False`` when no verdict was obtained or the output
+        is unsafe. The withheld text is retained in a flag for review.
         """
         if not self.enabled:
             return ScreenOutcome(publish=True, verdict=SafetyVerdict(status="unscreened"), user_turn="")
@@ -156,8 +146,7 @@ class SafetyScreen:
             verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
             user_turn = ""
 
-        blocked_categories = BLOCKED_AGENT_CATEGORIES.intersection(verdict.categories)
-        if verdict.status == "unavailable" or blocked_categories:
+        if verdict.status in ("unsafe", "unavailable"):
             flag_id = await self._flag(
                 sender_type="agent",
                 sender=message.sender,
@@ -172,7 +161,7 @@ class SafetyScreen:
                 {
                     "sender": message.sender,
                     "error": verdict.error,
-                    "categories": sorted(blocked_categories),
+                    "categories": verdict.categories,
                 },
             )
             return ScreenOutcome(publish=False, verdict=verdict, user_turn=user_turn, flag_id=flag_id)

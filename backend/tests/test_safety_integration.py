@@ -100,7 +100,7 @@ class TestAgentManagerGate:
             await am._handle_message(TurnResult(action_type="message", agent_name="Alice", message=msg))
         assert msg in state.messages
 
-    async def test_unreviewed_withheld_turn_is_auto_released_after_timeout(self):
+    async def test_unreviewed_withheld_turn_becomes_concern_after_timeout(self):
         state = _make_state()
         am = AgentManager(
             state=state,
@@ -122,22 +122,18 @@ class TestAgentManagerGate:
         )
         with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()) as sleep, \
              patch("agents.agent_manager.db_conn.get_pool", return_value=MagicMock()), \
-             patch("agents.agent_manager.safety_repo.claim_flag_for_auto_release", new=AsyncMock(return_value=True)) as claim, \
-             patch("agents.agent_manager.safety_repo.set_message_safety_verdict", new=AsyncMock()) as set_verdict, \
-             patch("agents.agent_manager.safety_repo.mark_flag_published", new=AsyncMock()) as mark:
-            await am._auto_release_withheld(original, outcome)
+             patch("agents.agent_manager.safety_repo.claim_flag_for_timeout_concern", new=AsyncMock(return_value=True)) as claim:
+            await am._auto_resolve_withheld(original, outcome)
 
-        sleep.assert_awaited_once_with(60)
+        sleep.assert_awaited_once_with(120)
         claim.assert_awaited_once()
-        am._handle_message.assert_awaited_once()
-        assert am._handle_message.call_args.kwargs["skip_safety"] is True
-        released = am._handle_message.call_args.args[0].message
-        assert released.content == "held"
-        assert released.metadata["safety_review_override"]["reviewed_by"] == "automatic_timeout"
-        set_verdict.assert_awaited_once()
-        mark.assert_awaited_once()
+        am._handle_message.assert_not_awaited()
+        am.logger.log_event.assert_called_with(
+            "safety_flag_auto_concern",
+            {"flag_id": "f1", "sender": "Alice", "delay_seconds": 120},
+        )
 
-    async def test_human_review_wins_auto_release_race(self):
+    async def test_human_review_wins_timeout_race(self):
         am = AgentManager(
             state=_make_state(),
             orchestrator=MagicMock(),
@@ -156,12 +152,10 @@ class TestAgentManagerGate:
         )
         with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()), \
              patch("agents.agent_manager.db_conn.get_pool", return_value=MagicMock()), \
-             patch("agents.agent_manager.safety_repo.claim_flag_for_auto_release", new=AsyncMock(return_value=False)), \
-             patch("agents.agent_manager.safety_repo.mark_flag_published", new=AsyncMock()) as mark:
-            await am._auto_release_withheld(Message.create(sender="Alice", content="held"), outcome)
+             patch("agents.agent_manager.safety_repo.claim_flag_for_timeout_concern", new=AsyncMock(return_value=False)):
+            await am._auto_resolve_withheld(Message.create(sender="Alice", content="held"), outcome)
 
         am._handle_message.assert_not_awaited()
-        mark.assert_not_awaited()
 
 
 def _safety_config(enabled=True, **extra):

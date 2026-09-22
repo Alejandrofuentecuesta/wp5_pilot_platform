@@ -40,7 +40,7 @@ export default function ExitConfirmationModal({
       className="fixed inset-0 bg-black/40 flex items-center justify-center z-[9999] px-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Confirm exit"
+      aria-label="Confirmar salida"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose()
       }}

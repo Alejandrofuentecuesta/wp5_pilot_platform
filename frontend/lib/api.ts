@@ -105,7 +105,12 @@ export async function likeMessage(sessionId: string, messageId: string) {
 export async function reportMessage(
   sessionId: string,
   messageId: string,
-  options: { report: boolean; block: boolean },
+  options: {
+    report: boolean
+    block: boolean
+    reasons?: string[]
+    reason_other?: string | null
+  },
 ) {
   const res = await fetch(
     `${API_BASE}/session/${sessionId}/message/${messageId}/report`,
@@ -113,6 +118,23 @@ export async function reportMessage(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(options),
+    },
+  )
+  if (!res.ok) throw new Error("Network error")
+  return res.json()
+}
+
+export async function reactToMessage(
+  sessionId: string,
+  messageId: string,
+  reaction: import("./types").MessageReaction,
+) {
+  const res = await fetch(
+    `${API_BASE}/session/${sessionId}/message/${messageId}/reaction`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ reaction }),
     },
   )
   if (!res.ok) throw new Error("Network error")

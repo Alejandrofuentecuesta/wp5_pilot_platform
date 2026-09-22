@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import type { Message, EmotionRating } from "@/lib/types"
+import type { Message, EmotionRating, MessageReaction } from "@/lib/types"
 import ChatHeader from "./ChatHeader"
 import MessageFeed from "./MessageFeed"
 import InputBar from "./InputBar"
@@ -29,13 +29,14 @@ interface ChatRoomProps {
   sendMessage: (customContent?: string) => void
   // Like
   toggleLike: (msg: Message) => void
+  toggleReaction: (msg: Message, reaction: MessageReaction) => void
   // Report
   reportModalOpen: boolean
   setReportModalOpen: (open: boolean) => void
   reportTarget: Message | null
   setReportTarget: (msg: Message | null) => void
   reporting: boolean
-  performReport: (block: boolean) => void
+  performReport: (reasons: string[], otherReason: string | null) => void
   blockUser: (msg: Message) => void
   typingCount: number
   newsArticle: Message | null
@@ -64,6 +65,7 @@ export default function ChatRoom({
   setReplyTo,
   sendMessage,
   toggleLike,
+  toggleReaction,
   reportModalOpen,
   setReportModalOpen,
   reportTarget,
@@ -102,6 +104,7 @@ export default function ChatRoom({
         typingCount={typingCount}
         onReply={(msg) => setReplyTo(msg)}
         onLike={(msg) => toggleLike(msg)}
+        onReaction={toggleReaction}
         onMention={(sender) => setInputValue(inputValue + `@${sender} `)}
         onReport={(msg) => {
           if (reporting) return
@@ -125,8 +128,7 @@ export default function ChatRoom({
         <ReportModal
           senderName={reportTarget.sender}
           reporting={reporting}
-          onReport={() => performReport(false)}
-          onReportAndBlock={() => performReport(true)}
+          onAccept={performReport}
           onClose={() => {
             setReportModalOpen(false)
             setReportTarget(null)

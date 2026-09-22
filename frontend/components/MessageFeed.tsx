@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useRef, Fragment } from "react"
-import type { Message } from "@/lib/types"
+import type { Message, MessageReaction } from "@/lib/types"
 import { getDateLabel } from "@/lib/dates"
 import { PARTICIPANT_SENDER } from "@/lib/constants"
 import MessageBubble from "./MessageBubble"
@@ -14,6 +14,7 @@ interface MessageFeedProps {
   typingCount: number
   onReply: (msg: Message) => void
   onLike: (msg: Message) => void
+  onReaction: (msg: Message, reaction: MessageReaction) => void
   onMention: (sender: string) => void
   onReport: (msg: Message) => void
   onBlock: (msg: Message) => void
@@ -62,6 +63,7 @@ export default function MessageFeed({
   typingCount,
   onReply,
   onLike,
+  onReaction,
   onMention,
   onReport,
   onBlock,
@@ -119,6 +121,7 @@ export default function MessageFeed({
                 displayName={displayName}
                 onReply={onReply}
                 onLike={onLike}
+                onReaction={onReaction}
                 onMention={onMention}
                 onReport={onReport}
                 onBlock={onBlock}

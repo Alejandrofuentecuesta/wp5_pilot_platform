@@ -437,6 +437,12 @@ class ReportRequest(BaseModel):
     report: Optional[bool] = True
     block: Optional[bool] = False
     reason: Optional[str] = None
+    reasons: List[str] = Field(default_factory=list)
+    reason_other: Optional[str] = None
+
+
+class ReactionRequest(BaseModel):
+    reaction: Literal["laugh", "angry", "sad", "bored", "afraid", "dislike"]
 
 
 class AgentImpressionRequest(BaseModel):
@@ -1251,6 +1257,53 @@ async def like_message(session_id: str, message_id: str, payload: LikeRequest):
     return {"message": message.to_dict()}
 
 
+@app.post("/session/{session_id}/message/{message_id}/reaction")
+async def react_to_message(session_id: str, message_id: str, payload: ReactionRequest):
+    """Set, change, or toggle the participant's reaction to a message."""
+    session = await session_manager.get_session(session_id)
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    message = next((m for m in session.state.messages if m.message_id == message_id), None)
+    if not message:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    reactions = dict(message.metadata.get("reactions") or {})
+    previous = reactions.get(PARTICIPANT_IDENTITY)
+    if previous == payload.reaction:
+        reactions.pop(PARTICIPANT_IDENTITY, None)
+        action = "removed"
+    else:
+        reactions[PARTICIPANT_IDENTITY] = payload.reaction
+        action = "changed" if previous else "added"
+    message.metadata["reactions"] = reactions
+
+    try:
+        pool = _get_pool()
+        await message_repo.update_message_metadata(pool, message_id, message.metadata)
+    except Exception as exc:
+        session.logger.log_error("persist_reaction", str(exc))
+
+    event = {
+        "event_type": "message_reaction",
+        "session_id": session_id,
+        "message_id": message_id,
+        "user": PARTICIPANT_IDENTITY,
+        "reaction": payload.reaction,
+        "action": action,
+        "reactions": reactions,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+    session.logger.log_event("message_reaction", event)
+    try:
+        r = redis_client.get_redis()
+        await redis_client.publish_event(r, session_id, event)
+    except Exception as exc:
+        session.logger.log_error("publish_reaction", str(exc))
+
+    return {"message": message.to_dict()}
+
+
 @app.post("/session/{session_id}/message/{message_id}/report")
 async def report_message(session_id: str, message_id: str, payload: ReportRequest):
     """Report a message and optionally block the sender.
@@ -1321,6 +1374,8 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
             "blocked": blocked,
             "replacement_agent": replacement_agent,
             "reason": payload.reason,
+            "reasons": [reason.strip()[:200] for reason in payload.reasons[:10] if reason.strip()],
+            "reason_other": payload.reason_other.strip()[:1000] if payload.reason_other else None,
         })
 
     # Broadcast via pub/sub.

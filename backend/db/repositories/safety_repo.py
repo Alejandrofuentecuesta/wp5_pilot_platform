@@ -138,16 +138,16 @@ async def review_flag(
     return result.endswith("1")
 
 
-async def claim_flag_for_auto_release(pool: asyncpg.Pool, flag_id: str) -> bool:
-    """Atomically close an unreviewed withheld flag after its review window."""
+async def claim_flag_for_timeout_concern(pool: asyncpg.Pool, flag_id: str) -> bool:
+    """Atomically retain an unreviewed message as concern after its review window."""
     async with pool.acquire() as conn:
         result = await conn.execute(
             """
             UPDATE safety_flags
             SET    reviewed_at = $1,
                    reviewed_by = 'automatic_timeout',
-                   review_verdict = 'no_concern',
-                   review_note = 'Automatically published after 60 seconds without review'
+                   review_verdict = 'concern',
+                   review_note = 'Automatically retained after 120 seconds without review'
             WHERE  flag_id = $2
               AND  reviewed_at IS NULL
               AND  message_id IS NULL

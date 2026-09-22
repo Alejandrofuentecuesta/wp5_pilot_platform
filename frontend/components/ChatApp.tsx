@@ -51,8 +51,6 @@ export default function ChatApp() {
     return (
       <AgentImpressionSurvey
         agentNames={chat.sessionAgentNames}
-        reportedMessages={chat.finalReportedMessageExamples}
-        reportedMessageIds={chat.finalReportedMessageIds}
         blockedAgentNames={chat.finalBlockedAgentNames}
         submitting={chat.agentImpressionsSubmitting}
         error={chat.agentImpressionsError}
@@ -116,6 +114,7 @@ export default function ChatApp() {
       setReplyTo={chat.setReplyTo}
       sendMessage={chat.sendMessage}
       toggleLike={chat.toggleLike}
+      toggleReaction={chat.toggleReaction}
       reportModalOpen={chat.reportModalOpen}
       setReportModalOpen={chat.setReportModalOpen}
       reportTarget={chat.reportTarget}

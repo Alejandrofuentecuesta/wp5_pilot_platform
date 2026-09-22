@@ -8,6 +8,7 @@ import {
   startSession as apiStartSession,
   joinQueue as apiJoinQueue,
   likeMessage as apiLikeMessage,
+  reactToMessage as apiReactToMessage,
   reportMessage as apiReportMessage,
   submitAgentImpressions as apiSubmitAgentImpressions,
   AtCapacityError,
@@ -20,12 +21,13 @@ import type {
   UserMessagePayload,
   LikeEvent,
   ReportEvent,
+  ReactionEvent,
   BlockEvent,
   ParticipantStance,
   SessionIntakeResponse,
   AgentImpression,
   FinalReportBlockSurvey,
-  ReportBlockExample,
+  MessageReaction,
   EmotionRating,
 } from "@/lib/types"
 
@@ -131,33 +133,6 @@ export function useChat() {
     [messages],
   )
 
-  const finalReportedMessages = useMemo(() => {
-    const byId = new Map<string, Message>()
-    for (const message of messages) {
-      const isSelfMessage = message.sender === username || message.sender === PARTICIPANT_SENDER
-      const isSystemMessage = message.sender.startsWith("[") || message.msg_type === "news_article"
-      if (!isSelfMessage && !isSystemMessage && message.reported) {
-        byId.set(message.message_id, message)
-      }
-    }
-    return [...byId.values()]
-  }, [messages, username])
-
-  const finalReportedMessageExamples = useMemo<ReportBlockExample[]>(
-    () =>
-      finalReportedMessages.slice(0, 2).map((message) => ({
-        message_id: message.message_id,
-        sender: message.sender,
-        content: message.content,
-      })),
-    [finalReportedMessages],
-  )
-
-  const finalReportedMessageIds = useMemo(
-    () => finalReportedMessages.map((message) => message.message_id),
-    [finalReportedMessages],
-  )
-
   const finalBlockedAgentNames = useMemo(
     () => mergeUniqueNames(surveyBlockedAgentNames, Object.keys(blockedSenders)),
     [surveyBlockedAgentNames, blockedSenders],
@@ -202,6 +177,15 @@ export function useChat() {
           m.message_id === evt.message_id
             ? { ...m, likes_count: evt.likes_count, liked_by: evt.liked_by }
             : m,
+        ),
+      )
+    } else if (obj && obj.event_type === "message_reaction") {
+      const evt = obj as unknown as ReactionEvent
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.message_id === evt.message_id
+            ? { ...message, reactions: evt.reactions }
+            : message,
         ),
       )
     } else if (obj && obj.event_type === "message_report") {
@@ -690,8 +674,47 @@ export function useChat() {
     }
   }
 
+  const toggleReaction = async (msg: Message, reaction: MessageReaction) => {
+    if (!sessionId) return
+    const previous = { ...(msg.reactions || {}) }
+    const next = { ...previous }
+    if (next[PARTICIPANT_SENDER] === reaction) {
+      delete next[PARTICIPANT_SENDER]
+    } else {
+      next[PARTICIPANT_SENDER] = reaction
+    }
+    setMessages((current) =>
+      current.map((message) =>
+        message.message_id === msg.message_id ? { ...message, reactions: next } : message,
+      ),
+    )
+
+    try {
+      const data = await apiReactToMessage(sessionId, msg.message_id, reaction)
+      setMessages((current) =>
+        current.map((message) =>
+          message.message_id === data.message.message_id
+            ? { ...message, reactions: data.message.reactions || {} }
+            : message,
+        ),
+      )
+    } catch {
+      setMessages((current) =>
+        current.map((message) =>
+          message.message_id === msg.message_id ? { ...message, reactions: previous } : message,
+        ),
+      )
+    }
+  }
+
   // Report or block a message sender (with optimistic update + rollback).
-  const reportOrBlock = async (target: Message, report: boolean, block: boolean) => {
+  const reportOrBlock = async (
+    target: Message,
+    report: boolean,
+    block: boolean,
+    reasons: string[] = [],
+    reasonOther: string | null = null,
+  ) => {
     if (!sessionId || reporting) return
     setReporting(true)
     const uid = PARTICIPANT_SENDER
@@ -731,7 +754,12 @@ export function useChat() {
     setReportTarget(null)
 
     try {
-      const data = await apiReportMessage(sessionId, messageId, { report, block })
+      const data = await apiReportMessage(sessionId, messageId, {
+        report,
+        block,
+        reasons,
+        reason_other: reasonOther,
+      })
       const serverMsg = data.message
       if (report) {
         setMessages((prev) =>
@@ -769,9 +797,9 @@ export function useChat() {
     }
   }
 
-  const performReport = async (block: boolean) => {
+  const performReport = async (reasons: string[], otherReason: string | null) => {
     if (!reportTarget) return
-    await reportOrBlock(reportTarget, true, block)
+    await reportOrBlock(reportTarget, true, false, reasons, otherReason)
   }
 
   const blockUser = async (message: Message) => {
@@ -808,8 +836,6 @@ export function useChat() {
     // Messages
     visibleMessages,
     participants,
-    finalReportedMessageExamples,
-    finalReportedMessageIds,
     finalBlockedAgentNames,
     // Input
     inputValue,
@@ -822,6 +848,7 @@ export function useChat() {
     sendMessage,
     // Like
     toggleLike,
+    toggleReaction,
     // Report
     reportModalOpen,
     setReportModalOpen,

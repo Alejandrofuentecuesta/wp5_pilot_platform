@@ -210,3 +210,15 @@ async def update_message_reported(
             reported,
             message_id,
         )
+
+
+async def update_message_metadata(
+    pool: asyncpg.Pool, message_id: str, metadata: dict
+) -> None:
+    """Replace the JSON metadata for a message."""
+    async with pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE messages SET metadata = $1::jsonb WHERE message_id = $2",
+            json.dumps(metadata),
+            message_id,
+        )

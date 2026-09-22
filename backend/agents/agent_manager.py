@@ -61,7 +61,7 @@ class AgentManager:
             outcome = await self.safety_screen.screen_agent(message, self.state)
             if not outcome.publish:
                 if outcome.flag_id:
-                    task = asyncio.create_task(self._auto_release_withheld(message, outcome))
+                    task = asyncio.create_task(self._auto_resolve_withheld(message, outcome))
                     if self.task_registry is not None:
                         self.task_registry.add(task)
                         task.add_done_callback(self.task_registry.discard)
@@ -123,12 +123,12 @@ class AgentManager:
         except Exception as exc:
             self.logger.log_error("publish_agent_message", str(exc))
 
-    async def _auto_release_withheld(self, original: Message, outcome) -> None:
-        """Publish a still-unreviewed held turn after the 60-second review window."""
-        await asyncio.sleep(60)
+    async def _auto_resolve_withheld(self, original: Message, outcome) -> None:
+        """Close an unreviewed held turn as concern after two minutes."""
+        await asyncio.sleep(120)
         lock = self.turn_lock
         if lock is None:
-            self.logger.log_error("safety_auto_release", "turn lock unavailable")
+            self.logger.log_error("safety_auto_concern", "turn lock unavailable")
             return
         async with lock:
             if self.session_active is not None and not self.session_active():
@@ -137,39 +137,17 @@ class AgentManager:
                 return
             try:
                 pool = db_conn.get_pool()
-                claimed = await safety_repo.claim_flag_for_auto_release(pool, outcome.flag_id)
+                claimed = await safety_repo.claim_flag_for_timeout_concern(pool, outcome.flag_id)
                 if not claimed:
                     return
-                message = Message.create(
-                    sender=original.sender,
-                    content=original.content,
-                    reply_to=original.reply_to,
-                    quoted_text=original.quoted_text,
-                    mentions=original.mentions,
-                    is_incivil=original.is_incivil,
-                    is_like_minded=original.is_like_minded,
-                    inferred_participant_stance=original.inferred_participant_stance,
-                    classification_rationale=original.classification_rationale,
-                )
-                message.metadata.update(original.metadata or {})
-                message.metadata["safety_review_override"] = {
-                    "flag_id": outcome.flag_id,
-                    "reviewed_by": "automatic_timeout",
-                }
-                await self._handle_message(
-                    TurnResult(action_type="message", agent_name=message.sender, message=message),
-                    skip_safety=True,
-                )
-                await safety_repo.set_message_safety_verdict(pool, message.message_id, outcome.verdict.status)
-                await safety_repo.mark_flag_published(pool, outcome.flag_id, message.message_id, message.timestamp)
                 self.logger.log_event(
-                    "safety_flag_auto_released",
-                    {"flag_id": outcome.flag_id, "message_id": message.message_id, "delay_seconds": 60},
+                    "safety_flag_auto_concern",
+                    {"flag_id": outcome.flag_id, "sender": original.sender, "delay_seconds": 120},
                 )
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
-                self.logger.log_error("safety_auto_release", str(exc))
+                self.logger.log_error("safety_auto_concern", str(exc))
 
     async def _handle_like(self, result: TurnResult) -> None:
         """Process an agent 'like' action — update DB and broadcast."""

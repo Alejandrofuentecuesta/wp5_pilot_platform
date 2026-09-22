@@ -229,7 +229,7 @@ function FlagRow({
   const [showContext, setShowContext] = useState(false)
   const isParticipant = flag.sender_type === "participant"
   const elapsed = flag.displayed_at ? now - new Date(flag.displayed_at).getTime() : null
-  const autoReleaseRemaining = Math.max(0, 60000 - (now - new Date(flag.created_at).getTime()))
+  const autoConcernRemaining = Math.max(0, 120000 - (now - new Date(flag.created_at).getTime()))
   const paused = !!flag.safety_paused_at
   const canAct = flag.live && !!reviewer
   const canPublishWithheld =
@@ -256,7 +256,7 @@ function FlagRow({
             title={elapsed === null ? "Never shown to the participant" : "Time since the participant saw this"}
           >
             {elapsed === null
-              ? `withheld · auto in ${fmtElapsed(autoReleaseRemaining)}`
+              ? `withheld · auto concern in ${fmtElapsed(autoConcernRemaining)}`
               : `seen ${fmtElapsed(elapsed)} ago`}
           </span>
           <button
@@ -803,7 +803,7 @@ export default function SafetyTab({ adminKey }: { adminKey: string }) {
         <div>
           <h2 className="text-sm font-semibold text-admin-text">Safety monitor</h2>
           <p className="text-xs text-admin-muted">
-            Withheld agent messages can be reviewed for 60 seconds, then publish automatically if no decision is recorded. Agent rows are grey; participant rows are purple.
+            Withheld agent messages can be reviewed for 120 seconds. If no decision is recorded, they are marked as concern and remain out of the chat. Agent rows are grey; participant rows are purple.
           </p>
         </div>
         <ReviewerBar reviewer={reviewer} onChange={saveReviewer} />

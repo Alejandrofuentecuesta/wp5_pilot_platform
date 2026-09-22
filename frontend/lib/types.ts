@@ -9,12 +9,15 @@ export interface Message {
   likes_count?: number
   liked_by?: string[]
   reported?: boolean
+  reactions?: Record<string, MessageReaction>
   // Feature seed messages (e.g. news articles)
   msg_type?: string
   headline?: string
   source?: string
   body?: string
 }
+
+export type MessageReaction = "laugh" | "angry" | "sad" | "bored" | "afraid" | "dislike"
 
 export interface LikeEvent {
   event_type: "message_like"
@@ -34,7 +37,13 @@ export interface BlockEvent {
   blocked: Record<string, string>
 }
 
-export type WSIncoming = Message | LikeEvent | ReportEvent | BlockEvent
+export interface ReactionEvent {
+  event_type: "message_reaction"
+  message_id: string
+  reactions: Record<string, MessageReaction>
+}
+
+export type WSIncoming = Message | LikeEvent | ReportEvent | ReactionEvent | BlockEvent
 
 export interface EmotionRating {
   emotion: string

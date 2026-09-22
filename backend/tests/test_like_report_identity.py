@@ -123,3 +123,62 @@ class TestReportOneWay:
             if call.args and call.args[0] == "message_report"
         ]
         assert report_events == []
+
+    def test_report_reasons_are_logged_with_the_message(self, client):
+        session, message = _fake_session()
+        with _patched(session):
+            response = client.post(
+                f"/session/{SESSION_ID}/message/{message.message_id}/report",
+                json={"reasons": ["Contiene insultos u ofensas", "Me resulta incómodo"]},
+            )
+        assert response.status_code == 200
+        report_event = next(
+            call.args[1]
+            for call in session.logger.log_event.call_args_list
+            if call.args and call.args[0] == "message_report"
+        )
+        assert report_event["reasons"] == [
+            "Contiene insultos u ofensas",
+            "Me resulta incómodo",
+        ]
+
+
+class TestMessageReaction:
+    def test_reaction_is_added_and_toggled_off(self, client):
+        session, message = _fake_session()
+        with _patched(session):
+            first = client.post(
+                f"/session/{SESSION_ID}/message/{message.message_id}/reaction",
+                json={"reaction": "laugh"},
+            )
+            second = client.post(
+                f"/session/{SESSION_ID}/message/{message.message_id}/reaction",
+                json={"reaction": "laugh"},
+            )
+        assert first.status_code == 200
+        assert first.json()["message"]["reactions"] == {"participant": "laugh"}
+        assert second.status_code == 200
+        assert second.json()["message"]["reactions"] == {}
+
+    def test_reaction_can_be_changed(self, client):
+        session, message = _fake_session()
+        with _patched(session):
+            client.post(
+                f"/session/{SESSION_ID}/message/{message.message_id}/reaction",
+                json={"reaction": "sad"},
+            )
+            response = client.post(
+                f"/session/{SESSION_ID}/message/{message.message_id}/reaction",
+                json={"reaction": "dislike"},
+            )
+        assert response.status_code == 200
+        assert response.json()["message"]["reactions"] == {"participant": "dislike"}
+
+    def test_invalid_reaction_is_rejected(self, client):
+        session, message = _fake_session()
+        with _patched(session):
+            response = client.post(
+                f"/session/{SESSION_ID}/message/{message.message_id}/reaction",
+                json={"reaction": "surprise"},
+            )
+        assert response.status_code == 422

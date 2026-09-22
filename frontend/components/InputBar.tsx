@@ -69,7 +69,7 @@ export default function InputBar({
           <button
             onClick={onCancelReply}
             className="px-3 text-tertiary hover:text-primary transition-colors self-center"
-            aria-label="Cancel reply"
+            aria-label="Cancelar respuesta"
           >
             <svg
               width="16"
@@ -96,13 +96,13 @@ export default function InputBar({
             maxLength={2000}
             placeholder="Escribe un mensaje..."
             className="max-h-32 flex-1 resize-none overflow-y-hidden bg-transparent text-sm leading-5 text-primary outline-none placeholder:text-tertiary"
-            aria-label="Message input"
+            aria-label="Mensaje"
           />
         </div>
         <button
           onClick={onSend}
           className="px-4 h-[42px] rounded-lg bg-accent hover:bg-accent-hover flex items-center justify-center shrink-0 transition-colors text-white"
-          aria-label="Send message"
+          aria-label="Enviar mensaje"
         >
           <SendIcon />
         </button>

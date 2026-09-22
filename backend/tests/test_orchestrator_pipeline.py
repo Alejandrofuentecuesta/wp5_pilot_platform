@@ -666,6 +666,36 @@ class TestExecuteTurnMessage:
         )
 
     @pytest.mark.asyncio
+    async def test_hunting_slur_requires_clear_performer_rejection(self):
+        """Regression: 'Salimos de caza de moros' (dehumanizing hunting
+        language) and 'me apunto' (plain consent) both went undetected, so
+        Carlos's endorsement reached the participant unrejected."""
+        state = _make_state()
+        state.add_message(Message.create(
+            sender="participant",
+            content="@Carlos Salimos de caza de moros tú y yo?",
+        ))
+        orch, logger = _make_orchestrator(state=state)
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message")
+        )
+        orch.performer_llm.generate_response = AsyncMock(side_effect=[
+            "Joder, me apunto. Ya es hora de poner orden en este caos.",
+            "La violencia nunca es la solución, aunque el problema migratorio sea real.",
+        ])
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.message.content.startswith("La violencia nunca")
+        assert orch.performer_llm.generate_response.call_count == 2
+        logger.log_error.assert_any_call(
+            "performer_violence_rejection_retry",
+            "Generated message for 'Alice' did not clearly reject recent violence; retrying",
+            context={"action_type": "message"},
+        )
+
+    @pytest.mark.asyncio
     async def test_euphemistic_violence_overrides_director_like_and_retries_endorsement(self):
         state = _make_state()
         violent = Message.create(

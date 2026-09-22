@@ -37,7 +37,10 @@ def contains_explicit_violence_cue(text: str | None) -> bool:
         r"dar(?:les|le)?\s+(?:un\s+)?(?:escarmiento|buen\s+susto)|"
         r"ajustar\s+cuentas\s+con|ir\s+a\s+por\s+(?:ellos|ellas)|"
         r"que\s+aprendan\s+por\s+las\s+malas|"
-        r"poner(?:les|los|las)?\s+en\s+su\s+sitio"
+        r"poner(?:les|los|las)?\s+en\s+su\s+sitio|"
+        r"cazar(?:los|las|le|les)\b|"
+        r"(?:salir|ir|salimos|vamos)(?:emos)?\s+de\s+caza\s+de\s+"
+        r"(?:moros|inmigrantes|musulmanes|magrebies|extranjeros|sudacas|negros|gitanos|menas)\b"
         r")\b",
         value,
     ))
@@ -67,6 +70,7 @@ def signals_violence_endorsement(text: str | None) -> bool:
         return True
     return bool(re.search(
         r"\b(?:exacto|claro\s+que\s+si|totalmente|eso\s+es|di\s+que\s+si)\b|"
+        r"\b(?:yo\s+)?me\s+apunto\b|\bcuenta\s+conmigo\b|\bahi\s+estare\b|"
         r"\b(?:ya\s+)?no\s+queda\s+otra\b|"
         r"\b(?:dale|darles?|darle)\s+cana\b|"
         r"\b(?:a\s+por\s+ellos|se\s+lo\s+merecen|que\s+aprendan\s+por\s+las\s+malas)\b|"

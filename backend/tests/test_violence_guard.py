@@ -21,6 +21,8 @@ from utils.violence_guard import (
         "Vamos con los bates y arreglamos esto",
         "Hay que ir con machetes a por ellos",
         "Salir con los bates es la única solución",
+        "Salimos de caza de moros tú y yo?",
+        "Vamos a cazarlos a todos",
     ],
 )
 def test_detects_explicit_and_euphemistic_violence(text):
@@ -35,6 +37,8 @@ def test_detects_explicit_and_euphemistic_violence(text):
         "Hay que hacerles pagar",
         "Que aprendan por las malas",
         "Se lo merecen",
+        "Joder, me apunto. Ya es hora de poner orden en este caos",
+        "Cuenta conmigo para eso",
     ],
 )
 def test_detects_contextual_violence_endorsement(text):
@@ -60,4 +64,19 @@ def test_bare_bat_mention_without_violent_verb_is_not_a_cue(text):
     """'un bate'/'los bates' alone is overwhelmingly literal (baseball, a gift)
     in Spanish, unlike 'unos palos' which is a standalone beating idiom — so
     only the verb/preposition-anchored patterns should fire for bats."""
+    assert not contains_explicit_violence_cue(text)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Mi padre y yo vamos de caza este fin de semana",
+        "Salimos de caza de jabalíes mañana",
+        "Nos vamos de caza con los amigos del pueblo",
+    ],
+)
+def test_literal_hunting_trip_is_not_a_cue(text):
+    """'ir/salir de caza' alone is an ordinary hobby (deer, boar); only 'de
+    caza de <ethnic/national-origin group>' — hunting language aimed at
+    people — is treated as a violence cue."""
     assert not contains_explicit_violence_cue(text)

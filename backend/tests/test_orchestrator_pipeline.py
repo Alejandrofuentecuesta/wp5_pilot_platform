@@ -134,6 +134,7 @@ def _action_json(
     performer_instruction=None,
     target_user=None,
     target_message_id=None,
+    violence_requires_rejection=None,
 ):
     """Build a valid Director Action JSON response.
 
@@ -157,6 +158,8 @@ def _action_json(
         data["target_user"] = target_user
     if target_message_id:
         data["target_message_id"] = target_message_id
+    if violence_requires_rejection is not None:
+        data["violence_requires_rejection"] = violence_requires_rejection
     return json.dumps(data)
 
 
@@ -728,6 +731,47 @@ class TestExecuteTurnMessage:
                 "agent_name": "Alice",
                 "original_action_type": "like",
                 "source_message_id": violent.message_id,
+                "director_flagged": False,
+            },
+        )
+
+    @pytest.mark.asyncio
+    async def test_director_semantic_flag_overrides_when_regex_misses_the_phrasing(self):
+        """The Director reads the whole chat log with an LLM, so it can flag
+        a violent proposal on meaning alone even when contains_explicit_violence_cue
+        doesn't recognise the specific wording — the semantic backstop this
+        conversation asked for after 'bate' and 'cazar' both had to be
+        patched into the regex by hand."""
+        state = _make_state()
+        state.add_message(Message.create(
+            sender="participant",
+            content="Deberíamos ir a darles una lección que no olviden jamás, a la vieja usanza",
+        ))
+        orch, logger = _make_orchestrator(state=state)
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(
+                next_performer="Alice",
+                action_type="message",
+                violence_requires_rejection=True,
+            )
+        )
+        orch.performer_llm.generate_response = AsyncMock(side_effect=[
+            "Cuenta conmigo, hace falta gente con agallas para eso.",
+            "La violencia nunca es la solución, por mucho hartazgo que haya.",
+        ])
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.message.content.startswith("La violencia nunca")
+        assert orch.performer_llm.generate_response.call_count == 2
+        logger.log_event.assert_any_call(
+            "director_violence_override",
+            {
+                "agent_name": "Alice",
+                "original_action_type": "message",
+                "source_message_id": None,
+                "director_flagged": True,
             },
         )
 

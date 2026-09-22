@@ -2256,7 +2256,12 @@ class Orchestrator:
             ),
             None,
         )
-        if violence_source is not None:
+        # Semantic backstop: the regex above only catches phrasings we
+        # anticipated. The Director reads the actual chat log every turn, so
+        # ask it to judge this on meaning instead of relying solely on a
+        # pattern list that can never be exhaustive (see violence_guard.py).
+        director_flagged_violence = bool(action_data.get("violence_requires_rejection"))
+        if violence_source is not None or director_flagged_violence:
             original_action = action_type
             action_type = "message"
             action_data["action_type"] = "message"
@@ -2287,7 +2292,8 @@ class Orchestrator:
                 {
                     "agent_name": agent_name,
                     "original_action_type": original_action,
-                    "source_message_id": violence_source.message_id,
+                    "source_message_id": violence_source.message_id if violence_source else None,
+                    "director_flagged": director_flagged_violence,
                 },
             )
 
@@ -2396,7 +2402,12 @@ class Orchestrator:
             "violence" in instruction_text
             and re.search(r"\b(?:reject|condemn|never acceptable|must not endorse)\b", instruction_text)
         )
-        violence_rejection_required = fresh_room_violence or instructed_violence_rejection
+        # Same semantic backstop as the deterministic override above: trust
+        # the Director's own reading of the chat log, not just the regex.
+        director_flagged_violence = bool(action_data.get("violence_requires_rejection"))
+        violence_rejection_required = (
+            fresh_room_violence or instructed_violence_rejection or director_flagged_violence
+        )
 
         # Get the selected agent's profile.
         agent_profile = self.agent_profiles.get(agent_name, "")

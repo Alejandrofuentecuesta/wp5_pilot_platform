@@ -263,6 +263,7 @@ Respond with a JSON object using exactly this structure:
   "action_type": "message | reply | @mention",
   "target_user": "username or null",
   "target_message_id": "msg_id or null",
+  "violence_requires_rejection": true or false,
   "performer_instruction": {
     "objective": "...",
     "motivation": "...",
@@ -275,3 +276,4 @@ Respond with a JSON object using exactly this structure:
 - `target_user`: The member being targeted, or null if addressing the room.
 - `target_message_id`: Required for `reply`, null otherwise.
 - `performer_instruction`: Always required.
+- `violence_requires_rejection`: Read the recent chat log yourself and judge this on meaning, not keywords. Set `true` if the participant or an agent has, in any wording, proposed, endorsed, requested, celebrated, or even half-jokingly floated physical violence, a hunt, an attack, or vigilante action against any person or group — this is not limited to the stock phrases or weapons named elsewhere in this prompt; use your own judgment of what the message actually means. Set `false` otherwise. This is a semantic backstop for phrasing the deterministic checks elsewhere in the pipeline may not catch — when in doubt, prefer `true`.

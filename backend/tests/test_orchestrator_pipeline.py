@@ -636,6 +636,42 @@ class TestExecuteTurnMessage:
         )
 
     @pytest.mark.asyncio
+    async def test_euphemistic_violence_overrides_director_like_and_retries_endorsement(self):
+        state = _make_state()
+        violent = Message.create(
+            sender="participant",
+            content="Habría que hacer justicia por mano propia",
+        )
+        state.add_message(violent)
+        orch, logger = _make_orchestrator(state=state)
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(
+                next_performer="Alice",
+                action_type="like",
+                target_message_id=violent.message_id,
+            )
+        )
+        orch.performer_llm.generate_response = AsyncMock(side_effect=[
+            "La violencia no es la solución, pero ya no queda otra.",
+            "La violencia nunca es una solución, aunque comparta parte del diagnóstico político.",
+        ])
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.action_type == "message"
+        assert result.message.content.startswith("La violencia nunca")
+        assert orch.performer_llm.generate_response.call_count == 2
+        logger.log_event.assert_any_call(
+            "director_violence_override",
+            {
+                "agent_name": "Alice",
+                "original_action_type": "like",
+                "source_message_id": violent.message_id,
+            },
+        )
+
+    @pytest.mark.asyncio
     async def test_cross_cell_validation_reply_retries_and_rewrites(self):
         state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob")])
         target = Message.create(sender="Bob", content="Esto es una farsa total.")

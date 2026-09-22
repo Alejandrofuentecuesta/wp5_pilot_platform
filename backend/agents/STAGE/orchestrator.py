@@ -2226,6 +2226,58 @@ class Orchestrator:
                 target_message_id = None
                 action_data["target_message_id"] = None
 
+        # Deterministic violence override: the Director may not turn a violent
+        # proposal into a like, quote, mention, or supportive instruction.
+        # Keep this outside the LLM prompt so euphemisms cannot bypass it.
+        latest_room_message = self.state.messages[-1] if self.state.messages else None
+        targeted_message = next(
+            (m for m in self.state.messages if m.message_id == target_message_id),
+            None,
+        ) if target_message_id else None
+        violence_source = next(
+            (
+                message for message in (latest_room_message, targeted_message)
+                if message
+                and contains_explicit_violence_cue(message.content)
+                and not explicitly_rejects_violence(message.content)
+            ),
+            None,
+        )
+        if violence_source is not None:
+            original_action = action_type
+            action_type = "message"
+            action_data["action_type"] = "message"
+            target_user = None
+            action_data["target_user"] = None
+            target_message_id = None
+            action_data["target_message_id"] = None
+            existing_instruction = dict(action_data.get("performer_instruction") or {})
+            directive = (existing_instruction.get("directive") or "").strip()
+            violence_clause = (
+                "Reject the violent suggestion explicitly and unequivocally. State in natural Spanish that "
+                "violence is never a solution. Do not quote, paraphrase, repeat, soften, joke about, or endorse "
+                "the proposal or any euphemism for it. Do not use 'pero' to follow the rejection with coercion, "
+                "retaliation, intimidation, 'dar caña', 'mano dura', or 'no queda otra'. You may preserve your "
+                "political stance, but the complete message must reject violence."
+            )
+            existing_instruction["objective"] = "Reject the recent violent suggestion without reproducing it."
+            existing_instruction["motivation"] = (
+                existing_instruction.get("motivation")
+                or "Violence cannot be validated, even by a like-minded speaker."
+            )
+            existing_instruction["directive"] = (
+                f"{directive} {violence_clause}".strip() if directive else violence_clause
+            )
+            action_data["performer_instruction"] = existing_instruction
+            self.logger.log_event(
+                "director_violence_override",
+                {
+                    "agent_name": agent_name,
+                    "original_action_type": original_action,
+                    "source_message_id": violence_source.message_id,
+                },
+            )
+
         # 3b. Handle 'wait' — Director selected the human participant.
         #     Skip Performer/Moderator and restore evaluate counter
         #     (wait turns are not productive turns).
@@ -2322,9 +2374,8 @@ class Orchestrator:
             for key in ("objective", "motivation", "directive")
         ).lower()
         latest_room_message = self.state.messages[-1] if self.state.messages else None
-        fresh_participant_violence = bool(
+        fresh_room_violence = bool(
             latest_room_message
-            and latest_room_message.sender == self.state.user_name
             and contains_explicit_violence_cue(latest_room_message.content)
             and not explicitly_rejects_violence(latest_room_message.content)
         )
@@ -2332,7 +2383,7 @@ class Orchestrator:
             "violence" in instruction_text
             and re.search(r"\b(?:reject|condemn|never acceptable|must not endorse)\b", instruction_text)
         )
-        violence_rejection_required = fresh_participant_violence or instructed_violence_rejection
+        violence_rejection_required = fresh_room_violence or instructed_violence_rejection
 
         # Get the selected agent's profile.
         agent_profile = self.agent_profiles.get(agent_name, "")
@@ -2610,8 +2661,10 @@ class Orchestrator:
                     "The latest violent suggestion must be rejected clearly and explicitly. "
                     "State naturally in Spanish that violence is never an acceptable solution. "
                     "Do not begin with agreement words such as 'exacto' or 'claro que si', do not use "
-                    "'mano dura', and do not repeat, paraphrase, endorse, or soften the violent wording. "
-                    "You may keep your political position, but the rejection of violence must be unmistakable."
+                    "'mano dura', 'dar caña', or 'no queda otra', and do not repeat, paraphrase, endorse, "
+                    "or soften the violent wording. Do not follow the rejection with 'pero' and a coercive, "
+                    "retaliatory, or intimidating proposal. You may keep your political position, but the "
+                    "complete message must reject violence unmistakably."
                 )
                 content = None
                 continue

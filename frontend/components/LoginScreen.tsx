@@ -265,7 +265,7 @@ export default function LoginScreen({
                           <polyline points="9 17 4 12 9 7" />
                           <path d="M20 18v-2a4 4 0 00-4-4H4" />
                         </svg>
-                        Reply
+                        Responder
                       </span>
                       cuando estés de acuerdo, en desacuerdo o quieras reaccionar a un comentario.
                     </span>
@@ -276,7 +276,7 @@ export default function LoginScreen({
                       <strong>Mencionar a otro usuario</strong>
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-accent-soft text-accent font-medium">
                         <span aria-hidden="true">@</span>
-                        Mention
+                        Mencionar
                       </span>
                       si quieres usar el avatar de otro usuario para ampliar su respuesta o hacer mención a algún punto que desees destacar.
                     </span>
@@ -284,12 +284,12 @@ export default function LoginScreen({
                   <li className="flex gap-3 items-start">
                     <span className="mt-2.5 h-2.5 w-2.5 shrink-0 rounded-full bg-accent" />
                     <span className="inline-flex items-center flex-wrap gap-1.5">
-                      <strong>Dar Like</strong>
+                      <strong>Dar a Me gusta</strong>
                       <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-xs bg-red-50 text-danger font-medium">
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                           <path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" />
                         </svg>
-                        Like
+                        Me gusta
                       </span>
                       a los comentarios que apoyes o con los que estés de acuerdo.
                     </span>
@@ -303,7 +303,7 @@ export default function LoginScreen({
                           <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                           <line x1="4" y1="22" x2="4" y2="15" />
                         </svg>
-                        Report
+                        Reportar
                       </span>
                       Puedes denunciar comentarios y usuarios que te parezcan inapropiados, molestos o incómodos.
                     </span>

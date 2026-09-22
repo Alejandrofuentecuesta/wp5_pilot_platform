@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { Message, MessageReaction } from "@/lib/types"
 import { getSenderColor, PARTICIPANT_SENDER } from "@/lib/constants"
 import { formatMessageTime } from "@/lib/dates"
@@ -68,6 +68,19 @@ export default function MessageBubble({
   onBlock,
 }: MessageBubbleProps) {
   const [reactionPickerOpen, setReactionPickerOpen] = useState(false)
+  const reactionPickerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!reactionPickerOpen) return
+
+    const closeOnOutsidePress = (event: PointerEvent) => {
+      if (!reactionPickerRef.current?.contains(event.target as Node)) {
+        setReactionPickerOpen(false)
+      }
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePress)
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePress)
+  }, [reactionPickerOpen])
   // The backend stores the participant's chosen display name as sender, while
   // older sessions may still use the canonical "participant" value.
   const messageIsSelf =
@@ -174,7 +187,7 @@ export default function MessageBubble({
             Me gusta{likesCount > 0 ? ` ${likesCount}` : ""}
           </button>
 
-          <div className="relative">
+          <div ref={reactionPickerRef} className="relative">
             <button
               onClick={() => setReactionPickerOpen((open) => !open)}
               className={`inline-flex items-center gap-1 rounded px-2 py-1 text-[11px] transition-colors ${selectedReaction ? "bg-accent-soft text-accent" : "text-secondary hover:bg-accent-soft hover:text-accent"}`}

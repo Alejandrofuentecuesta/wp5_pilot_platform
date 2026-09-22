@@ -743,6 +743,23 @@ class TestPendingReviewExclusion:
             orchestrator.execute_turn.assert_awaited_once()
             assert orchestrator.execute_turn.await_args.kwargs["allowed_performers"] == set()
 
+    def test_pipeline_task_done_frees_both_the_slot_and_the_pipeline(self):
+        """The same pipeline id must not be refired while its previous turn
+        is still running — see the comment on _active_pipeline_ids. Only
+        clearing _active_turn_tasks (the total-count cap) is not enough:
+        another pipeline finishing first must not let this one's id be
+        picked again before its own task is done."""
+        with _patch_externals():
+            session, _ = _create_session()
+            fake_task = object()
+            session._active_turn_tasks.add(fake_task)
+            session._active_pipeline_ids.add(1)
+
+            session._on_pipeline_task_done(fake_task, 1)
+
+            assert fake_task not in session._active_turn_tasks
+            assert 1 not in session._active_pipeline_ids
+
 
 # ── Blocked agent filtering ─────────────────────────────────────────────────
 

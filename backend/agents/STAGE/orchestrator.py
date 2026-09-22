@@ -1778,6 +1778,19 @@ class Orchestrator:
             recent_action,
             speaking_agent_names,
         )
+        if addressed_agent and allowed_performers is not None and addressed_agent not in allowed_performers:
+            # The agent the participant addressed is currently excluded (e.g.
+            # a pending safety review on their last message, or — in
+            # parallel mode — another pipeline's pool). "Must reply to being
+            # addressed" is stronger than treatment balancing, but it must
+            # not be stronger than the safety exclusion: forcing a blocked
+            # agent to speak again is exactly what that exclusion exists to
+            # prevent. Fall back to ordinary Director selection instead.
+            self.logger.log_error(
+                "addressed_agent_excluded",
+                f"Participant addressed '{addressed_agent}' but they are currently excluded from selection",
+            )
+            addressed_agent = None
         capped_speaker, capped_streak = self._trailing_speaker_streak(recent_action, speaking_agent_names)
         disallowed_speaker = capped_speaker if capped_streak >= 2 else None
         base_allowed_real = (

@@ -971,6 +971,50 @@ class TestExecuteTurnReply:
         assert result.action_type == "message"
 
     @pytest.mark.asyncio
+    async def test_addressed_agent_excluded_from_allowed_performers_is_not_forced(self):
+        """The 'must reply to being addressed' rule is stronger than treatment
+        balancing, but must not override an active exclusion (e.g. Alice has
+        an unreviewed withheld message and was excluded via
+        allowed_performers). Forcing a blocked agent to speak again is
+        exactly what that exclusion exists to prevent."""
+        state = _make_state(
+            simulation_config={"participant_target_reply_probability": 1.0},
+        )
+        agent_message = Message.create(sender="Alice", content="Mi opinión")
+        state.add_message(agent_message)
+        participant_reply = Message.create(
+            sender="participant",
+            content="No estoy de acuerdo",
+            reply_to=agent_message.message_id,
+            quoted_text=agent_message.content,
+        )
+        state.add_message(participant_reply)
+        orch, _ = _make_orchestrator(state=state)
+        orch._director_evaluate = AsyncMock()
+        orch._director_action = AsyncMock(return_value={
+            "next_performer": "Bob",
+            "action_type": "message",
+            "priority": "test",
+            "performer_rationale": "test",
+            "action_rationale": "test",
+            "performer_instruction": {
+                "objective": "Engage",
+                "motivation": "Respond",
+                "directive": "Be direct",
+            },
+        })
+        orch.performer_llm.generate_response = AsyncMock(return_value="Otra opinión.")
+        orch.moderator_llm.generate_response = AsyncMock(return_value="Otra opinión.")
+
+        result = await orch.execute_turn("criteria_A", allowed_performers={"Bob"})
+
+        assert result is not None
+        # Alice was addressed but is excluded — the Director's own pick
+        # (Bob, the only allowed performer) must stand, not be overridden.
+        assert result.agent_name == "Bob"
+        assert result.action_type == "message"
+
+    @pytest.mark.asyncio
     async def test_reply_sets_reply_to_and_quoted_text(self):
         state = _make_state()
         state.add_message(Message.create(sender="Bob", content="What do you think?"))

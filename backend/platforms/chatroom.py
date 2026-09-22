@@ -500,6 +500,15 @@ class SimulationSession:
         self._turn_lock = asyncio.Lock()   # serialises the persist+broadcast phase
         self._parallel_turns = max(1, int(self.simulation_config.get("parallel_turns", 1)))
         self._active_turn_tasks: set = set()  # track fire-and-forget parallel tasks
+        # pipeline ids (1..N) with a _parallel_turn task currently in flight.
+        # _active_turn_tasks alone only caps the *total* concurrent turns; it
+        # does not stop the same pipeline being fired again while its own
+        # previous turn is still running (e.g. because other pipelines
+        # finished faster and freed up a slot in the total count). Two
+        # overlapping turns on one pipeline share its Orchestrator instance
+        # and agent pool, so they could independently pick the same agent
+        # before either turn's message has been screened and marked pending.
+        self._active_pipeline_ids: set[int] = set()
         self._next_pipeline_id = 0  # cycles 1..N for parallel pipeline tagging
         self._safety_tasks: set[asyncio.Task] = set()
         self._safety_stop_lock = asyncio.Lock()
@@ -930,6 +939,7 @@ class SimulationSession:
             except asyncio.CancelledError:
                 pass
         self._active_turn_tasks.clear()
+        self._active_pipeline_ids.clear()
 
         # Classifier checks are independent background tasks. On a normal end,
         # cancel them so a late result cannot revive a terminal interaction.
@@ -1099,15 +1109,24 @@ class SimulationSession:
                     if self._parallel_turns > 1:
                         # Fire turn as background task, capped by parallel_turns.
                         # Each pipeline has its own Orchestrator so Directors run concurrently.
+                        # A candidate pipeline only fires if it isn't already
+                        # running a turn — otherwise the cycle stalls on it
+                        # (not skipped) until it frees up, preserving
+                        # round-robin order across pipelines.
                         if len(self._active_turn_tasks) < self._parallel_turns:
-                            self._next_pipeline_id = (self._next_pipeline_id % self._parallel_turns) + 1
-                            pid = self._next_pipeline_id
-                            allowed = self._pipeline_agents[pid - 1]  # 0-indexed
-                            task = asyncio.create_task(
-                                self._parallel_turn(pid, allowed)
-                            )
-                            self._active_turn_tasks.add(task)
-                            task.add_done_callback(self._active_turn_tasks.discard)
+                            candidate_pid = (self._next_pipeline_id % self._parallel_turns) + 1
+                            if candidate_pid not in self._active_pipeline_ids:
+                                self._next_pipeline_id = candidate_pid
+                                pid = candidate_pid
+                                allowed = self._pipeline_agents[pid - 1]  # 0-indexed
+                                self._active_pipeline_ids.add(pid)
+                                task = asyncio.create_task(
+                                    self._parallel_turn(pid, allowed)
+                                )
+                                self._active_turn_tasks.add(task)
+                                task.add_done_callback(
+                                    lambda t, pid=pid: self._on_pipeline_task_done(t, pid)
+                                )
                     else:
                         await self._guarded_turn()
 
@@ -1198,6 +1217,11 @@ class SimulationSession:
             self.logger.log_error("guarded_turn", str(e))
         finally:
             await self._publish_typing(started=False)
+
+    def _on_pipeline_task_done(self, task: "asyncio.Task", pid: int) -> None:
+        """Free both the global slot and the per-pipeline lock a _parallel_turn held."""
+        self._active_turn_tasks.discard(task)
+        self._active_pipeline_ids.discard(pid)
 
     async def _parallel_turn(self, pid: int, allowed_agents: List[str], stagger_delay: float = 0.0) -> None:
         """Execute a single agent turn in parallel-friendly mode.

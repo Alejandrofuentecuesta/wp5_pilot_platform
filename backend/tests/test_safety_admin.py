@@ -165,6 +165,101 @@ class TestFlags:
         assert session._publish_typing.await_count == 2
         assert session._publish_typing.await_args_list[0].kwargs == {"started": True}
         assert session._publish_typing.await_args_list[1].kwargs == {"started": False}
+        # And the agent must be unblocked so the Director can pick them again.
+        session.safety_screen.resolve_flag.assert_called_once_with("f1", "Carlos")
+
+    def test_concern_verdict_still_unblocks_the_agent_without_publishing(self, client):
+        """Marking an agent's withheld message as 'concern' resolves the flag
+        (so the agent can speak again) without ever publishing it."""
+        pool = MagicMock()
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value={
+            "session_id": "s1",
+            "experiment_id": "e1",
+            "message_id": None,
+            "displayed_at": None,
+            "sender_type": "agent",
+            "sender": "Carlos",
+            "content": "mensaje retenido",
+            "verdict": "unsafe",
+            "categories": ["S10"],
+        })
+        pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
+        pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+        session = MagicMock()
+        session.agent_manager._handle_message = AsyncMock()
+
+        with patch.object(main, "_get_pool", return_value=pool), \
+             patch("main.session_manager.get_session", new=AsyncMock(return_value=session)), \
+             patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
+             patch("main.event_repo.insert_event", new=AsyncMock()):
+            r = client.post("/admin/safety/flags/f1/review", headers=HDR,
+                            json={"verdict": "concern", "reviewer": "Laia"})
+
+        assert r.status_code == 200
+        assert r.json()["published"] is False
+        session.agent_manager._handle_message.assert_not_awaited()
+        session.safety_screen.resolve_flag.assert_called_once_with("f1", "Carlos")
+
+    def test_unavailable_verdict_reviewed_unblocks_without_publish_path(self, client):
+        """An 'unavailable' flag can never be published (no verdict to approve),
+        but reviewing it must still unblock the agent."""
+        pool = MagicMock()
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value={
+            "session_id": "s1",
+            "experiment_id": "e1",
+            "message_id": None,
+            "displayed_at": None,
+            "sender_type": "agent",
+            "sender": "Carlos",
+            "content": "mensaje retenido",
+            "verdict": "unavailable",
+            "categories": [],
+        })
+        pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
+        pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+        session = MagicMock()
+        session.agent_manager._handle_message = AsyncMock()
+
+        with patch.object(main, "_get_pool", return_value=pool), \
+             patch("main.session_manager.get_session", new=AsyncMock(return_value=session)), \
+             patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
+             patch("main.event_repo.insert_event", new=AsyncMock()):
+            r = client.post("/admin/safety/flags/f1/review", headers=HDR,
+                            json={"verdict": "no_concern", "reviewer": "Laia"})
+
+        assert r.status_code == 200
+        assert r.json()["published"] is False
+        session.agent_manager._handle_message.assert_not_awaited()
+        session.safety_screen.resolve_flag.assert_called_once_with("f1", "Carlos")
+
+    def test_participant_flag_review_does_not_touch_safety_screen(self, client):
+        pool = MagicMock()
+        conn = MagicMock()
+        conn.fetchrow = AsyncMock(return_value={
+            "session_id": "s1",
+            "experiment_id": "e1",
+            "message_id": "m1",
+            "displayed_at": "2026-01-01T00:00:00Z",
+            "sender_type": "participant",
+            "sender": "Paula",
+            "content": "mensaje del participante",
+            "verdict": "unsafe",
+            "categories": ["S11"],
+        })
+        pool.acquire.return_value.__aenter__ = AsyncMock(return_value=conn)
+        pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
+
+        with patch.object(main, "_get_pool", return_value=pool), \
+             patch("main.session_manager.get_session", new=AsyncMock()) as get_session, \
+             patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
+             patch("main.event_repo.insert_event", new=AsyncMock()):
+            r = client.post("/admin/safety/flags/f1/review", headers=HDR,
+                            json={"verdict": "no_concern", "reviewer": "Laia"})
+
+        assert r.status_code == 200
+        get_session.assert_not_awaited()
 
 
 class TestSessionActions:

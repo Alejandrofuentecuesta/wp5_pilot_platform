@@ -328,3 +328,75 @@ class TestAnthropicTransport:
         await screen.after_publish(msg, out)
         kw = repo.insert_flag.call_args.kwargs
         assert kw["rationale"] == "targets an identity group."
+
+
+class TestPendingReviewBlocking:
+    """An agent with an unreviewed withheld flag must not be selectable again
+    until that flag is resolved — otherwise a second, unrelated turn from the
+    same agent can publish while the first is still awaiting review."""
+
+    async def test_withheld_agent_turn_blocks_the_agent(self, repo):
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        screen, _ = _screen(FakeClient(v))
+        assert screen.pending_review_agents() == set()
+
+        msg = Message.create(sender="Carlos", content="x")
+        out = await screen.screen_agent(msg, _state())
+
+        assert out.publish is False
+        assert screen.pending_review_agents() == {"Carlos"}
+
+    async def test_unavailable_agent_turn_also_blocks(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="unavailable", error="timeout")))
+        await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
+        assert screen.pending_review_agents() == {"Carlos"}
+
+    async def test_safe_agent_turn_does_not_block(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe")))
+        await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
+        assert screen.pending_review_agents() == set()
+
+    async def test_participant_flag_does_not_block_any_agent(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="unsafe", categories=["S11"])))
+        await screen.screen_participant(Message.create(sender="Paula", content="x"))
+        assert screen.pending_review_agents() == set()
+
+    async def test_resolve_flag_unblocks_the_agent(self, repo):
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        screen, _ = _screen(FakeClient(v))
+        out = await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
+
+        screen.resolve_flag(out.flag_id, "Carlos")
+
+        assert screen.pending_review_agents() == set()
+
+    async def test_resolve_flag_without_agent_name_scans_all(self, repo):
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        screen, _ = _screen(FakeClient(v))
+        out = await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
+
+        screen.resolve_flag(out.flag_id)
+
+        assert screen.pending_review_agents() == set()
+
+    async def test_two_pending_flags_for_same_agent_both_must_resolve(self, repo):
+        """Defensive: an agent blocked twice stays blocked until every flag clears."""
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        screen, _ = _screen(FakeClient(v))
+        first = await screen.screen_agent(Message.create(sender="Carlos", content="a"), _state())
+        # Second withheld flag injected directly (the agent should already be
+        # excluded from selection by the caller, but the bookkeeping must
+        # still be correct if it somehow happens).
+        screen._pending_review_agents["Carlos"].add("extra-flag")
+
+        screen.resolve_flag(first.flag_id, "Carlos")
+        assert screen.pending_review_agents() == {"Carlos"}
+
+        screen.resolve_flag("extra-flag", "Carlos")
+        assert screen.pending_review_agents() == set()
+
+    async def test_resolving_unknown_flag_is_a_noop(self, repo):
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe")))
+        screen.resolve_flag("does-not-exist", "Nobody")
+        screen.resolve_flag("does-not-exist")
+        assert screen.pending_review_agents() == set()

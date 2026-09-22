@@ -2394,6 +2394,17 @@ async def admin_safety_review(
     if not ok:
         raise HTTPException(status_code=404, detail="flag not found")
 
+    # Reviewing an agent's withheld flag — whatever the verdict — clears the
+    # block that keeps the Director from picking that agent again. Without
+    # this a second, unrelated turn from the same agent can publish while
+    # the first is still pending review; approving it afterwards then makes
+    # two messages from that agent land back-to-back with no explanation.
+    if row.get("sender_type") == "agent":
+        if session is None:
+            session = await session_manager.get_session(str(row["session_id"]))
+        if session is not None:
+            session.safety_screen.resolve_flag(flag_id, row.get("sender"))
+
     published_message_id = None
     if publish_withheld and session is not None:
         message = Message.create(sender=row["sender"], content=row["content"])

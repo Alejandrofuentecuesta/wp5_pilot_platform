@@ -677,6 +677,73 @@ class TestGuardedTurnLocking:
             session.agent_manager._handle_message.assert_awaited_once()
 
 
+class TestPendingReviewExclusion:
+    """An agent with an unreviewed withheld flag must not be picked for a new
+    turn — see SafetyScreen.pending_review_agents. Covers both turn modes."""
+
+    @pytest.mark.asyncio
+    async def test_guarded_turn_excludes_pending_review_agents(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            session.safety_screen.enabled = True
+            session.safety_screen.pending_review_agents = MagicMock(return_value={"Bob"})
+            execute_turn = AsyncMock(return_value=None)
+            session.agent_manager.orchestrator.execute_turn = execute_turn
+
+            await session._guarded_turn()
+
+            execute_turn.assert_awaited_once()
+            assert execute_turn.await_args.kwargs["allowed_performers"] == {"Alice"}
+
+    @pytest.mark.asyncio
+    async def test_guarded_turn_passes_none_when_nothing_pending(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            session.safety_screen.enabled = True
+            session.safety_screen.pending_review_agents = MagicMock(return_value=set())
+            execute_turn = AsyncMock(return_value=None)
+            session.agent_manager.orchestrator.execute_turn = execute_turn
+
+            await session._guarded_turn()
+
+            assert execute_turn.await_args.kwargs["allowed_performers"] is None
+
+    @pytest.mark.asyncio
+    async def test_guarded_turn_passes_none_when_screening_disabled(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            assert session.safety_screen.enabled is False
+            execute_turn = AsyncMock(return_value=None)
+            session.agent_manager.orchestrator.execute_turn = execute_turn
+
+            await session._guarded_turn()
+
+            assert execute_turn.await_args.kwargs["allowed_performers"] is None
+
+    @pytest.mark.asyncio
+    async def test_parallel_turn_intersects_pool_with_pending_review(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            session._parallel_turns = 2
+            session._pipeline_agents = [["Alice"], ["Bob"]]
+            session._pipeline_orchestrators = [MagicMock(), MagicMock()]
+            session.safety_screen.enabled = True
+            session.safety_screen.pending_review_agents = MagicMock(return_value={"Alice"})
+            orchestrator = session._pipeline_orchestrators[0]
+            orchestrator.action_window_size = 20
+            orchestrator._pending_participant_target = MagicMock(return_value=(None, None))
+            orchestrator.execute_turn = AsyncMock(return_value=None)
+
+            await session._parallel_turn(1, ["Alice"])
+
+            orchestrator.execute_turn.assert_awaited_once()
+            assert orchestrator.execute_turn.await_args.kwargs["allowed_performers"] == set()
+
+
 # ── Blocked agent filtering ─────────────────────────────────────────────────
 
 class TestBlockedAgentFiltering:

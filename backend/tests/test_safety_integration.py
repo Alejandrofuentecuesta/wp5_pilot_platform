@@ -133,6 +133,63 @@ class TestAgentManagerGate:
             {"flag_id": "f1", "sender": "Alice", "delay_seconds": 120},
         )
 
+    async def test_auto_concern_unblocks_the_agent(self):
+        """The 2-minute timeout must clear the pending-review block, same as a human review."""
+        state = _make_state()
+        screen = MagicMock()
+        am = AgentManager(
+            state=state,
+            orchestrator=MagicMock(),
+            logger=MagicMock(),
+            session_id="s",
+            experiment_id="e",
+            safety_screen=screen,
+            session_active=lambda: True,
+            hold_active=lambda: False,
+            turn_lock=asyncio.Lock(),
+        )
+        am._handle_message = AsyncMock()
+        original = Message.create(sender="Alice", content="held")
+        outcome = ScreenOutcome(
+            publish=False,
+            verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
+            user_turn="",
+            flag_id="f1",
+        )
+        with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()), \
+             patch("agents.agent_manager.db_conn.get_pool", return_value=MagicMock()), \
+             patch("agents.agent_manager.safety_repo.claim_flag_for_timeout_concern", new=AsyncMock(return_value=True)):
+            await am._auto_resolve_withheld(original, outcome)
+
+        screen.resolve_flag.assert_called_once_with("f1", "Alice")
+
+    async def test_lost_timeout_race_does_not_unblock_the_agent(self):
+        """A human already reviewed it first: the timeout must not touch the block state."""
+        screen = MagicMock()
+        am = AgentManager(
+            state=_make_state(),
+            orchestrator=MagicMock(),
+            logger=MagicMock(),
+            session_id="s",
+            safety_screen=screen,
+            session_active=lambda: True,
+            hold_active=lambda: False,
+            turn_lock=asyncio.Lock(),
+        )
+        am._handle_message = AsyncMock()
+        outcome = ScreenOutcome(
+            publish=False,
+            verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
+            user_turn="",
+            flag_id="f1",
+        )
+        with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()), \
+             patch("agents.agent_manager.db_conn.get_pool", return_value=MagicMock()), \
+             patch("agents.agent_manager.safety_repo.claim_flag_for_timeout_concern", new=AsyncMock(return_value=False)):
+            await am._auto_resolve_withheld(Message.create(sender="Alice", content="held"), outcome)
+
+        screen.resolve_flag.assert_not_called()
+
     async def test_human_review_wins_timeout_race(self):
         am = AgentManager(
             state=_make_state(),

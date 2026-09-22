@@ -140,6 +140,8 @@ class AgentManager:
                 claimed = await safety_repo.claim_flag_for_timeout_concern(pool, outcome.flag_id)
                 if not claimed:
                     return
+                if self.safety_screen is not None:
+                    self.safety_screen.resolve_flag(outcome.flag_id, original.sender)
                 self.logger.log_event(
                     "safety_flag_auto_concern",
                     {"flag_id": outcome.flag_id, "sender": original.sender, "delay_seconds": 120},

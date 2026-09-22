@@ -1140,13 +1140,28 @@ class SimulationSession:
         pipeline before it could publish, and then land immediately after
         it with no typing delay of its own — the two messages would appear
         back-to-back with no visible gap.
+
+        Also excludes any agent with an unreviewed withheld message from
+        selection (see ``SafetyScreen.pending_review_agents``): otherwise the
+        Director can pick that same agent again for an unrelated turn while
+        their first message is still sitting in the review queue, and a
+        later approval then makes two of their messages appear one after
+        the other with no explanation.
         """
         if not self.running or self._safety_intervention_triggered:
             return
         try:
             await self._publish_typing(started=True)
+            # Agents with an unreviewed withheld message must not be picked
+            # again until that flag is resolved — see the docstring above.
+            allowed_performers = None
+            if self.safety_screen is not None and self.safety_screen.enabled:
+                pending = self.safety_screen.pending_review_agents()
+                if pending:
+                    allowed_performers = set(self._agent_names) - pending
             result = await self.agent_manager.orchestrator.execute_turn(
                 self.internal_validity_criteria,
+                allowed_performers=allowed_performers,
             )
 
             if result is None or result.action_type == "wait":
@@ -1215,10 +1230,18 @@ class SimulationSession:
 
             await self._publish_typing(started=True)
 
+            # Agents with an unreviewed withheld message must not be picked
+            # again until that flag is resolved (see SafetyScreen.pending_review_agents).
+            allowed_performers = set(allowed_agents)
+            if self.safety_screen is not None and self.safety_screen.enabled:
+                pending = self.safety_screen.pending_review_agents()
+                if pending:
+                    allowed_performers -= pending
+
             # ── Phase 1: Director — runs concurrently across pipelines ────────
             result = await orchestrator.execute_turn(
                 self.internal_validity_criteria,
-                allowed_performers=set(allowed_agents),
+                allowed_performers=allowed_performers,
             )
 
             if result is None or result.action_type == "wait":

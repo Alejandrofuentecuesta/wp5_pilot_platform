@@ -21,7 +21,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Set, Tuple
 
 from db import connection as db_conn
 from db.repositories import safety_repo
@@ -77,6 +77,39 @@ class SafetyScreen:
         self.context_mode = context_mode
         # message_id -> verdict status of participant messages screened here.
         self._participant_verdicts: Dict[str, str] = {}
+        # agent_name -> open flag_ids blocking them. While an agent has any
+        # unreviewed withheld message, the Director must not pick them again —
+        # otherwise a second turn from the same agent can publish before the
+        # first one is reviewed, and approving the first afterwards makes two
+        # messages from that agent appear back-to-back with no explanation.
+        self._pending_review_agents: Dict[str, Set[str]] = {}
+
+    # ── pending-review blocking ──────────────────────────────────────────
+
+    def pending_review_agents(self) -> Set[str]:
+        """Agent names that currently have at least one unreviewed withheld flag."""
+        return {name for name, flags in self._pending_review_agents.items() if flags}
+
+    def resolve_flag(self, flag_id: str, agent_name: Optional[str] = None) -> None:
+        """Unblock the agent once a withheld flag has been reviewed (or auto-resolved).
+
+        Call this from wherever a flag transitions out of the open/unreviewed
+        state: the reviewer approval endpoint and the 2-minute auto-concern
+        timeout. ``agent_name`` is an optional shortcut; without it every
+        pending agent is scanned for the flag_id.
+        """
+        if agent_name is not None:
+            flags = self._pending_review_agents.get(agent_name)
+            if flags is not None:
+                flags.discard(flag_id)
+                if not flags:
+                    del self._pending_review_agents[agent_name]
+            return
+        for name, flags in list(self._pending_review_agents.items()):
+            if flag_id in flags:
+                flags.discard(flag_id)
+                if not flags:
+                    del self._pending_review_agents[name]
 
     # ── conversation mapping ──────────────────────────────────────────────
 
@@ -156,6 +189,8 @@ class SafetyScreen:
                 message_id=None,
                 displayed_at=None,
             )
+            if flag_id:
+                self._pending_review_agents.setdefault(message.sender, set()).add(flag_id)
             self._event(
                 "safety_turn_withheld",
                 {

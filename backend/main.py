@@ -2401,11 +2401,23 @@ async def admin_safety_review(
             "flag_id": flag_id,
             "reviewed_by": reviewer,
         }
-        async with session._turn_lock:
-            await session.agent_manager._handle_message(
-                TurnResult(action_type="message", agent_name=message.sender, message=message),
-                skip_safety=True,
-            )
+        # Same typing delay as a normal turn (chatroom.py's _guarded_turn /
+        # _parallel_turn): without it this publishes the instant the lock is
+        # free, right after whatever the live loop just finished — the two
+        # land back-to-back with no visible gap, looking like both appeared
+        # at once.
+        await session._publish_typing(started=True)
+        try:
+            delay = len(message.content) / session.TYPING_CHARS_PER_SECOND
+            delay = max(session.TYPING_DELAY_MIN, min(delay, session.TYPING_DELAY_MAX))
+            await asyncio.sleep(delay)
+            async with session._turn_lock:
+                await session.agent_manager._handle_message(
+                    TurnResult(action_type="message", agent_name=message.sender, message=message),
+                    skip_safety=True,
+                )
+        finally:
+            await session._publish_typing(started=False)
         await safety_repo.set_message_safety_verdict(pool, message.message_id, row["verdict"])
         await safety_repo.mark_flag_published(pool, flag_id, message.message_id, message.timestamp)
         published_message_id = message.message_id

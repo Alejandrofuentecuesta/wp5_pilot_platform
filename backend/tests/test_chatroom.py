@@ -627,6 +627,56 @@ class TestParticipantSafety:
             session.agent_manager._handle_message.assert_not_awaited()
 
 
+class TestGuardedTurnLocking:
+    """_turn_lock only serialises the final persist+broadcast step, not the LLM
+    pipeline or the typing delay (matching _parallel_turn). Otherwise any other
+    lock-acquirer — e.g. a reviewer approving a withheld message from the Safety
+    tab — would have to wait out this turn's whole multi-second pipeline before
+    it could publish, then land immediately after it with no delay of its own."""
+
+    @pytest.mark.asyncio
+    async def test_lock_is_free_while_the_pipeline_is_still_running(self):
+        with _patch_externals(), patch("platforms.chatroom.asyncio.sleep", new=AsyncMock()):
+            session, _ = _create_session()
+            session.running = True
+
+            pipeline_started = asyncio.Event()
+            release_pipeline = asyncio.Event()
+
+            async def slow_execute_turn(*args, **kwargs):
+                pipeline_started.set()
+                await release_pipeline.wait()
+                result = MagicMock()
+                result.action_type = "message"
+                result.message = Message.create(sender="Alice", content="hola")
+                return result
+
+            session.agent_manager.orchestrator.execute_turn = AsyncMock(side_effect=slow_execute_turn)
+            session.agent_manager._handle_message = AsyncMock()
+
+            turn_task = asyncio.create_task(session._guarded_turn())
+            await asyncio.wait_for(pipeline_started.wait(), timeout=1)
+
+            # The pipeline is still blocked (mid-Director/Performer call), but
+            # the lock must already be free for another acquirer to get in —
+            # this is what lets a Safety-tab approval publish without waiting
+            # for this whole turn to finish.
+            acquired = asyncio.Event()
+
+            async def try_acquire():
+                async with session._turn_lock:
+                    acquired.set()
+
+            acquire_task = asyncio.create_task(try_acquire())
+            await asyncio.wait_for(acquired.wait(), timeout=1)
+            assert acquired.is_set()
+
+            release_pipeline.set()
+            await asyncio.wait_for(turn_task, timeout=1)
+            await asyncio.wait_for(acquire_task, timeout=1)
+            session.agent_manager._handle_message.assert_awaited_once()
+
+
 # ── Blocked agent filtering ─────────────────────────────────────────────────
 
 class TestBlockedAgentFiltering:

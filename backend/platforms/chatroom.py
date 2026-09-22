@@ -1131,44 +1131,58 @@ class SimulationSession:
         so the frontend can show a "someone is writing..." indicator.
         After the LLM returns a message, a length-based typing delay is
         applied before the message is persisted and broadcast.
+
+        Only the final persist+broadcast step is serialised on
+        ``_turn_lock`` (matching ``_parallel_turn``) — not the LLM pipeline
+        or the typing delay. Holding the lock across the whole turn used to
+        make any other lock-acquirer (e.g. a reviewer approving a withheld
+        message from the Safety tab) wait out this turn's full multi-second
+        pipeline before it could publish, and then land immediately after
+        it with no typing delay of its own — the two messages would appear
+        back-to-back with no visible gap.
         """
         if not self.running or self._safety_intervention_triggered:
             return
-        async with self._turn_lock:
-            try:
-                if not self.running or self._safety_intervention_triggered:
-                    return
-                await self._publish_typing(started=True)
-                result = await self.agent_manager.orchestrator.execute_turn(
-                    self.internal_validity_criteria,
-                )
+        try:
+            await self._publish_typing(started=True)
+            result = await self.agent_manager.orchestrator.execute_turn(
+                self.internal_validity_criteria,
+            )
 
-                if result is None or result.action_type == "wait":
-                    return
+            if result is None or result.action_type == "wait":
+                return
 
-                if not self.running or self._safety_intervention_triggered:
-                    return
+            if not self.running or self._safety_intervention_triggered:
+                return
 
-                # Apply realistic typing delay based on message length.
-                if result.message and result.message.content:
-                    delay = len(result.message.content) / self.TYPING_CHARS_PER_SECOND
-                    delay = max(self.TYPING_DELAY_MIN, min(delay, self.TYPING_DELAY_MAX))
-                    await asyncio.sleep(delay)
-
-                # A safety classification can finish while the LLM or typing
-                # delay is in flight. Never persist or expose that late action.
-                if not self.running or self._safety_intervention_triggered:
-                    return
-
-                # Delegate persistence + broadcast to AgentManager.
-                if result.action_type == "like":
+            if result.action_type == "like":
+                async with self._turn_lock:
+                    if not self.running or self._safety_intervention_triggered:
+                        return
                     await self.agent_manager._handle_like(result)
-                else:
-                    await self.agent_manager._handle_message(result)
-            except Exception as e:
-                self.logger.log_error("guarded_turn", str(e))
-            finally:
-                await self._publish_typing(started=False)
+                return
+
+            # Apply realistic typing delay based on message length.
+            if result.message and result.message.content:
+                delay = len(result.message.content) / self.TYPING_CHARS_PER_SECOND
+                delay = max(self.TYPING_DELAY_MIN, min(delay, self.TYPING_DELAY_MAX))
+                await asyncio.sleep(delay)
+
+            # A safety classification can finish while the LLM or typing
+            # delay is in flight. Never persist or expose that late action.
+            if not self.running or self._safety_intervention_triggered:
+                return
+
+            # Delegate persistence + broadcast to AgentManager (serialised
+            # for ordering, same as _parallel_turn).
+            async with self._turn_lock:
+                if not self.running or self._safety_intervention_triggered:
+                    return
+                await self.agent_manager._handle_message(result)
+        except Exception as e:
+            self.logger.log_error("guarded_turn", str(e))
+        finally:
+            await self._publish_typing(started=False)
 
     async def _parallel_turn(self, pid: int, allowed_agents: List[str], stagger_delay: float = 0.0) -> None:
         """Execute a single agent turn in parallel-friendly mode.

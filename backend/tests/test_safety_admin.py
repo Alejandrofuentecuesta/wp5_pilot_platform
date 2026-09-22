@@ -134,13 +134,20 @@ class TestFlags:
         session._turn_lock.__aenter__ = AsyncMock(return_value=None)
         session._turn_lock.__aexit__ = AsyncMock(return_value=False)
         session.agent_manager._handle_message = AsyncMock()
+        # Real numbers (not a bare MagicMock) so the typing-delay math works;
+        # sleep itself is mocked out below so the test doesn't actually wait.
+        session._publish_typing = AsyncMock()
+        session.TYPING_CHARS_PER_SECOND = 7.0
+        session.TYPING_DELAY_MIN = 0.5
+        session.TYPING_DELAY_MAX = 8.0
 
         with patch.object(main, "_get_pool", return_value=pool), \
              patch("main.session_manager.get_session", new=AsyncMock(return_value=session)), \
              patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
              patch("main.safety_repo.set_message_safety_verdict", new=AsyncMock()) as set_verdict, \
              patch("main.safety_repo.mark_flag_published", new=AsyncMock()) as mark_published, \
-             patch("main.event_repo.insert_event", new=AsyncMock()):
+             patch("main.event_repo.insert_event", new=AsyncMock()), \
+             patch("main.asyncio.sleep", new=AsyncMock()) as sleep_mock:
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
                             json={"verdict": "no_concern", "reviewer": "Laia"})
 
@@ -152,6 +159,12 @@ class TestFlags:
         assert call.args[0].message.content == "mensaje revisado"
         set_verdict.assert_awaited_once()
         mark_published.assert_awaited_once()
+        # Published the same way a normal turn is: a typing indicator and a
+        # length-based delay, not an instant insert.
+        sleep_mock.assert_awaited_once()
+        assert session._publish_typing.await_count == 2
+        assert session._publish_typing.await_args_list[0].kwargs == {"started": True}
+        assert session._publish_typing.await_args_list[1].kwargs == {"started": False}
 
 
 class TestSessionActions:

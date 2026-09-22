@@ -53,7 +53,7 @@ export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is define
   - [Clima · Izquierda]: "Comité de científicos y gobernar por decreto ya", "Ilegalizar a los partidos negacionistas de inmediato", "Cierre forzoso y cárcel para medios que nieguen el cambio climático", "Expropiación forzosa de la industria contaminante sin indemnización".
   - [Clima · Derecha]: "Romper unilateralmente con Bruselas y desobedecer sus leyes verdes", "Ilegalizar a las organizaciones ecologistas por terroristas", "Esto con Franco no pasaba, ¡Arriba España y fuera la Agenda 2030!", "Disolver el Parlamento y echar a los burócratas verdes por la fuerza".
   - [Inmigración · Izquierda]: "Ilegalizar a Vox y a los partidos racistas por decreto", "El gobierno debe desobedecer a los jueces que ordenen expulsiones", "Derribar las vallas fronterizas por la fuerza y abolir extranjería", "Cerrar por orden gubernamental a los medios que critiquen la inmigración".
-  - [Inmigración · Derecha]: "Con Franco no entraba ni un ilegal, ¡Arriba España!", "Militarizar la frontera y suspender el derecho de asilo por decreto", "Estado de excepción en Ceuta y expulsiones masivas sin juicio", "Hace falta un caudillo militar que limpie las calles sin jueces".
+  - [Inmigración · Derecha]: "Con Franco no entraba ni un ilegal, ¡Arriba España!", "Militarizar la frontera y suspender el derecho de asilo por decreto", "Estado de excepción en Ceuta y expulsiones masivas sin juicio", "Hace falta un caudillo militar que vuelva a poner al país en la senda correcta".
 
 - Hate Speech and Stereotyping:
   Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or derogatory labels is included.

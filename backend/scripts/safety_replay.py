@@ -1,145 +1,94 @@
-"""Replay a set of messages through the safety classifier and record verdicts.
+"""Replay recorded chat sessions through the safety classifier.
 
-Used to validate a safety host (SAL Ollama during development, Konstanz vLLM
-before fielding) against the same prompt rendering the platform uses, and to
-compare two hosts on identical input.
+Every message of every session is judged exactly as the live screen judges
+it: the same policy, the same conversation excerpt (built from the messages
+before it), the same client. Used to validate a classifier host and a policy
+on real transcripts before they go live.
 
-Input: a JSON file containing either a list of strings, or a list of objects
-with at least ``content`` (optionally ``user_turn`` for the participant
-message it replied to, and ``id``). Output: JSONL, one verdict per input, in
-order. Resumable: existing output lines are skipped.
+Input: a JSON list of sessions, each
+``{"session_id": ..., "user_name": ..., "messages": [{"message_id", "sender",
+"content", "reply_to"}, ...]}`` with messages in chat order. Output: JSONL,
+one verdict per message. Resumable: messages already in the output are
+skipped.
 
-Environment: SAFETY_BASE_URL, SAFETY_MODEL, SAFETY_TRANSPORT
-(``ollama_raw`` | ``openai_completions``), SAFETY_API_KEY.
+Environment: SAFETY_TRANSPORT (default ``openai_chat``), SAFETY_BASE_URL,
+SAFETY_MODEL, SAFETY_API_KEY. For Ollama on the same host:
 
-    SAFETY_TRANSPORT=ollama_raw SAFETY_BASE_URL=http://localhost:11434 \\
-    SAFETY_MODEL=llama-guard3:8b SAFETY_API_KEY=... \\
-    uv run python scripts/safety_replay.py messages.json verdicts.jsonl --mode agent
-
-``--mode agent`` (default) classifies each message as an Agent turn replying
-to ``user_turn`` (or a placeholder when absent); ``--mode user`` classifies
-each message as a lone User turn.
+    SAFETY_BASE_URL=http://localhost:11434 SAFETY_MODEL=gpt-oss-safeguard:20b \\
+    uv run python scripts/safety_replay.py sessions.json verdicts.jsonl
 """
 from __future__ import annotations
 
 import argparse
 import asyncio
 import json
-import os
 import sys
 from collections import Counter
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from utils.safety import NEUTRAL_USER_TURN, SafetyClient, render_prompt  # noqa: E402
-from utils.safety.prompt import categories_from_config  # noqa: E402
-
-PLACEHOLDER_USER_TURN = "(no participant message yet)"
-
-
-def _load(path: Path):
-    data = json.loads(path.read_text(encoding="utf-8"))
-    items = []
-    for i, entry in enumerate(data):
-        if isinstance(entry, str):
-            items.append({"id": i, "content": entry, "user_turn": None})
-        else:
-            items.append({
-                "id": entry.get("id", i),
-                "content": entry["content"],
-                "user_turn": entry.get("user_turn"),
-            })
-    return items
+from utils.safety import SafetyClient, load_policy, render_excerpt  # noqa: E402
 
 
 async def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("input", type=Path)
     ap.add_argument("output", type=Path)
-    ap.add_argument("--mode", choices=("agent", "user"), default="agent")
-    ap.add_argument("--concurrency", type=int, default=4)
-    ap.add_argument("--categories", type=Path, help="JSON list of {code,title,definition?,enabled?}")
-    ap.add_argument("--policy", type=Path,
-                    help="a saved experimental.safety block (as returned by GET /admin/safety/policy); "
-                         "sets categories and context_mode, overriding --categories/--mode")
+    ap.add_argument("--agents-only", action="store_true", help="skip participant messages")
     args = ap.parse_args()
 
-    cfg = {
-        "transport": os.getenv("SAFETY_TRANSPORT"),
-        "base_url": os.getenv("SAFETY_BASE_URL"),
-        "model": os.getenv("SAFETY_MODEL"),
-        "timeout_s": float(os.getenv("SAFETY_TIMEOUT_S", "30")),
-    }
-    client = SafetyClient.from_config(cfg)
-    context_mode = None
-    if args.policy:
-        policy = json.loads(args.policy.read_text())
-        categories = categories_from_config(policy.get("categories"))
-        context_mode = policy.get("context_mode", "conditional")
-    else:
-        categories = categories_from_config(
-            json.loads(args.categories.read_text()) if args.categories else None
-        )
-
-    items = _load(args.input)
+    sessions = json.loads(args.input.read_text(encoding="utf-8"))
     done = set()
     if args.output.exists():
         for line in args.output.read_text(encoding="utf-8").splitlines():
             if line.strip():
-                done.add(json.loads(line)["id"])
-    todo = [it for it in items if it["id"] not in done]
-    print(f"{len(items)} messages, {len(done)} already done, {len(todo)} to classify "
-          f"via {client.transport} {client.model} at {client.base_url}", file=sys.stderr)
+                done.add(json.loads(line)["message_id"])
 
-    sem = asyncio.Semaphore(max(1, args.concurrency))
-    lock = asyncio.Lock()
-    counts = Counter()
+    client = SafetyClient.from_config({})
+    policy = load_policy()
+    print(f"{client.transport} {client.base_url} {client.model} policy={policy.version}", file=sys.stderr)
 
-    async def one(item):
-        user_turn = item["user_turn"] or PLACEHOLDER_USER_TURN
-        async with sem:
-            if context_mode == "none":
-                conv = [("user", NEUTRAL_USER_TURN), ("assistant", item["content"])]
-            elif context_mode == "conditional":
-                # Mirror the live screen: include the participant turn only
-                # when that turn is itself unsafe under the same policy.
-                uv = await client.classify(render_prompt([("user", user_turn)], categories))
-                ctx = user_turn if uv.status == "unsafe" else NEUTRAL_USER_TURN
-                conv = [("user", ctx), ("assistant", item["content"])]
-            elif context_mode == "always" or args.mode == "agent":
-                conv = [("user", user_turn), ("assistant", item["content"])]
-            else:
-                conv = [("user", item["content"])]
-            prompt = render_prompt(conv, categories)
-            v = await client.classify(prompt)
-        row = {
-            "id": item["id"],
-            "content": item["content"],
-            "status": v.status,
-            "categories": v.categories,
-            "raw": v.raw,
-            "unsafe_prob": v.unsafe_prob,
-            "latency_ms": v.latency_ms,
-            "error": v.error,
-            "model": v.model,
-            "prompt_hash": v.prompt_hash,
-        }
-        async with lock:
-            with args.output.open("a", encoding="utf-8") as fh:
-                fh.write(json.dumps(row, ensure_ascii=False) + "\n")
-            counts[v.status] += 1
-            n = sum(counts.values())
-            if n % 25 == 0 or n == len(todo):
-                print(f"  {n}/{len(todo)}  {dict(counts)}", file=sys.stderr)
-
-    await asyncio.gather(*(one(it) for it in todo))
-
-    all_rows = [json.loads(l) for l in args.output.read_text(encoding="utf-8").splitlines() if l.strip()]
-    status = Counter(r["status"] for r in all_rows)
-    cats = Counter(c for r in all_rows for c in r["categories"])
-    print(f"\n{len(all_rows)} verdicts: {dict(status)}", file=sys.stderr)
-    print(f"categories: {dict(cats.most_common())}", file=sys.stderr)
+    counts: Counter = Counter()
+    with args.output.open("a", encoding="utf-8") as out:
+        for session in sessions:
+            user_name = session["user_name"]
+            history = []
+            for raw in session["messages"]:
+                message = SimpleNamespace(
+                    message_id=str(raw["message_id"]),
+                    sender=raw["sender"],
+                    content=raw.get("content") or "",
+                    reply_to=str(raw["reply_to"]) if raw.get("reply_to") else None,
+                )
+                role = "participant" if message.sender == user_name else "agent"
+                skip = message.message_id in done or (args.agents_only and role == "participant")
+                if not skip and message.content.strip():
+                    excerpt = render_excerpt(message, history, user_name)
+                    verdict = await client.classify(policy.text, excerpt)
+                    counts[verdict.status] += 1
+                    out.write(json.dumps({
+                        "session_id": session["session_id"],
+                        "message_id": message.message_id,
+                        "role": role,
+                        "sender": message.sender,
+                        "content": message.content,
+                        "excerpt": excerpt,
+                        "status": verdict.status,
+                        "categories": verdict.categories,
+                        "rationale": verdict.rationale,
+                        "reasoning": verdict.reasoning,
+                        "raw": verdict.raw,
+                        "latency_ms": verdict.latency_ms,
+                        "error": verdict.error,
+                        "model": verdict.model,
+                        "policy_version": policy.version,
+                    }, ensure_ascii=False) + "\n")
+                    out.flush()
+                    print(f"{sum(counts.values())} {dict(counts)}", file=sys.stderr, end="\r")
+                history.append(message)
+    print(f"\ndone: {dict(counts)}", file=sys.stderr)
     return 0
 
 

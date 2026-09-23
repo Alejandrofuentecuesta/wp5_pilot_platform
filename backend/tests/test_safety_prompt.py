@@ -1,191 +1,132 @@
-"""Llama Guard 3 prompt rendering and verdict parsing.
-
-The renderer must produce exactly what the model's own chat template
-produces, otherwise verdicts obtained here are not comparable with the
-model's documented behaviour. The template string below is copied verbatim
-from ``meta-llama/Llama-Guard-3-8B/tokenizer_config.json``.
-"""
+"""Policy loading, conversation excerpt and verdict parsing."""
 from __future__ import annotations
 
-import jinja2
+from types import SimpleNamespace
+
 import pytest
 
-from utils.safety.prompt import (
-    DEFAULT_CATEGORIES,
-    EXPERIMENT_DEFAULT_CATEGORIES,
-    Category,
-    categories_from_config,
-    parse_verdict,
-    render_chat_prompt,
-    render_prompt,
-)
+from utils.safety.prompt import ACTIVE_POLICY, GAP_MARKER, load_policy, parse_verdict, render_excerpt
 
-HF_CHAT_TEMPLATE = (
-    "{% if messages|length % 2 == 0 %}{% set role = 'Agent' %}{% else %}{% set role = 'User' %}{% endif %}"
-    "{{ \" <|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
-    "Task: Check if there is unsafe content in '\" + role + \"' messages in conversations according our safety policy with the below categories.\n\n"
-    "<BEGIN UNSAFE CONTENT CATEGORIES>\n"
-    "S1: Violent Crimes.\nS2: Non-Violent Crimes.\nS3: Sex Crimes.\nS4: Child Exploitation.\n"
-    "S5: Defamation.\nS6: Specialized Advice.\nS7: Privacy.\nS8: Intellectual Property.\n"
-    "S9: Indiscriminate Weapons.\nS10: Hate.\nS11: Self-Harm.\nS12: Sexual Content.\n"
-    "S13: Elections.\nS14: Code Interpreter Abuse.\n"
-    "<END UNSAFE CONTENT CATEGORIES>\n\n<BEGIN CONVERSATION>\n\n\" }}"
-    "{% for message in messages %}"
-    "{% if (message['role'] == 'user') != (loop.index0 % 2 == 0) %}"
-    "{{ raise_exception('Conversation roles must alternate user/assistant/user/assistant/...') }}"
-    "{% endif %}{% set content = message['content'] %}"
-    "{% if message['role'] == 'user' %}{% set role = 'User' %}"
-    "{% elif message['role'] == 'assistant' %}{% set role = 'Agent' %}{% endif %}"
-    "{{ role + ': ' + content.strip() + '\n\n' }}{% endfor %}"
-    "{{ \"<END CONVERSATION>\n\nProvide your safety assessment for ONLY THE LAST \" + role + \" message in the above conversation:\n"
-    " - First line must read 'safe' or 'unsafe'.\n"
-    " - If unsafe, a second line must include a comma-separated list of violated categories."
-    "<|eot_id|><|start_header_id|>assistant<|end_header_id|>\" }}"
-)
+USER = "Paula"
 
 
-def _hf_render(messages):
-    env = jinja2.Environment()
-
-    def raise_exception(msg):
-        raise ValueError(msg)
-
-    env.globals["raise_exception"] = raise_exception
-    return env.from_string(HF_CHAT_TEMPLATE).render(messages=messages)
+def m(sender, content, reply_to=None, mid=None):
+    m.n += 1
+    return SimpleNamespace(message_id=mid or f"m{m.n}", sender=sender, content=content, reply_to=reply_to)
 
 
-class TestRenderMatchesMetaTemplate:
-    def test_two_turn_response_classification(self):
-        conv = [("user", "  Los moros nos invaden  "), ("assistant", "Eso es una mentira, joder.\n")]
-        messages = [{"role": r if r == "user" else "assistant", "content": t} for r, t in conv]
-        assert render_prompt(conv) == _hf_render(messages)
-
-    def test_one_turn_prompt_classification(self):
-        conv = [("user", "Quiero matar a mi vecino")]
-        assert render_prompt(conv) == _hf_render([{"role": "user", "content": conv[0][1]}])
-        assert "ONLY THE LAST User message" in render_prompt(conv)
-
-    def test_two_turn_judges_agent(self):
-        out = render_prompt([("user", "a"), ("assistant", "b")])
-        assert "unsafe content in 'Agent' messages" in out
-        assert "ONLY THE LAST Agent message" in out
-
-    def test_roles_must_alternate(self):
-        with pytest.raises(ValueError):
-            render_prompt([("assistant", "x")])
-        with pytest.raises(ValueError):
-            render_prompt([("user", "x"), ("user", "y")])
-
-    def test_empty_conversation_rejected(self):
-        with pytest.raises(ValueError):
-            render_prompt([])
-
-    def test_default_categories_are_the_fourteen_titles(self):
-        assert [c.code for c in DEFAULT_CATEGORIES] == [f"S{i}" for i in range(1, 15)]
-        assert all(c.definition is None for c in DEFAULT_CATEGORIES)
+m.n = 0
 
 
-class TestCustomCategories:
-    def test_definition_rendered_under_title(self):
-        cats = [Category("S10", "Hate", "Only slurs directed at the participant.")]
-        out = render_prompt([("user", "x")], cats)
-        assert "S10: Hate.\nOnly slurs directed at the participant.\n<END UNSAFE" in out
+def _lines(excerpt):
+    return excerpt.split("\n\n")
 
-    def test_from_config_defaults_when_absent(self):
-        assert categories_from_config(None) == EXPERIMENT_DEFAULT_CATEGORIES
-        assert categories_from_config([]) == EXPERIMENT_DEFAULT_CATEGORIES
-        by_code = {c.code: c for c in EXPERIMENT_DEFAULT_CATEGORIES}
-        assert "S5" not in by_code
-        assert "S13" not in by_code
-        assert by_code["S10"].title == "Explicit Dehumanization"
-        assert "Do not classify political hostility" in by_code["S10"].definition
 
-    def test_disabled_entries_are_omitted(self):
-        cats = categories_from_config([
-            {"code": "S10", "title": "Hate", "enabled": True},
-            {"code": "S13", "title": "Elections", "enabled": False},
-        ])
-        assert [c.code for c in cats] == ["S10"]
-        out = render_prompt([("user", "x")], cats)
-        assert "S13" not in out
+class TestPolicy:
+    def test_active_policy_loads_and_is_versioned(self):
+        p = load_policy()
+        assert p.name == ACTIVE_POLICY
+        assert p.version == f"{ACTIVE_POLICY}@{p.sha256[:12]}"
+        assert "## INSTRUCTIONS" in p.text and "## VIOLATES (1)" in p.text and "## SAFE (0)" in p.text
+        for code in range(1, 15):
+            assert f"S{code} - " in p.text
 
-    def test_full_policy_marks_omitted_codes_disabled(self):
-        from utils.safety.prompt import full_policy
-        rows = {r["code"]: r for r in full_policy([{"code": "S10", "title": "Hate", "definition": "d"}])}
-        assert rows["S10"]["enabled"] is True and rows["S10"]["definition"] == "d"
-        assert rows["S1"]["enabled"] is False
-        defaults = {r["code"]: r for r in full_policy(None)}
-        assert defaults["S5"]["enabled"] is False
-        assert defaults["S13"]["enabled"] is False
-        assert defaults["S10"]["enabled"] is True
-        assert defaults["S10"]["title"] == "Explicit Dehumanization"
-        assert "moro" in defaults["S10"]["definition"]
+    def test_missing_policy_raises(self):
+        with pytest.raises(FileNotFoundError):
+            load_policy("no_such_policy")
 
-    def test_from_config_requires_code_and_title(self):
-        with pytest.raises(ValueError):
-            categories_from_config([{"code": "S1"}])
+
+class TestExcerpt:
+    def test_window_is_target_plus_two_before(self):
+        history = [m(USER, "uno"), m("Carlos", "dos"), m("Ana", "tres"), m(USER, "cuatro")]
+        out = _lines(render_excerpt(m("Carlos", "cinco"), history, USER))
+        assert out[:3] == ["Agent 1: tres", "User: cuatro", "Agent 2: cinco"]
+        assert out[3] == "[Assess the last message above, written by Agent 2. The earlier messages are context only.]"
+
+    def test_agents_numbered_by_appearance_and_same_agent_same_number(self):
+        history = [m("Carlos", "a"), m("Ana", "b")]
+        out = _lines(render_excerpt(m("Carlos", "c"), history, USER))
+        assert out[:3] == ["Agent 1: a", "Agent 2: b", "Agent 1: c"]
+
+    def test_latest_user_message_added_when_outside_window(self):
+        history = [m(USER, "viejo"), m(USER, "voy a por él"), m("Carlos", "x"), m("Ana", "y"), m("Luis", "z")]
+        out = _lines(render_excerpt(m("Marta", "hazlo"), history, USER))
+        assert out[:6] == ["User: voy a por él", GAP_MARKER, "Agent 1: y", "Agent 2: z", "Agent 3: hazlo", out[5]]
+        assert "viejo" not in "".join(out)
+
+    def test_no_gap_marker_when_user_message_is_adjacent(self):
+        history = [m(USER, "u"), m("Carlos", "x"), m("Ana", "y")]
+        out = _lines(render_excerpt(m("Luis", "z"), history, USER))
+        assert out[:4] == ["User: u", "Agent 1: x", "Agent 2: y", "Agent 3: z"]
+
+    def test_quoted_message_added_when_outside_window(self):
+        quoted = m("Carlos", "hay que echarlos a todos", mid="q1")
+        history = [quoted, m("Ana", "otra cosa"), m(USER, "a"), m("Luis", "b"), m("Marta", "c")]
+        out = _lines(render_excerpt(m("Jorge", "exacto", reply_to="q1"), history, USER))
+        # The quoted message and the user's latest message are both outside
+        # the window; each is added, with a gap marker where messages are left out.
+        assert out[:7] == [
+            "Agent 1: hay que echarlos a todos",
+            GAP_MARKER,
+            "User: a",
+            "Agent 2: b",
+            "Agent 3: c",
+            "Agent 4: exacto",
+            out[6],
+        ]
+        assert "otra cosa" not in "".join(out)
+
+    def test_participant_target_gets_no_extra_user_message(self):
+        history = [m(USER, "antes"), m("Carlos", "x"), m("Ana", "y"), m("Luis", "z")]
+        out = _lines(render_excerpt(m(USER, "me quiero morir"), history, USER))
+        assert out[:3] == ["Agent 1: y", "Agent 2: z", "User: me quiero morir"]
+        assert out[3].startswith("[Assess the last message above, written by User.")
+
+    def test_first_message_of_session(self):
+        out = _lines(render_excerpt(m("Carlos", "hola"), [], USER))
+        assert out == ["Agent 1: hola", "[Assess the last message above, written by Agent 1. The earlier messages are context only.]"]
+
+    def test_empty_messages_are_skipped(self):
+        history = [m("Carlos", "a"), m("Ana", "   "), m("Luis", "b")]
+        out = _lines(render_excerpt(m("Marta", "c"), history, USER))
+        assert out[:3] == ["Agent 1: a", "Agent 2: b", "Agent 3: c"]
 
 
 class TestParseVerdict:
-    @pytest.mark.parametrize("raw", ["safe", "safe\n", "  Safe  ", "safe\n\n"])
-    def test_safe(self, raw):
-        assert parse_verdict(raw) == ("safe", [], None)
+    def test_safe(self):
+        assert parse_verdict('{"violation": 0, "categories": [], "rationale": "ok"}') == ("safe", [], "ok")
 
-    def test_unsafe_with_categories(self):
-        assert parse_verdict("unsafe\nS10,S1") == ("unsafe", ["S10", "S1"], None)
-        assert parse_verdict("unsafe\nS11") == ("unsafe", ["S11"], None)
-        assert parse_verdict("unsafe\n s10 , s1 \n") == ("unsafe", ["S10", "S1"], None)
+    def test_unsafe_multiple_categories(self):
+        raw = '{"violation": 1, "categories": ["S1", "S10"], "rationale": "calls for violence"}'
+        assert parse_verdict(raw) == ("unsafe", ["S1", "S10"], "calls for violence")
 
-    @pytest.mark.parametrize(
-        "raw",
-        [None, "", "   ", "unsafe", "unsafe\nhate", "maybe", "safe unsafe", "unsafe\n", "I think it's safe"],
-    )
+    def test_json_surrounded_by_text(self):
+        raw = 'Here is my answer:\n```json\n{"violation": 1, "categories": ["S11"], "rationale": "x"}\n```'
+        assert parse_verdict(raw) == ("unsafe", ["S11"], "x")
+
+    def test_category_codes_are_normalised(self):
+        raw = '{"violation": 1, "categories": ["s10", "S10 - Hate", "S01"], "rationale": "x"}'
+        assert parse_verdict(raw) == ("unsafe", ["S10", "S1"], "x")
+
+    def test_boolean_violation_accepted(self):
+        assert parse_verdict('{"violation": true, "categories": ["S1"]}') == ("unsafe", ["S1"], None)
+
+    def test_unsafe_without_categories_is_still_unsafe(self):
+        assert parse_verdict('{"violation": 1, "categories": [], "rationale": "x"}') == ("unsafe", [], "x")
+
+    @pytest.mark.parametrize("raw", [
+        None,
+        "",
+        "safe",
+        "unsafe\nS10",
+        '{"violation": 2, "categories": []}',
+        '{"violation": "1", "categories": []}',
+        '{"categories": ["S1"]}',
+        '{"violation": 1, "categories": "S1"}',
+        '{"violation": 1, "categories": ["S15"]}',
+        '{"violation": 1, "categories": ["hate"]}',
+        '{"violation": 0, "categories": ["S10"]}',
+        '{"violation": 1, "categories": [',
+    ])
     def test_anything_else_is_unavailable(self, raw):
         assert parse_verdict(raw) == ("unavailable", [], None)
-
-    def test_unsafe_rationale_is_captured_and_label_stripped(self):
-        status, cats, rationale = parse_verdict("unsafe\nS1,S9\nRationale: it endorses armed violence.")
-        assert (status, cats) == ("unsafe", ["S1", "S9"])
-        assert rationale == "it endorses armed violence."
-
-    def test_safe_rationale_is_captured(self):
-        status, cats, rationale = parse_verdict("safe\nRationale: no policy is violated.")
-        assert (status, cats) == ("safe", [])
-        assert rationale == "no policy is violated."
-
-    def test_no_trailing_lines_means_no_rationale(self):
-        assert parse_verdict("unsafe\nS1")[2] is None
-
-
-class TestRenderChatPrompt:
-    def test_system_prompt_contains_categories_and_format_instructions(self):
-        system, _ = render_chat_prompt([("user", "a"), ("assistant", "b")])
-        assert "S1: Violent Crimes." in system
-        assert "S14: Code Interpreter Abuse." in system
-        assert "'safe' or 'unsafe'" in system
-        assert "Rationale:" in system
-
-    def test_judges_agent_on_even_turn_count(self):
-        system, user = render_chat_prompt([("user", "a"), ("assistant", "b")])
-        assert "unsafe content in 'Agent' messages" in system
-        assert "LAST Agent message" in user
-
-    def test_judges_user_on_single_turn(self):
-        system, user = render_chat_prompt([("user", "Quiero matar a mi vecino")])
-        assert "unsafe content in 'User' messages" in system
-        assert "LAST User message" in user
-        assert "Quiero matar a mi vecino" in user
-
-    def test_custom_categories_included(self):
-        cats = [Category("S10", "Hate", "Only slurs directed at the participant.")]
-        system, _ = render_chat_prompt([("user", "x")], cats)
-        assert "S10: Hate.\nOnly slurs directed at the participant." in system
-        assert "S1: Violent Crimes" not in system
-
-    def test_roles_must_alternate(self):
-        with pytest.raises(ValueError):
-            render_chat_prompt([("assistant", "x")])
-
-    def test_empty_conversation_rejected(self):
-        with pytest.raises(ValueError):
-            render_chat_prompt([])

@@ -23,8 +23,9 @@ from agents.STAGE.orchestrator import Orchestrator
 from features import load_features
 from db import connection as db_conn
 from db.repositories import session_repo, message_repo, config_repo, event_repo, safety_repo
+from db.repositories.config_repo import validate_safety_config
 from platforms.safety_screen import SafetyScreen
-from utils.safety import SafetyClient, categories_from_config
+from utils.safety import SafetyClient
 from cache import redis_client
 
 # How long a disconnected participant has to rejoin before their session is
@@ -511,6 +512,7 @@ class SimulationSession:
         self._active_pipeline_ids: set[int] = set()
         self._next_pipeline_id = 0  # cycles 1..N for parallel pipeline tagging
         self._safety_tasks: set[asyncio.Task] = set()
+        self._participant_screen_tasks: set[asyncio.Task] = set()
         self._safety_stop_lock = asyncio.Lock()
         self._safety_intervention_triggered = False
 
@@ -631,22 +633,21 @@ class SimulationSession:
         A misconfigured but enabled screen is a hard error at session start:
         silently running without screening is exactly what must not happen.
         """
-        cfg = experimental_full.get("safety") or {}
+        # Validated here as well as on save: configs saved before the switch
+        # to gpt-oss-safeguard still carry Llama Guard settings, which
+        # validation drops in favour of the safeguard defaults.
+        cfg = validate_safety_config(experimental_full.get("safety"))
         enabled = bool(cfg.get("enabled", False))
         client = None
         if enabled:
             client = SafetyClient.from_config(cfg)
-        seed = self.experimental_config.get("seed") or {}
         return SafetyScreen(
             session_id=self.session_id,
             experiment_id=self.experiment_id,
             logger=self.logger,
             client=client,
-            categories=categories_from_config(cfg.get("categories")),
             enabled=enabled,
             user_name=self.state.user_name,
-            seed_text=seed.get("body") or seed.get("agent_summary") or "",
-            context_mode=cfg.get("context_mode") or "conditional",
         )
 
     def _build_pipeline_orchestrators(self) -> List[Orchestrator]:
@@ -1508,9 +1509,18 @@ class SimulationSession:
 
         # Screen the participant's own words after publication (flag only):
         # a self-harm disclosure or a stated intent to harm someone must reach
-        # the reviewer even though the message itself is never withheld.
+        # the reviewer even though the message itself is never withheld. The
+        # classifier reasons before it answers, so this runs in the
+        # background. It is kept out of _safety_tasks on purpose: ending the
+        # session cancels those, and a disclosure made just before the end
+        # must still be flagged.
+        screen_task = asyncio.create_task(self._screen_participant(message))
+        self._participant_screen_tasks.add(screen_task)
+        screen_task.add_done_callback(self._participant_screen_tasks.discard)
+
+    async def _screen_participant(self, message: Message) -> None:
         try:
-            await self.safety_screen.screen_participant(message)
+            await self.safety_screen.screen_participant(message, self.state)
         except Exception as exc:
             self.logger.log_error("screen_participant", str(exc))
 

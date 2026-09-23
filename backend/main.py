@@ -36,7 +36,7 @@ from utils.session_csv_exporter import render_session_messages_csv
 from db import connection as db_conn
 from cache import redis_client
 from db.repositories import message_repo, session_repo, event_repo, config_repo, token_repo, safety_repo
-from utils.safety.prompt import CATEGORY_NAMES, full_policy
+from utils.safety import CATEGORY_NAMES, load_policy
 from features import AVAILABLE_FEATURES, FEATURES_META
 
 
@@ -2330,7 +2330,7 @@ async def admin_safety_flags_export(
     columns = [
         "flag_id", "session_id", "experiment_id", "treatment_group", "user_name",
         "sender_type", "sender", "content", "context_user_turn", "verdict",
-        "categories", "category_names", "rationale", "model", "unsafe_prob",
+        "categories", "category_names", "rationale", "reasoning", "policy_version", "model",
         "latency_ms", "error", "displayed_at", "created_at", "reviewed_at",
         "reviewed_by", "review_verdict", "review_note", "message_id", "seq",
         "session_status", "started_at", "ended_at", "end_reason",
@@ -2376,7 +2376,6 @@ async def admin_safety_review(
         body.verdict == "no_concern"
         and row["sender_type"] == "agent"
         and row["verdict"] == "unsafe"
-        and bool(row["categories"])
         and row["message_id"] is None
         and row["displayed_at"] is None
     )
@@ -2454,22 +2453,12 @@ async def admin_safety_review(
     }
 
 
-class SafetyPolicyRequest(BaseModel):
-    enabled: Optional[bool] = None
-    categories: List[Dict[str, Any]]
-    context_mode: Literal["none", "conditional", "always"]
-    # Which model classifies messages. None/empty falls back to SAFETY_*
-    # overrides and then to the shared Konstanz Llama Guard configuration.
-    transport: Optional[str] = None
-    model: Optional[str] = None
-
-
 class SafetyClassifierTestRequest(BaseModel):
     enabled: bool = True
     transport: Optional[str] = None
     base_url: Optional[str] = None
     model: Optional[str] = None
-    timeout_s: float = 8.0
+    timeout_s: Optional[float] = None
 
 
 class SafetyLockRequest(BaseModel):
@@ -2484,65 +2473,22 @@ async def _safety_block(pool, experiment_id: str) -> Dict[str, Any]:
 
 
 def _policy_view(experiment_id: str, safety: Dict[str, Any]) -> Dict[str, Any]:
+    policy = load_policy()
     return {
         "experiment_id": experiment_id,
         "enabled": safety.get("enabled", False),
         "locked": safety.get("locked", False),
-        "context_mode": safety.get("context_mode", "conditional"),
-        "categories": full_policy(safety.get("categories")),
         "transport": safety.get("transport"),
         "model": safety.get("model"),
+        "policy": {"name": policy.name, "version": policy.version, "text": policy.text},
     }
 
 
 @app.get("/admin/safety/policy/{experiment_id}")
 async def admin_safety_policy_get(experiment_id: str, x_admin_key: str = Header(None)):
-    """The screening policy of an experiment: every category with its enabled flag and description."""
+    """The screening settings of an experiment and the (fixed) policy text the classifier uses."""
     _require_admin(x_admin_key)
     safety = await _safety_block(_get_pool(), experiment_id)
-    return _policy_view(experiment_id, safety)
-
-
-@app.put("/admin/safety/policy/{experiment_id}")
-async def admin_safety_policy_put(
-    experiment_id: str, body: SafetyPolicyRequest, x_admin_key: str = Header(None)
-):
-    """Update categories and context mode only. Refused while the policy is locked.
-
-    Applies to sessions started afterwards; live sessions keep the policy they
-    were built with.
-    """
-    _require_admin(x_admin_key)
-    pool = _get_pool()
-    safety = await _safety_block(pool, experiment_id)
-    if safety.get("locked"):
-        raise HTTPException(status_code=409, detail="Screening policy is locked")
-    if body.enabled is not None:
-        safety["enabled"] = body.enabled
-    cats = []
-    for c in body.categories:
-        cats.append({
-            "code": str(c.get("code", "")).strip(),
-            "title": str(c.get("title", "")).strip(),
-            "enabled": bool(c.get("enabled", True)),
-            **({"definition": c["definition"].strip()} if c.get("definition") and str(c["definition"]).strip() else {}),
-        })
-    safety["categories"] = cats
-    safety["context_mode"] = body.context_mode
-    # Only touch model routing when the caller explicitly sends it. The
-    # Safety tab edits policy fields, while LLM Pipeline owns these settings.
-    if "transport" in body.model_fields_set:
-        safety["transport"] = (body.transport or "").strip() or None
-    if "model" in body.model_fields_set:
-        safety["model"] = (body.model or "").strip() or None
-    # Keep any per-experiment Llama Guard base URL while Claude is selected.
-    # The Anthropic client ignores it, and preserving it makes switching back
-    # to the self-hosted classifier lossless.
-    try:
-        safety = config_repo.validate_safety_config(safety)
-        await config_repo.update_safety_block(pool, experiment_id, safety)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
     return _policy_view(experiment_id, safety)
 
 
@@ -2551,25 +2497,20 @@ async def _test_safety_classifier_config(safety: Dict[str, Any]) -> Dict[str, An
     if not safety.get("enabled"):
         return {"ok": False, "error": "Screening is disabled for this experiment; nothing to test."}
 
-    from utils.safety import SafetyClient, categories_from_config, render_chat_prompt, render_prompt
+    from utils.safety import SafetyClient, render_excerpt
 
     try:
         client = SafetyClient.from_config(safety)
     except Exception as e:
         return {"ok": False, "error": f"Client creation failed: {e}"}
 
-    categories = categories_from_config(safety.get("categories"))
-    conversation = [
-        ("user", "(no participant message)"),
-        ("assistant", "This is a harmless test message to verify the safety classifier is reachable."),
-    ]
+    policy = load_policy()
+    probe = Message.create(
+        sender="Agent",
+        content="Hola a todos, creo que deberíamos hablar con calma sobre este tema.",
+    )
     try:
-        if client.transport == "anthropic_messages":
-            system, user = render_chat_prompt(conversation, categories)
-            verdict = await client.classify_chat(system, user)
-        else:
-            prompt = render_prompt(conversation, categories)
-            verdict = await client.classify(prompt)
+        verdict = await client.classify(policy.text, render_excerpt(probe, [], user_name="User"))
     except Exception as e:
         return {"ok": False, "error": f"Call failed: {e}"}
 
@@ -2582,6 +2523,7 @@ async def _test_safety_classifier_config(safety: Dict[str, Any]) -> Dict[str, An
         "categories": verdict.categories,
         "rationale": verdict.rationale,
         "raw": verdict.raw,
+        "policy_version": policy.version,
         "latency_ms": verdict.latency_ms,
         "error": verdict.error,
     }

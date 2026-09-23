@@ -23,6 +23,8 @@ async def insert_flag(
     categories: Optional[List[str]] = None,
     raw_output: Optional[str] = None,
     rationale: Optional[str] = None,
+    reasoning: Optional[str] = None,
+    policy_version: Optional[str] = None,
     model: Optional[str] = None,
     prompt_hash: str = "",
     unsafe_prob: Optional[float] = None,
@@ -37,9 +39,9 @@ async def insert_flag(
             INSERT INTO safety_flags(
                 flag_id, session_id, experiment_id, message_id, seq,
                 sender_type, sender, content, context_user_turn,
-                verdict, categories, raw_output, rationale, model, prompt_hash,
-                unsafe_prob, latency_ms, error, displayed_at
-            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)
+                verdict, categories, raw_output, rationale, reasoning, policy_version,
+                model, prompt_hash, unsafe_prob, latency_ms, error, displayed_at
+            ) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
             ON CONFLICT(flag_id) DO NOTHING
             """,
             flag_id,
@@ -55,6 +57,8 @@ async def insert_flag(
             categories or [],
             raw_output,
             rationale,
+            reasoning,
+            policy_version,
             model,
             prompt_hash,
             unsafe_prob,

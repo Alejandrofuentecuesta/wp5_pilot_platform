@@ -1,72 +1,36 @@
-"""Llama Guard 3 prompt rendering and verdict parsing.
+"""Safety policy, conversation excerpt and verdict parsing for gpt-oss-safeguard.
 
-The prompt is rendered here, byte for byte as the model's own chat template
-(``tokenizer_config.json`` of ``meta-llama/Llama-Guard-3-8B``) renders it, and
-sent raw to whichever host serves the model. Rendering locally means both the
-development host (Ollama) and the production host (vLLM) receive identical
-input, so verdicts are comparable across them.
+The classifier receives two texts: the policy (a fixed file in ``policies/``,
+sent as the system message) and an excerpt of the chat ending with the message
+under assessment (sent as the user message). The policy is not configurable
+per experiment; changing it means adding a new file and pointing
+``ACTIVE_POLICY`` at it, so every verdict can be traced to the exact text
+through ``Policy.version``.
 
-Llama Guard judges only the last turn of a strictly alternating User/Agent
-conversation. Callers build that conversation; this module only renders it.
+The excerpt keeps the line between the human and the LLMs and nothing else:
+the participant is ``User``, every agent is ``Agent <n>`` numbered by order of
+appearance in the excerpt. It holds the message under assessment and the two
+messages before it, plus the participant's latest message and the message
+being replied to when either falls outside those three.
 """
 from __future__ import annotations
 
+import hashlib
+import json
+import re
 from dataclasses import dataclass
-from typing import List, Optional, Sequence, Tuple
+from functools import lru_cache
+from pathlib import Path
+from typing import List, Optional, Protocol, Sequence, Tuple
 
+POLICY_DIR = Path(__file__).parent / "policies"
+ACTIVE_POLICY = "safeguard_v1"
 
-@dataclass(frozen=True)
-class Category:
-    code: str
-    title: str
-    definition: Optional[str] = None
+# The message under assessment plus the two before it.
+WINDOW = 3
+GAP_MARKER = "[...]"
 
-    def render(self) -> str:
-        line = f"{self.code}: {self.title}."
-        if self.definition:
-            line += f"\n{self.definition.strip()}"
-        return line
-
-
-# Exactly the titles in the model's default chat template.
-DEFAULT_CATEGORIES: List[Category] = [
-    Category("S1", "Violent Crimes"),
-    Category("S2", "Non-Violent Crimes"),
-    Category("S3", "Sex Crimes"),
-    Category("S4", "Child Exploitation"),
-    Category("S5", "Defamation"),
-    Category("S6", "Specialized Advice"),
-    Category("S7", "Privacy"),
-    Category("S8", "Intellectual Property"),
-    Category("S9", "Indiscriminate Weapons"),
-    Category("S10", "Hate"),
-    Category("S11", "Self-Harm"),
-    Category("S12", "Sexual Content"),
-    Category("S13", "Elections"),
-    Category("S14", "Code Interpreter Abuse"),
-]
-
-# Political hostility, stereotypes and slurs are deliberate stimuli in this
-# experiment. Generic Hate, Defamation and Elections categories would mostly
-# create review work for intended content. Keep S10 only as the narrower
-# boundary already imposed on the Director and Performer: explicit
-# dehumanization. The remaining categories cover harms outside the treatment.
-_EXPLICIT_DEHUMANIZATION = Category(
-    "S10",
-    "Explicit Dehumanization",
-    "Classify as S10 only when the agent explicitly portrays an identity-based group "
-    "as non-human animals, vermin, disease, objects, or inherently less than human. "
-    "Do not classify political hostility, insults, slurs, derogatory labels, stereotypes, "
-    "prejudice, discriminatory generalizations, or terms such as moro, facha, progre, "
-    "zurdo or mena on their own; those are permitted experimental incivility.",
-)
-EXPERIMENT_DEFAULT_CATEGORIES: List[Category] = [
-    _EXPLICIT_DEHUMANIZATION if c.code == "S10" else c
-    for c in DEFAULT_CATEGORIES
-    if c.code not in {"S5", "S13"}
-]
-
-# Human-readable names for the dashboard (the model card's long titles).
+# Human-readable names for the dashboard (the hazard taxonomy's titles).
 CATEGORY_NAMES = {
     "S1": "Violent Crimes",
     "S2": "Non-Violent Crimes",
@@ -84,180 +48,119 @@ CATEGORY_NAMES = {
     "S14": "Code Interpreter Abuse",
 }
 
-_ROLE_LABEL = {"user": "User", "assistant": "Agent"}
 
-# Stands in for the participant turn when the policy excludes context.
-NEUTRAL_USER_TURN = "(no participant message)"
+@dataclass(frozen=True)
+class Policy:
+    name: str
+    text: str
+    sha256: str
 
-
-def full_policy(raw: Optional[Sequence[dict]]) -> List[dict]:
-    """All 14 categories with their enabled flag and description, for the admin panel."""
-    by_code = {str(e.get("code", "")).strip(): e for e in (raw or [])}
-    experiment_defaults = {c.code: c for c in EXPERIMENT_DEFAULT_CATEGORIES}
-    rows = []
-    for c in DEFAULT_CATEGORIES:
-        e = by_code.get(c.code, {})
-        default = experiment_defaults.get(c.code)
-        rows.append({
-            "code": c.code,
-            "title": e.get("title") or (default.title if default else c.title),
-            "name": CATEGORY_NAMES.get(c.code, c.title),
-            "enabled": bool(e.get("enabled", True)) if raw else default is not None,
-            "definition": e.get("definition") or (default.definition if default else "") or "",
-        })
-    if raw:
-        # Codes omitted from a saved policy count as disabled.
-        saved = set(by_code)
-        for r in rows:
-            if r["code"] not in saved:
-                r["enabled"] = False
-    return rows
+    @property
+    def version(self) -> str:
+        return f"{self.name}@{self.sha256[:12]}"
 
 
-def categories_from_config(raw: Optional[Sequence[dict]]) -> List[Category]:
-    """Build the category list from experiment config; default when absent.
+@lru_cache(maxsize=None)
+def load_policy(name: str = ACTIVE_POLICY) -> Policy:
+    """Read a policy file. Raises if it is missing, so a bad name fails early."""
+    text = (POLICY_DIR / f"{name}.md").read_text(encoding="utf-8").strip()
+    return Policy(name=name, text=text, sha256=hashlib.sha256(text.encode("utf-8")).hexdigest())
 
-    Entries with ``enabled: false`` are omitted from the prompt entirely, so
-    the model can neither see nor return that code.
+
+class ChatMessage(Protocol):
+    message_id: str
+    sender: str
+    content: str
+    reply_to: Optional[str]
+
+
+def render_excerpt(target: ChatMessage, history: Sequence[ChatMessage], user_name: str) -> str:
+    """Render the excerpt the classifier judges; ``target`` is its last message.
+
+    ``history`` is the chat before ``target`` in chronological order and must
+    not contain ``target`` itself.
     """
-    if not raw:
-        return list(EXPERIMENT_DEFAULT_CATEGORIES)
-    out: List[Category] = []
-    for entry in raw:
-        if entry.get("enabled", True) is False:
-            continue
-        code = str(entry.get("code", "")).strip()
-        title = str(entry.get("title", "")).strip()
-        if not code or not title:
-            raise ValueError(f"safety category needs code and title: {entry!r}")
-        definition = entry.get("definition")
-        out.append(Category(code, title, definition.strip() if definition else None))
-    return out
+    history = [m for m in history if (m.content or "").strip()]
+    picked = set(range(max(0, len(history) - (WINDOW - 1)), len(history)))
 
+    if target.reply_to:
+        for i, m in enumerate(history):
+            if m.message_id == target.reply_to:
+                picked.add(i)
+                break
 
-def render_prompt(
-    conversation: Sequence[Tuple[str, str]],
-    categories: Optional[Sequence[Category]] = None,
-) -> str:
-    """Render the Llama Guard 3 prompt for ``conversation``.
+    if target.sender != user_name and not any(history[i].sender == user_name for i in picked):
+        for i in range(len(history) - 1, -1, -1):
+            if history[i].sender == user_name:
+                picked.add(i)
+                break
 
-    ``conversation`` is a sequence of ``(role, text)`` with roles ``"user"``
-    and ``"assistant"``, alternating and starting with ``"user"``. The last
-    turn is the one judged.
-    """
-    if not conversation:
-        raise ValueError("conversation must have at least one turn")
-    cats = list(categories) if categories is not None else DEFAULT_CATEGORIES
-    for i, (role, _) in enumerate(conversation):
-        expected = "user" if i % 2 == 0 else "assistant"
-        if role != expected:
-            raise ValueError("Conversation roles must alternate user/assistant/user/assistant/...")
+    rows: List[Tuple[int, ChatMessage]] = [(i, history[i]) for i in sorted(picked)]
+    rows.append((len(history), target))
 
-    judged = "Agent" if len(conversation) % 2 == 0 else "User"
-    category_block = "\n".join(c.render() for c in cats)
+    labels = {user_name: "User"}
+    agents = 0
+    lines: List[str] = []
+    previous = None
+    for i, m in rows:
+        if previous is not None and i > previous + 1:
+            lines.append(GAP_MARKER)
+        previous = i
+        if m.sender not in labels:
+            agents += 1
+            labels[m.sender] = f"Agent {agents}"
+        lines.append(f"{labels[m.sender]}: {m.content.strip()}")
 
-    parts = [
-        # The leading space is part of the model's template.
-        " <|begin_of_text|><|start_header_id|>user<|end_header_id|>\n\n"
-        f"Task: Check if there is unsafe content in '{judged}' messages in conversations "
-        "according our safety policy with the below categories.\n\n"
-        "<BEGIN UNSAFE CONTENT CATEGORIES>\n"
-        f"{category_block}\n"
-        "<END UNSAFE CONTENT CATEGORIES>\n\n"
-        "<BEGIN CONVERSATION>\n\n"
-    ]
-    for role, text in conversation:
-        parts.append(f"{_ROLE_LABEL[role]}: {text.strip()}\n\n")
-    parts.append(
-        "<END CONVERSATION>\n\n"
-        f"Provide your safety assessment for ONLY THE LAST {judged} message in the above conversation:\n"
-        " - First line must read 'safe' or 'unsafe'.\n"
-        " - If unsafe, a second line must include a comma-separated list of violated categories."
-        "<|eot_id|><|start_header_id|>assistant<|end_header_id|>"
+    lines.append(
+        f"[Assess the last message above, written by {labels[target.sender]}. "
+        "The earlier messages are context only.]"
     )
-    return "".join(parts)
+    return "\n\n".join(lines)
 
 
-def _join_rationale(lines: List[str]) -> Optional[str]:
-    """Flatten trailing lines into one rationale string, dropping a 'Rationale:' label."""
-    if not lines:
-        return None
-    text = " ".join(lines).strip()
-    if text.lower().startswith("rationale:"):
-        text = text[len("rationale:"):].strip()
-    return text or None
-
-
-def render_chat_prompt(
-    conversation: Sequence[Tuple[str, str]],
-    categories: Optional[Sequence[Category]] = None,
-) -> Tuple[str, str]:
-    """Render a System/User prompt pair for a chat-completions classifier.
-
-    Equivalent in substance to ``render_prompt`` (same categories, same last
-    turn judged), but phrased for a model served through a chat/messages API
-    (e.g. Claude Haiku) rather than Llama Guard's own raw completion
-    template. Produces the same two-line ``safe``/``unsafe`` verdict
-    ``parse_verdict`` expects, plus a one-sentence rationale on the line
-    after it. Returns ``(system_prompt, user_content)``.
-    """
-    if not conversation:
-        raise ValueError("conversation must have at least one turn")
-    cats = list(categories) if categories is not None else DEFAULT_CATEGORIES
-    for i, (role, _) in enumerate(conversation):
-        expected = "user" if i % 2 == 0 else "assistant"
-        if role != expected:
-            raise ValueError("Conversation roles must alternate user/assistant/user/assistant/...")
-
-    judged = "Agent" if len(conversation) % 2 == 0 else "User"
-    category_block = "\n".join(c.render() for c in cats)
-
-    system_prompt = (
-        "You are a strict safety classifier for a social-science research chatroom simulation. "
-        f"Check if there is unsafe content in '{judged}' messages in conversations according to "
-        "our safety policy with the below categories.\n\n"
-        "<BEGIN UNSAFE CONTENT CATEGORIES>\n"
-        f"{category_block}\n"
-        "<END UNSAFE CONTENT CATEGORIES>\n\n"
-        f"You will be given a conversation and must assess ONLY THE LAST {judged} message in it. "
-        "Respond in exactly this format and nothing else:\n"
-        "Line 1: 'safe' or 'unsafe'\n"
-        "Line 2 (only when unsafe): a comma-separated list of violated category codes, e.g. 'S1,S10'\n"
-        "Final line: 'Rationale: ' followed by one short sentence explaining the verdict.\n"
-        "Do not add any other text, headers, disclaimers, or formatting."
-    )
-    conversation_block = "\n\n".join(f"{_ROLE_LABEL[role]}: {text.strip()}" for role, text in conversation)
-    user_content = (
-        "<BEGIN CONVERSATION>\n\n"
-        f"{conversation_block}\n\n"
-        "<END CONVERSATION>\n\n"
-        f"Provide your safety assessment for ONLY THE LAST {judged} message in the above conversation."
-    )
-    return system_prompt, user_content
+_CODE = re.compile(r"S(\d{1,2})\b")
 
 
 def parse_verdict(raw: Optional[str]) -> Tuple[str, List[str], Optional[str]]:
-    """Parse the model output into ``(status, categories, rationale)``.
+    """Parse the classifier's JSON answer into ``(status, categories, rationale)``.
 
-    Requires the documented shape: first line ``safe`` or ``unsafe``, and for
-    ``unsafe`` a second line of comma-separated category codes. Anything else
-    is ``("unavailable", [], None)`` so the caller withholds. Any further
-    lines are treated as an optional rationale — Llama Guard's template never
-    asks for one, but a chat-completions classifier (see
-    ``render_chat_prompt``) is asked to add one, so this stays lenient about
-    trailing content instead of rejecting it.
+    Expects the first JSON object in the output to be
+    ``{"violation": 0|1, "categories": [...], "rationale": "..."}``.
+    Anything else, including a ``violation`` of 0 that still lists
+    categories, is ``unavailable`` so the caller withholds the message.
     """
-    if not raw or not raw.strip():
+    if not raw or "{" not in raw:
         return "unavailable", [], None
-    lines = [ln.strip() for ln in raw.strip().splitlines() if ln.strip()]
-    head = lines[0].lower()
-    if head == "safe":
-        return "safe", [], _join_rationale(lines[1:])
-    if head == "unsafe":
-        if len(lines) < 2:
+    try:
+        obj, _ = json.JSONDecoder().raw_decode(raw[raw.index("{"):])
+    except ValueError:
+        return "unavailable", [], None
+    if not isinstance(obj, dict):
+        return "unavailable", [], None
+
+    violation = obj.get("violation")
+    if isinstance(violation, bool):
+        violation = int(violation)
+    if violation not in (0, 1):
+        return "unavailable", [], None
+
+    raw_codes = obj.get("categories") or []
+    if not isinstance(raw_codes, list):
+        return "unavailable", [], None
+    codes: List[str] = []
+    for c in raw_codes:
+        match = _CODE.match(str(c).strip().upper())
+        if not match or not 1 <= int(match.group(1)) <= 14:
             return "unavailable", [], None
-        codes = [c.strip().upper() for c in lines[1].split(",") if c.strip()]
-        if not codes or not all(c.startswith("S") and c[1:].isdigit() for c in codes):
+        code = f"S{int(match.group(1))}"
+        if code not in codes:
+            codes.append(code)
+
+    rationale = obj.get("rationale")
+    rationale = (rationale.strip() or None) if isinstance(rationale, str) else None
+
+    if violation == 0:
+        if codes:
             return "unavailable", [], None
-        return "unsafe", codes, _join_rationale(lines[2:])
-    return "unavailable", [], None
+        return "safe", [], rationale
+    return "unsafe", codes, rationale

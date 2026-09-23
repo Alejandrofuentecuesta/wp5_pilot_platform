@@ -15,55 +15,37 @@ import pytest
 
 from models.message import Message
 from platforms.safety_screen import SafetyScreen
-from utils.safety import DEFAULT_CATEGORIES, SafetyVerdict
+from utils.safety import SafetyVerdict, load_policy
 
 
 class FakeClient:
     def __init__(self, verdict: SafetyVerdict, raise_exc: bool = False):
         self.verdict = verdict
         self.raise_exc = raise_exc
+        self.policies = []
         self.prompts = []
 
-    async def classify(self, prompt):
-        self.prompts.append(prompt)
+    async def classify(self, policy, excerpt):
+        self.policies.append(policy)
+        self.prompts.append(excerpt)
         if self.raise_exc:
             raise RuntimeError("boom")
         return self.verdict
-
-
-class FakeChatClient:
-    """Stands in for the anthropic_messages transport (system/user, not one raw prompt)."""
-
-    transport = "anthropic_messages"
-
-    def __init__(self, verdict: SafetyVerdict):
-        self.verdict = verdict
-        self.calls = []
-
-    async def classify_chat(self, system, user):
-        self.calls.append((system, user))
-        return self.verdict
-
-    async def classify(self, prompt):  # pragma: no cover - must never be used in chat mode
-        raise AssertionError("classify() called instead of classify_chat() for anthropic_messages transport")
 
 
 def _state(*messages):
     return SimpleNamespace(messages=list(messages), user_name="Paula")
 
 
-def _screen(client, enabled=True, seed="Artículo de prueba", context_mode="always"):
+def _screen(client, enabled=True):
     logger = MagicMock()
     return SafetyScreen(
         session_id="sess",
         experiment_id="exp",
         logger=logger,
         client=client,
-        categories=list(DEFAULT_CATEGORIES),
         enabled=enabled,
         user_name="Paula",
-        seed_text=seed,
-        context_mode=context_mode,
     ), logger
 
 
@@ -79,7 +61,7 @@ def repo():
 
 class TestAgentPath:
     async def test_safe_publishes_without_flag(self, repo):
-        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="{}")))
         msg = Message.create(sender="Carlos", content="Hola")
         out = await screen.screen_agent(msg, _state())
         assert out.publish is True
@@ -88,7 +70,7 @@ class TestAgentPath:
         repo.insert_flag.assert_not_awaited()
 
     async def test_unsafe_hate_output_is_withheld_and_flagged(self, repo):
-        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10", model="g", prompt_hash="h")
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="{}", model="g", prompt_hash="h")
         screen, logger = _screen(FakeClient(v))
         user = Message.create(sender="Paula", content="Los moros fuera")
         msg = Message.create(sender="Carlos", content="Eso, fuera todos")
@@ -99,7 +81,8 @@ class TestAgentPath:
         assert kw["message_id"] is None
         assert kw["verdict"] == "unsafe"
         assert kw["categories"] == ["S10"]
-        assert kw["context_user_turn"] == "Los moros fuera"
+        assert kw["context_user_turn"].startswith("User: Los moros fuera\n\nAgent 1: Eso, fuera todos\n\n")
+        assert kw["policy_version"] == load_policy().version
         assert kw["displayed_at"] is None
         assert kw["prompt_hash"] == "h"
         assert logger.log_event.call_args[0][0] == "safety_turn_withheld"
@@ -109,7 +92,7 @@ class TestAgentPath:
         v = SafetyVerdict(
             status="unsafe",
             categories=[category],
-            raw=f"unsafe\n{category}",
+            raw="{}",
             model="g",
             prompt_hash="h",
         )
@@ -156,7 +139,7 @@ class TestAgentPath:
         assert out.flag_id is None
         assert logger.log_error.called
 
-    async def test_user_turn_is_latest_participant_message(self, repo):
+    async def test_policy_and_excerpt_are_sent(self, repo):
         client = FakeClient(SafetyVerdict(status="safe"))
         screen, _ = _screen(client)
         state = _state(
@@ -164,55 +147,42 @@ class TestAgentPath:
             Message.create(sender="Carlos", content="agente"),
             Message.create(sender="Paula", content="segundo"),
         )
-        await screen.screen_agent(Message.create(sender="Carlos", content="resp"), state)
-        assert "User: segundo\n\nAgent: resp\n\n" in client.prompts[0]
-        assert "agente" not in client.prompts[0]
+        await screen.screen_agent(Message.create(sender="Ana", content="resp"), state)
+        assert client.policies[0] == load_policy().text
+        assert client.prompts[0].startswith("Agent 1: agente\n\nUser: segundo\n\nAgent 2: resp\n\n")
+        assert "primero" not in client.prompts[0]
 
-    async def test_seed_used_before_first_participant_message(self, repo):
+    async def test_participant_message_outside_window_is_included(self, repo):
         client = FakeClient(SafetyVerdict(status="safe"))
-        screen, _ = _screen(client, seed="Cuerpo del artículo")
-        await screen.screen_agent(Message.create(sender="Carlos", content="resp"), _state())
-        assert "User: Cuerpo del artículo\n\n" in client.prompts[0]
+        screen, _ = _screen(client)
+        state = _state(
+            Message.create(sender="Paula", content="voy a por mi vecino"),
+            Message.create(sender="Carlos", content="uno"),
+            Message.create(sender="Ana", content="dos"),
+            Message.create(sender="Luis", content="tres"),
+        )
+        await screen.screen_agent(Message.create(sender="Marta", content="hazlo"), state)
+        assert client.prompts[0].startswith(
+            "User: voy a por mi vecino\n\n[...]\n\nAgent 1: dos\n\nAgent 2: tres\n\nAgent 3: hazlo\n\n"
+        )
 
-    async def test_context_none_uses_neutral_turn(self, repo):
+    async def test_render_failure_withholds(self, repo):
         client = FakeClient(SafetyVerdict(status="safe"))
-        screen, _ = _screen(client, context_mode="none")
-        state = _state(Message.create(sender="Paula", content="los moros fuera"))
-        await screen.screen_agent(Message.create(sender="Carlos", content="resp"), state)
-        assert "User: (no participant message)\n\nAgent: resp" in client.prompts[0]
-        assert "moros" not in client.prompts[0]
+        screen, _ = _screen(client)
+        out = await screen.screen_agent(Message.create(sender="Carlos", content="x"), SimpleNamespace(messages=[None]))
+        assert out.publish is False
+        assert repo.insert_flag.call_args.kwargs["verdict"] == "unavailable"
+        assert client.prompts == []
 
-    async def test_context_conditional_only_after_unsafe_participant_turn(self, repo):
-        client = FakeClient(SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10"))
-        screen, _ = _screen(client, context_mode="conditional")
-        benign = Message.create(sender="Paula", content="hola a todos")
-        hateful = Message.create(sender="Paula", content="los moros fuera")
-        # Participant turn not yet screened -> neutral context.
-        await screen.screen_agent(Message.create(sender="Carlos", content="r1"), _state(benign))
-        assert "User: (no participant message)" in client.prompts[-1]
-        # Participant turn screened safe -> still neutral.
-        screen._participant_verdicts[benign.message_id] = "safe"
-        await screen.screen_agent(Message.create(sender="Carlos", content="r2"), _state(benign))
-        assert "User: (no participant message)" in client.prompts[-1]
-        # Participant turn screened unsafe -> included.
-        await screen.screen_participant(hateful)
-        assert screen._participant_verdicts[hateful.message_id] == "unsafe"
-        await screen.screen_agent(Message.create(sender="Carlos", content="r3"), _state(benign, hateful))
-        assert "User: los moros fuera\n\nAgent: r3" in client.prompts[-1]
-
-    async def test_context_conditional_includes_explicit_violence_even_after_safe_verdict(self, repo):
-        client = FakeClient(SafetyVerdict(status="safe", raw="safe"))
-        screen, _ = _screen(client, context_mode="conditional")
-        violent = Message.create(sender="Paula", content="Habria que molerlos a palos")
-        screen._participant_verdicts[violent.message_id] = "safe"
-
-        await screen.screen_agent(Message.create(sender="Carlos", content="Exacto"), _state(violent))
-
-        assert "User: Habria que molerlos a palos\n\nAgent: Exacto" in client.prompts[-1]
-
-    def test_unknown_context_mode_rejected(self):
-        with pytest.raises(ValueError):
-            _screen(None, context_mode="sometimes")
+    async def test_rationale_and_reasoning_reach_the_flag(self, repo):
+        v = SafetyVerdict(
+            status="unsafe", categories=["S10"], raw="{}", rationale="dehumanises a group", reasoning="The message ...",
+        )
+        screen, _ = _screen(FakeClient(v))
+        await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
+        kw = repo.insert_flag.call_args.kwargs
+        assert kw["rationale"] == "dehumanises a group"
+        assert kw["reasoning"] == "The message ..."
 
     async def test_disabled_screen_publishes_and_writes_nothing(self, repo):
         screen, _ = _screen(None, enabled=False)
@@ -232,7 +202,7 @@ class TestParticipantPath:
     async def test_safe_records_verdict_only(self, repo):
         screen, _ = _screen(FakeClient(SafetyVerdict(status="safe")))
         msg = Message.create(sender="Paula", content="hola")
-        await screen.screen_participant(msg)
+        await screen.screen_participant(msg, _state(msg))
         repo.set_message_safety_verdict.assert_awaited_once()
         repo.insert_flag.assert_not_awaited()
 
@@ -244,52 +214,51 @@ class TestParticipantPath:
         "Estoy buscando gente para formar patrullas ciudadanas contra los inmigrantes",
     ])
     async def test_explicit_violence_cue_is_escalated_to_s1_when_model_says_safe(self, repo, content):
-        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="{}")))
         msg = Message.create(sender="Paula", content=content)
 
-        verdict = await screen.screen_participant(msg)
+        verdict = await screen.screen_participant(msg, _state(msg))
 
         assert verdict is not None
         assert verdict.status == "unsafe"
         assert "S1" in verdict.categories
-        assert screen._participant_verdicts[msg.message_id] == "unsafe"
         assert repo.insert_flag.call_args.kwargs["categories"] == ["S1"]
 
     async def test_explicit_rejection_is_not_escalated(self, repo):
-        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="{}")))
         msg = Message.create(sender="Paula", content="La violencia nunca es una solución")
 
-        verdict = await screen.screen_participant(msg)
+        verdict = await screen.screen_participant(msg, _state(msg))
 
         assert verdict is not None and verdict.status == "safe"
         repo.insert_flag.assert_not_awaited()
 
     async def test_do_not_hit_them_is_not_escalated(self, repo):
-        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="safe")))
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="safe", raw="{}")))
         msg = Message.create(sender="Paula", content="No hay que pegarles, la violencia no sirve")
 
-        verdict = await screen.screen_participant(msg)
+        verdict = await screen.screen_participant(msg, _state(msg))
 
         assert verdict is not None and verdict.status == "safe"
         repo.insert_flag.assert_not_awaited()
 
     async def test_unsafe_flags_as_participant(self, repo):
-        v = SafetyVerdict(status="unsafe", categories=["S11"], raw="unsafe\nS11")
+        v = SafetyVerdict(status="unsafe", categories=["S11"], raw="{}")
         client = FakeClient(v)
         screen, _ = _screen(client)
         msg = Message.create(sender="Paula", content="me quiero morir")
-        await screen.screen_participant(msg)
+        await screen.screen_participant(msg, _state(msg))
         kw = repo.insert_flag.call_args.kwargs
         assert kw["sender_type"] == "participant"
         assert kw["categories"] == ["S11"]
         assert kw["message_id"] == msg.message_id
         assert kw["displayed_at"] == msg.timestamp
-        assert "ONLY THE LAST User message" in client.prompts[0]
+        assert client.prompts[0].startswith("User: me quiero morir\n\n[Assess the last message above, written by User.")
 
     async def test_unavailable_flags_but_message_stays(self, repo):
         screen, _ = _screen(FakeClient(SafetyVerdict(status="unavailable", error="timeout")))
         msg = Message.create(sender="Paula", content="x")
-        v = await screen.screen_participant(msg)
+        v = await screen.screen_participant(msg, _state(msg))
         assert v.status == "unavailable"
         assert repo.insert_flag.call_args.kwargs["verdict"] == "unavailable"
         # Verdict column stays NULL: no verdict was obtained.
@@ -297,37 +266,9 @@ class TestParticipantPath:
 
     async def test_disabled_does_nothing(self, repo):
         screen, _ = _screen(None, enabled=False)
-        assert await screen.screen_participant(Message.create(sender="Paula", content="x")) is None
+        msg = Message.create(sender="Paula", content="x")
+        assert await screen.screen_participant(msg, _state(msg)) is None
         repo.insert_flag.assert_not_awaited()
-
-
-class TestAnthropicTransport:
-    """SafetyScreen must route to classify_chat(), not classify(), for this transport."""
-
-    async def test_safe_uses_classify_chat_not_classify(self, repo):
-        client = FakeChatClient(SafetyVerdict(status="safe", raw="safe"))
-        screen, _ = _screen(client)
-        msg = Message.create(sender="Carlos", content="Hola")
-        out = await screen.screen_agent(msg, _state())
-        assert out.publish is True
-        assert len(client.calls) == 1
-        system, user = client.calls[0]
-        assert "safety classifier" in system.lower()
-        assert "LAST Agent message" in user
-
-    async def test_unsafe_rationale_reaches_the_flag(self, repo):
-        v = SafetyVerdict(
-            status="unsafe",
-            categories=["S10"],
-            raw="unsafe\nS10\nRationale: targets an identity group.",
-            rationale="targets an identity group.",
-        )
-        screen, _ = _screen(FakeChatClient(v))
-        msg = Message.create(sender="Carlos", content="x")
-        out = await screen.screen_agent(msg, _state())
-        await screen.after_publish(msg, out)
-        kw = repo.insert_flag.call_args.kwargs
-        assert kw["rationale"] == "targets an identity group."
 
 
 class TestPendingReviewBlocking:
@@ -336,7 +277,7 @@ class TestPendingReviewBlocking:
     same agent can publish while the first is still awaiting review."""
 
     async def test_withheld_agent_turn_blocks_the_agent(self, repo):
-        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="{}")
         screen, _ = _screen(FakeClient(v))
         assert screen.pending_review_agents() == set()
 
@@ -358,11 +299,12 @@ class TestPendingReviewBlocking:
 
     async def test_participant_flag_does_not_block_any_agent(self, repo):
         screen, _ = _screen(FakeClient(SafetyVerdict(status="unsafe", categories=["S11"])))
-        await screen.screen_participant(Message.create(sender="Paula", content="x"))
+        msg = Message.create(sender="Paula", content="x")
+        await screen.screen_participant(msg, _state(msg))
         assert screen.pending_review_agents() == set()
 
     async def test_resolve_flag_unblocks_the_agent(self, repo):
-        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="{}")
         screen, _ = _screen(FakeClient(v))
         out = await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
 
@@ -371,7 +313,7 @@ class TestPendingReviewBlocking:
         assert screen.pending_review_agents() == set()
 
     async def test_resolve_flag_without_agent_name_scans_all(self, repo):
-        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="{}")
         screen, _ = _screen(FakeClient(v))
         out = await screen.screen_agent(Message.create(sender="Carlos", content="x"), _state())
 
@@ -381,7 +323,7 @@ class TestPendingReviewBlocking:
 
     async def test_two_pending_flags_for_same_agent_both_must_resolve(self, repo):
         """Defensive: an agent blocked twice stays blocked until every flag clears."""
-        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="unsafe\nS10")
+        v = SafetyVerdict(status="unsafe", categories=["S10"], raw="{}")
         screen, _ = _screen(FakeClient(v))
         first = await screen.screen_agent(Message.create(sender="Carlos", content="a"), _state())
         # Second withheld flag injected directly (the agent should already be

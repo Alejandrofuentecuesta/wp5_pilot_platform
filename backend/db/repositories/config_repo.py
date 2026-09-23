@@ -266,29 +266,33 @@ def validate_experimental_config(
     return out
 
 
-SAFETY_TRANSPORTS = ("openai_completions", "ollama_raw", "anthropic_messages")
-SAFETY_CONTEXT_MODES = ("none", "conditional", "always")
+SAFETY_TRANSPORTS = ("openai_chat", "anthropic_messages")
+# Llama Guard settings saved before the switch to gpt-oss-safeguard. They are
+# dropped on load, so such experiments fall back to the safeguard defaults.
+LEGACY_SAFETY_TRANSPORTS = ("openai_completions", "ollama_raw")
+LEGACY_SAFETY_KEYS = ("categories", "context_mode", "num_ctx")
 
 
 def validate_safety_config(raw: Any) -> Dict[str, Any]:
     """Validate ``experimental.safety``. Returns the cleaned block.
 
-    ``enabled: false`` (the default) needs nothing else. When enabled, the
-    transport must be known; base_url and model may be left empty to fall
-    back to the SAFETY_* environment variables at session start. Categories,
-    when given, are a list of ``{code, title, definition?}``.
+    ``enabled: false`` (the default) needs nothing else. When enabled,
+    transport, base_url and model may be left empty to fall back to the
+    SAFETY_* environment variables and the safeguard defaults at session
+    start. The policy itself is not part of the config; see
+    ``utils.safety.prompt.ACTIVE_POLICY``.
     """
     if raw is None:
-        return {"enabled": False, "context_mode": "conditional", "locked": False}
+        return {"enabled": False, "locked": False}
     if not isinstance(raw, dict):
         raise ValueError("'safety' must be an object")
-    out = dict(raw)
+    out = {k: v for k, v in raw.items() if k not in LEGACY_SAFETY_KEYS}
     out["enabled"] = bool(out.get("enabled", False))
     out["locked"] = bool(out.get("locked", False))
-    mode = out.get("context_mode") or "conditional"
-    if mode not in SAFETY_CONTEXT_MODES:
-        raise ValueError(f"'safety.context_mode' must be one of {', '.join(SAFETY_CONTEXT_MODES)}")
-    out["context_mode"] = mode
+    if out.get("transport") in LEGACY_SAFETY_TRANSPORTS:
+        out.pop("transport")
+        out.pop("model", None)
+        out.pop("timeout_s", None)  # sized for Llama Guard, too short for a reasoning model
     transport = out.get("transport")
     if transport is not None and transport not in SAFETY_TRANSPORTS:
         raise ValueError(
@@ -305,24 +309,6 @@ def validate_safety_config(raw: Any) -> Dict[str, Any]:
             raise ValueError("'safety.timeout_s' must be a number")
         if out["timeout_s"] <= 0:
             raise ValueError("'safety.timeout_s' must be positive")
-    cats = out.get("categories")
-    if cats is not None:
-        if not isinstance(cats, list):
-            raise ValueError("'safety.categories' must be a list")
-        for c in cats:
-            if not isinstance(c, dict) or not str(c.get("code", "")).strip() or not str(c.get("title", "")).strip():
-                raise ValueError("each safety category needs 'code' and 'title'")
-            if c.get("definition") is not None and not isinstance(c["definition"], str):
-                raise ValueError("'definition' of a safety category must be a string")
-            if "enabled" in c and not isinstance(c["enabled"], bool):
-                raise ValueError("'enabled' of a safety category must be a boolean")
-        if out["enabled"] and not any(c.get("enabled", True) for c in cats):
-            raise ValueError("at least one safety category must be enabled")
-    if "num_ctx" in out:
-        try:
-            out["num_ctx"] = int(out["num_ctx"])
-        except (TypeError, ValueError):
-            raise ValueError("'safety.num_ctx' must be an integer")
     return out
 
 

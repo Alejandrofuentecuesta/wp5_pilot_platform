@@ -8,11 +8,10 @@ import {
   listSafetyFlags,
   reviewSafetyFlag,
   safetySessionAction,
-  saveSafetyPolicy,
   testSafetyClassifier,
 } from "../../lib/admin-api"
 import type { SafetyClassifierTestResult } from "../../lib/admin-api"
-import type { SafetyFlag, SafetyPolicy, SafetyPolicyCategory, SafetySummary } from "../../lib/admin-types"
+import type { SafetyFlag, SafetyPolicy, SafetySummary } from "../../lib/admin-types"
 
 /* The Safety tab is the human-review side of the safety screen. Every flag
    the screen opens (an `unsafe` verdict on an agent or participant message,
@@ -22,8 +21,6 @@ import type { SafetyFlag, SafetyPolicy, SafetyPolicyCategory, SafetySummary } fr
 
 const POLL_MS = 5000
 const REVIEWER_KEY = "wp5-safety-reviewer"
-const EXPERIMENT_DEHUMANIZATION_DEFINITION =
-  "Classify as S10 only when the agent explicitly portrays an identity-based group as non-human animals, vermin, disease, objects, or inherently less than human. Do not classify political hostility, insults, slurs, derogatory labels, stereotypes, prejudice, discriminatory generalizations, or terms such as moro, facha, progre, zurdo or mena on their own; those are permitted experimental incivility."
 
 type View = "open" | "reviewed"
 
@@ -235,8 +232,7 @@ function FlagRow({
   const canPublishWithheld =
     !isParticipant &&
     !flag.displayed_at &&
-    flag.verdict === "unsafe" &&
-    flag.categories.length > 0
+    flag.verdict === "unsafe"
 
   return (
     <div
@@ -334,15 +330,22 @@ function FlagRow({
         </p>
       )}
 
-      {flag.context_user_turn && !isParticipant && (
+      {(flag.context_user_turn || flag.reasoning) && (
         <div className="mt-1">
           <button className="text-[11px] text-admin-faint hover:text-admin-text underline" onClick={() => setShowContext((v) => !v)}>
-            {showContext ? "hide" : "show"} the participant turn it was judged against
+            {showContext ? "hide" : "show"} what the classifier saw and its reasoning
           </button>
           {showContext && (
-            <p className="mt-1 text-xs text-admin-muted whitespace-pre-wrap border-l-2 border-admin-border pl-2">
-              {flag.context_user_turn}
-            </p>
+            <div className="mt-1 space-y-1 text-xs text-admin-muted border-l-2 border-admin-border pl-2">
+              {flag.context_user_turn && <p className="whitespace-pre-wrap">{flag.context_user_turn}</p>}
+              {flag.reasoning && (
+                <p className="whitespace-pre-wrap italic">
+                  <span className="not-italic font-medium">Reasoning: </span>
+                  {flag.reasoning}
+                </p>
+              )}
+              {flag.policy_version && <p className="text-[10px] text-admin-faint">policy {flag.policy_version}</p>}
+            </div>
           )}
         </div>
       )}
@@ -392,32 +395,22 @@ function FlagRow({
 
 /* ── Screening policy panel ───────────────────────────────────────────── */
 
-const CONTEXT_MODE_HELP: Record<SafetyPolicy["context_mode"], string> = {
-  none: "Agent messages are judged on their own.",
-  conditional: "The participant's last message is included only when that message was itself flagged (catches agents endorsing a participant's hate or violence).",
-  always: "The participant's last message is always included (highest sensitivity; the model also reacts to what the participant said).",
-}
+/* Which classifier screens messages is chosen in LLM Pipeline. The policy it
+   applies is fixed in the backend (utils/safety/policies) and shown here
+   read-only; replacing it is a code change, never an admin-panel edit. */
+type ClassifierKey = "safeguard" | "claude"
 
-/* Classifier model: which LLM screens messages. "Llama Guard" explicitly
-   selects the Konstanz OpenAI-compatible transport and model. The backend
-   reuses KONSTANZ_BASE_URL / KONSTANZ_API_KEY unless dedicated SAFETY_*
-   overrides are configured. "Claude" routes through the
-   anthropic_messages transport with its own prompt (utils.safety.prompt's
-   render_chat_prompt) that returns the same safe/unsafe + categories verdict
-   plus a one-sentence rationale. */
-type ClassifierKey = "llama_guard" | "claude"
-
-const CLASSIFIER_OPTIONS: { key: ClassifierKey; label: string; defaultModel: string }[] = [
-  { key: "llama_guard", label: "Llama Guard 3 (Konstanz)", defaultModel: "meta-llama/Llama-Guard-3-8B" },
-  { key: "claude", label: "Claude (Anthropic API)", defaultModel: "claude-haiku-4-5-20251001" },
+const CLASSIFIER_OPTIONS: { key: ClassifierKey; label: string }[] = [
+  { key: "safeguard", label: "gpt-oss-safeguard (Konstanz)" },
+  { key: "claude", label: "Claude (Anthropic API)" },
 ]
 
 function classifierKeyFor(transport: string | null): ClassifierKey {
-  return transport === "anthropic_messages" ? "claude" : "llama_guard"
+  return transport === "anthropic_messages" ? "claude" : "safeguard"
 }
 
 /* Human label for whatever is actually saved, e.g. "Claude (claude-haiku-4-5-20251001)"
-   or "Llama Guard 3 (self-hosted)" when no model override is saved. */
+   or "gpt-oss-safeguard (Konstanz)" when no model override is saved. */
 function classifierSummary(transport: string | null, model: string | null): string {
   const key = classifierKeyFor(transport)
   const base = CLASSIFIER_OPTIONS.find((o) => o.key === key)!.label
@@ -426,36 +419,25 @@ function classifierSummary(transport: string | null, model: string | null): stri
 
 function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentId: string }) {
   const [policy, setPolicy] = useState<SafetyPolicy | null>(null)
-  const [draft, setDraft] = useState<SafetyPolicy | null>(null)
   const [open, setOpen] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null)
+  const [showText, setShowText] = useState(false)
+  const [msg, setMsg] = useState<string | null>(null)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<SafetyClassifierTestResult | null>(null)
 
   const load = useCallback(async () => {
     try {
-      const p = await getSafetyPolicy(adminKey, experimentId)
-      setPolicy(p)
-      setDraft((prev) => (prev && prev.experiment_id === p.experiment_id && !saving ? prev : p))
+      setPolicy(await getSafetyPolicy(adminKey, experimentId))
     } catch (e) {
-      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Failed to load policy" })
+      setMsg(e instanceof Error ? e.message : "Failed to load policy")
     }
-  }, [adminKey, experimentId, saving])
+  }, [adminKey, experimentId])
 
   useEffect(() => {
     load()
   }, [load])
 
-  if (!policy || !draft) return null
-
-  const dirty =
-    JSON.stringify(draft.categories) !== JSON.stringify(policy.categories) ||
-    draft.context_mode !== policy.context_mode
-  const enabledCount = draft.categories.filter((c) => c.enabled).length
-
-  const setCat = (code: string, patch: Partial<SafetyPolicyCategory>) =>
-    setDraft({ ...draft, categories: draft.categories.map((c) => (c.code === code ? { ...c, ...patch } : c)) })
+  if (!policy) return msg ? <p className="text-xs text-admin-danger-text">{msg}</p> : null
 
   const runTest = async () => {
     setTesting(true)
@@ -466,32 +448,6 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
       setTestResult({ ok: false, error: e instanceof Error ? e.message : "Test failed" })
     } finally {
       setTesting(false)
-    }
-  }
-
-  const save = async () => {
-    setSaving(true)
-    setMsg(null)
-    try {
-      const p = await saveSafetyPolicy(adminKey, experimentId, {
-        context_mode: draft.context_mode,
-        categories: draft.categories.map((c) => ({
-          code: c.code,
-          title: c.title,
-          enabled: c.enabled,
-          definition: c.definition.trim() || undefined,
-        })),
-      })
-      setPolicy(p)
-      setDraft(p)
-      setMsg({
-        kind: "ok",
-        text: `Saved — classifier: ${classifierSummary(p.transport, p.model)}. Applies to sessions started from now on; live sessions keep the policy they started with.`,
-      })
-    } catch (e) {
-      setMsg({ kind: "err", text: e instanceof Error ? e.message : "Save failed" })
-    } finally {
-      setSaving(false)
     }
   }
 
@@ -506,24 +462,18 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
           <span className="text-xs text-admin-muted">
             {experimentId} ·{" "}
             {policy.enabled
-              ? `${classifierSummary(policy.transport, policy.model)} · ${policy.categories.filter((c) => c.enabled).length}/14 categories · context: ${policy.context_mode}`
+              ? `${classifierSummary(policy.transport, policy.model)} · policy ${policy.policy.version}`
               : "screening disabled"}
           </span>
           {policy.locked && (
             <span className="text-[10px] px-1.5 py-0.5 rounded bg-admin-pastel-amber text-admin-pastel-amber-text">locked</span>
           )}
         </div>
-        <span className="text-xs text-admin-faint">{open ? "hide" : "edit"}</span>
+        <span className="text-xs text-admin-faint">{open ? "hide" : "show"}</span>
       </button>
 
       {open && (
         <div className="px-4 pb-4 space-y-4 border-t border-admin-border pt-3">
-          {policy.locked && (
-            <p className="text-xs text-admin-pastel-amber-text">
-              This policy is locked for fieldwork. Changes require unlocking through the API.
-            </p>
-          )}
-
           <div>
             <label className="block text-xs font-medium text-admin-text mb-1">Classifier model</label>
             <p className="text-xs text-admin-muted">
@@ -534,16 +484,12 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
             <div className="mt-2">
               <button
                 type="button"
-                disabled={testing || !policy.enabled || dirty}
+                disabled={testing || !policy.enabled}
                 onClick={runTest}
-                title={dirty ? "Save your changes first — this tests the saved config, not the draft." : undefined}
                 className="rounded border border-admin-border bg-admin-bg px-3 py-1.5 text-xs font-medium text-admin-text shadow-sm hover:bg-admin-raised disabled:opacity-40"
               >
                 {testing ? "Testing…" : "Test classifier"}
               </button>
-              {dirty && policy.enabled && (
-                <span className="ml-2 text-[11px] text-admin-faint">save first to test the new config</span>
-              )}
               {!policy.enabled && <span className="ml-2 text-[11px] text-admin-faint">enable screening first</span>}
 
               {testResult && (
@@ -580,95 +526,30 @@ function PolicyPanel({ adminKey, experimentId }: { adminKey: string; experimentI
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-admin-text mb-1">Participant context</label>
-            <select
-              value={draft.context_mode}
-              disabled={policy.locked}
-              onChange={(e) => setDraft({ ...draft, context_mode: e.target.value as SafetyPolicy["context_mode"] })}
-              className="border border-admin-border rounded px-2 py-1 text-xs bg-admin-bg text-admin-text"
-            >
-              <option value="none">none</option>
-              <option value="conditional">conditional</option>
-              <option value="always">always</option>
-            </select>
-            <p className="text-[11px] text-admin-faint mt-1">{CONTEXT_MODE_HELP[draft.context_mode]}</p>
-          </div>
-
-          <div>
-            <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
-              <div className="text-xs font-medium text-admin-text">
-                Categories <span className="text-admin-faint font-normal">({enabledCount}/14 enabled; a disabled category is left out of the prompt entirely)</span>
-              </div>
-              <button
-                type="button"
-                disabled={policy.locked}
-                onClick={() =>
-                  setDraft({
-                    ...draft,
-                    categories: draft.categories.map((category) => ({
-                      ...category,
-                      enabled: !["S5", "S13"].includes(category.code),
-                      definition:
-                        category.code === "S10"
-                          ? EXPERIMENT_DEHUMANIZATION_DEFINITION
-                          : category.definition,
-                    })),
-                  })
-                }
-                className="rounded border border-admin-border bg-admin-bg px-2.5 py-1 text-[11px] font-medium text-admin-text hover:bg-admin-raised disabled:opacity-40"
-              >
-                Apply experiment safety profile
-              </button>
-            </div>
-            <p className="mb-2 text-[11px] text-admin-faint">
-              Excludes Defamation and Elections; narrows Hate to explicit dehumanization so intended political slurs and hostility are not flagged.
+            <label className="block text-xs font-medium text-admin-text mb-1">Policy</label>
+            <p className="text-xs text-admin-muted">
+              <span className="font-mono">{policy.policy.version}</span>. Every message is judged with the two messages
+              before it, plus the participant&apos;s latest message and the quoted message when those fall outside that
+              window. The policy is part of the code and cannot be edited here.
             </p>
-            <div className="space-y-1">
-              {draft.categories.map((c) => (
-                <div key={c.code} className={`grid grid-cols-[auto_9rem_1fr] gap-2 items-start py-1 ${c.enabled ? "" : "opacity-60"}`}>
-                  <input
-                    type="checkbox"
-                    className="mt-1"
-                    checked={c.enabled}
-                    disabled={policy.locked}
-                    onChange={(e) => setCat(c.code, { enabled: e.target.checked })}
-                  />
-                  <span className="text-xs text-admin-text pt-0.5">
-                    <span className="font-mono">{c.code}</span> {c.name}
-                  </span>
-                  <textarea
-                    value={c.definition}
-                    disabled={policy.locked || !c.enabled}
-                    onChange={(e) => setCat(c.code, { definition: e.target.value })}
-                    rows={c.definition ? 3 : 1}
-                    placeholder="optional description (blank = the model's default understanding of this category)"
-                    className="w-full border border-admin-border rounded px-2 py-1 text-xs bg-admin-bg text-admin-text resize-y"
-                  />
-                </div>
-              ))}
-            </div>
+            <button
+              className="mt-1 text-[11px] text-admin-faint hover:text-admin-text underline"
+              onClick={() => setShowText((v) => !v)}
+            >
+              {showText ? "hide" : "show"} the policy text
+            </button>
+            {showText && (
+              <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap rounded border border-admin-border bg-admin-bg p-2 text-[11px] text-admin-muted">
+                {policy.policy.text}
+              </pre>
+            )}
           </div>
 
-          {msg && (
-            <p className={`text-xs ${msg.kind === "ok" ? "text-admin-pastel-green-text" : "text-admin-danger-text"}`}>{msg.text}</p>
+          {policy.locked && (
+            <p className="text-xs text-admin-pastel-amber-text">
+              Screening settings for this experiment are locked for fieldwork.
+            </p>
           )}
-
-          <div className="flex items-center gap-2">
-            <button
-              disabled={policy.locked || !dirty || saving || (draft.enabled && enabledCount === 0)}
-              onClick={save}
-              className="px-3 py-1 rounded text-xs font-medium bg-admin-accent text-white disabled:opacity-40"
-            >
-              {saving ? "Saving…" : "Save policy"}
-            </button>
-            <button
-              disabled={!dirty || saving}
-              onClick={() => setDraft(policy)}
-              className="px-3 py-1 rounded text-xs bg-admin-raised text-admin-muted disabled:opacity-40"
-            >
-              Discard changes
-            </button>
-          </div>
         </div>
       )}
     </div>

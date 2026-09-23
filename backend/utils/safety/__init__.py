@@ -1,13 +1,10 @@
-"""Safety screening: Llama Guard prompt rendering, transport client and verdicts."""
+"""Safety screening: gpt-oss-safeguard policy, conversation excerpt, transport client and verdicts."""
 from utils.safety.client import SafetyClient, SafetyVerdict  # noqa: F401
 from utils.safety.prompt import (  # noqa: F401
-    DEFAULT_CATEGORIES,
-    EXPERIMENT_DEFAULT_CATEGORIES,
-    NEUTRAL_USER_TURN,
-    full_policy,
-    Category,
-    categories_from_config,
+    ACTIVE_POLICY,
+    CATEGORY_NAMES,
+    Policy,
+    load_policy,
     parse_verdict,
-    render_chat_prompt,
-    render_prompt,
+    render_excerpt,
 )

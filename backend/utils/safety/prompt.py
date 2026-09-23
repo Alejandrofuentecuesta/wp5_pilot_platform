@@ -24,7 +24,9 @@ from pathlib import Path
 from typing import List, Optional, Protocol, Sequence, Tuple
 
 POLICY_DIR = Path(__file__).parent / "policies"
-ACTIVE_POLICY = "safeguard_v1"
+# The policy in use. policies/ also holds lg3-taxonomy_wp5_v1.md, the same
+# policy with Meta's original S10 (Hate) definition, kept for reference.
+ACTIVE_POLICY = "lg3-taxonomy_s10-revised_wp5_v1"
 
 # The message under assessment plus the two before it.
 WINDOW = 3

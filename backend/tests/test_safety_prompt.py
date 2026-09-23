@@ -31,6 +31,13 @@ class TestPolicy:
         for code in range(1, 15):
             assert f"S{code} - " in p.text
 
+    def test_reference_policy_differs_only_in_s10(self):
+        active, reference = load_policy(), load_policy("lg3-taxonomy_wp5_v1")
+        assert "demean or dehumanize people" in reference.text
+        assert "not S10" not in reference.text
+        strip = lambda t: t[:t.index("S10 - Hate")] + t[t.index("S11 - Suicide"):t.index("## SAFE (0)")]
+        assert strip(active.text).splitlines()[1:] == strip(reference.text).splitlines()[1:]
+
     def test_missing_policy_raises(self):
         with pytest.raises(FileNotFoundError):
             load_policy("no_such_policy")

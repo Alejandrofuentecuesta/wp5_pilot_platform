@@ -776,6 +776,67 @@ class TestExecuteTurnMessage:
         )
 
     @pytest.mark.asyncio
+    async def test_violence_not_re_rejected_once_already_addressed(self):
+        """Regression: once one agent has explicitly rejected a violent
+        proposal, a later agent quote-replying the SAME original message
+        must not be forced to repeat the rejection ritual — every agent
+        reciting 'la violencia nunca es la solución' was the reported bug."""
+        state = _make_state()
+        violent = Message.create(
+            sender="participant",
+            content="Habría que hacer justicia por mano propia",
+        )
+        state.add_message(violent)
+        state.add_message(Message.create(
+            sender="Alice",
+            content="La violencia nunca es una solución, aunque el problema sea real",
+        ))
+        orch, logger = _make_orchestrator(state=state)
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(
+                next_performer="Bob",
+                action_type="reply",
+                target_message_id=violent.message_id,
+            )
+        )
+        orch.performer_llm.generate_response = AsyncMock(
+            return_value="Totalmente de acuerdo con el fondo del problema."
+        )
+        orch.moderator_llm.generate_response = AsyncMock(
+            return_value="Totalmente de acuerdo con el fondo del problema."
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.message.content == "Totalmente de acuerdo con el fondo del problema."
+        assert orch.performer_llm.generate_response.call_count == 1
+        assert not any(
+            call.args[0] == "director_violence_override"
+            for call in logger.log_event.call_args_list
+        )
+
+    def test_violence_already_addressed_helper(self):
+        """Direct coverage of the dedup logic: resolved once rejected, stays
+        resolved through unrelated messages, reopens after a fresh violent
+        statement following the rejection."""
+        state = _make_state()
+        violent = Message.create(sender="participant", content="Habría que hacer justicia por mano propia")
+        state.add_message(violent)
+        orch, _ = _make_orchestrator(state=state)
+
+        assert orch._violence_already_addressed(violent) is False
+
+        state.add_message(Message.create(sender="Alice", content="La violencia nunca es una solución"))
+        assert orch._violence_already_addressed(violent) is True
+
+        state.add_message(Message.create(sender="Bob", content="Totalmente de acuerdo con el diagnóstico"))
+        assert orch._violence_already_addressed(violent) is True
+
+        state.add_message(Message.create(sender="Carlos", content="Pues yo digo de salir con bates a por ellos"))
+        assert orch._violence_already_addressed(violent) is False
+
+    @pytest.mark.asyncio
     async def test_cross_cell_validation_reply_retries_and_rewrites(self):
         state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob")])
         target = Message.create(sender="Bob", content="Esto es una farsa total.")

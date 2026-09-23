@@ -739,6 +739,39 @@ class Orchestrator:
 
         return False
 
+    def _violence_already_addressed(self, source_message: Optional[Message]) -> bool:
+        """True if some later message already rejected the violence in ``source_message``.
+
+        One clear rejection in the room is enough — the point is to stop the
+        proposal spreading unchallenged, not to make every agent who later
+        touches that message recite the same rejection. Only a fresh
+        explicit violent statement occurring *after* the last rejection
+        reopens the obligation.
+
+        Deliberately checks ``contains_explicit_violence_cue`` here, not
+        ``signals_violence_endorsement`` — the latter's short agreement
+        words ("totalmente", "exacto") are common in completely unrelated
+        political disagreement and would wrongly "reopen" the obligation on
+        every ordinary reply that happens to start that way.
+        """
+        if source_message is None:
+            return False
+        try:
+            start = self.state.messages.index(source_message)
+        except ValueError:
+            return False
+        last_rejection_idx: Optional[int] = None
+        last_violence_idx: Optional[int] = None
+        for i, message in enumerate(self.state.messages[start:], start=start):
+            content = message.content or ""
+            if explicitly_rejects_violence(content):
+                last_rejection_idx = i
+            elif contains_explicit_violence_cue(content):
+                last_violence_idx = i
+        if last_rejection_idx is None:
+            return False
+        return last_violence_idx is None or last_violence_idx <= last_rejection_idx
+
     def _pending_participant_target(
         self,
         recent_messages: List[Message],
@@ -2253,6 +2286,7 @@ class Orchestrator:
                 if message
                 and contains_explicit_violence_cue(message.content)
                 and not explicitly_rejects_violence(message.content)
+                and not self._violence_already_addressed(message)
             ),
             None,
         )

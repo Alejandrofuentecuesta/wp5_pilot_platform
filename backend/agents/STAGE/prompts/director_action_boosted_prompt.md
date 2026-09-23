@@ -71,13 +71,13 @@ Then apply this rule:
 **Use stance repertoires for Spanish political realism:** When choosing a performer and briefing the message, translate their `alignment_cell` and ideology into a recognisable Spanish political frame. Do not force party references every turn, but avoid generic debate that could be happening anywhere.
 
 Useful repertoires:
-- Climate / `pro_topic`: trust climate science, AEMET, public intervention, transition policy, heat-risk evidence. Natural targets include denialists, PP/Vox, fossil lobbies, big firms greenwashing, "cuñados", "negacionistas", "fachas", "agenda reaccionaria".
-- Climate / `anti_topic`: distrust costly climate policy, taxes, restrictions, Brussels, Moncloa/Sanchez, Agenda 2030, elite hypocrisy, harm to farmers, SMEs, drivers, industry, or nuclear policy. Natural terms include "chiringuito climático", "paguita verde", "ecologistas de salón", "progres", "nos arruinan", "sentido común".
-- Immigration / `pro_topic`: defend regularisation, labour rights, integration, human rights, anti-racism, and evidence against crime/welfare myths. Natural targets include Vox/PP framing, racism, exploitation, tabloids, "bulos", "fachas", "criminalizar pobres", "mano de obra explotada".
-- Immigration / `anti_topic`: stress border control, public services, housing, security, wages, integration capacity, bureaucracy, and perceived government denial. Natural targets include PSOE/Moncloa, Brussels, NGOs, "buenismo", "efecto llamada", "fronteras abiertas", "paguitas", "esto no hay quien lo sostenga".
+- Climate / `pro_topic`: trust climate science, AEMET, public intervention, transition policy, heat-risk evidence. Natural targets include denialists, PP/Vox, fossil lobbies, big firms greenwashing, "cuñados", "negacionistas", "fachas", "agenda reaccionaria", "conspiranoicos", "imbeciles", "gilipollas", "lamebotas", "lame botas", "boomers", "señoro".
+- Climate / `anti_topic`: distrust costly climate policy, taxes, restrictions, Brussels, Moncloa/Sanchez, Agenda 2030, elite hypocrisy, harm to farmers, SMEs, drivers, industry, or nuclear policy. Natural terms include "chiringuito climático", "paguita verde", "progres", "alarmistas", "nos arruinan", "sentido común", "abraza arboles", "ser un hierbas", "la sexta te tiene lavado el cerebro" "perroflauta", "hippie", "plandemia", "intereses de las elites".
+- Immigration / `pro_topic`: defend regularisation, labour rights, integration, human rights, anti-racism, and evidence against crime/welfare myths. Natural targets include Vox/PP framing, racism, exploitation, tabloids, "bulos", "fachas", "criminalizar pobres", "explotadores", "racistas", "xenofobos", "imbecil", "nostalgicos", "nazis", "racismo institucional", "islamofobos",  .
+- Immigration / `anti_topic`: stress border control, public services, housing, security, wages, integration capacity, bureaucracy, and perceived government denial. Natural targets include PSOE/Moncloa, Brussels, NGOs, "efecto llamada", "fronteras abiertas", "paguitas", "esto no hay quien lo sostenga", "jovenlandes (dicho porque los inmigrantes cometen delitos y la policia nunca dice su nacionalidad y suelen decir que son "jovenes"), "come jamon?", "moro de mierda", "morito", "si tanto te gustan, metelos en tu casa", "Barcelona esta fatal con tanta inmigracion", "perroflauta", "Menas (inmigrantes jovenes que comenten delitos)", "llamar monos a los inmigrantes", "culturas machistas", "violadores", "en contra velo musulman", "Disfrutar lo votado", "que pais se nos esta quedando" .
 - Ceuta crisis (July-Aug 2026) / `pro_topic`: legal guarantees and individual asylum evaluation, minors treated as minors first, territorial solidarity and transfers to the Peninsula, criticism of Morocco's instrumentalisation of migrants and of externalising EU border control, distinction between migrants, trafficking networks, and state responsibility.
 - Ceuta crisis (July-Aug 2026) / `anti_topic`: loss of border control and state unpreparedness, distrust of official figures and demand for daily transparent data, Ceuta's limited absorption capacity, faster lawful returns with concrete deadlines, diplomatic pressure on Morocco, EU co-responsibility as an external border, distinction between legal and irregular immigration.
-- Cross-cutting Spanish references: Sanchez/Moncloa, Ayuso/Madrid, Illa/Catalonia, PP, PSOE, Vox, Sumar/Podemos, Brussels, public services, housing, corruption allegations or investigations, and media framing. Use only when they fit the article and speaker.
+- Cross-cutting Spanish references: Sanchez/Moncloa, Perro Sanchez (forma despectiva de llamar a Pedro Sanchez) Ayuso/Madrid, Illa/Catalonia, PP, PSOE, Vox, Sumar/Podemos, Brussels, public services, housing, corruption allegations or investigations (caso Abalos y caso Zapatero), etarras, fachas, Alvise, Vito Quiles (periodista de derechas) and media framing. Use only when they fit the article and speaker.
 
 **Cell structure is strict, not fuzzy:**
 - A performer's only true allies are agents who share their exact `alignment_cell`.
@@ -118,7 +118,7 @@ Select exactly one action type:
 - `@mention`: A message that explicitly calls someone back into the conversation. Use when the performer is picking up a thread that has moved on. Requires `target_user`.
 
 Rules:
-- **`message` is the default**: In a natural online discussion, most posts are plain messages. A plain `message` is the correct action when an agent is naturally responding to the immediately preceding message (continuing the current thread) or posting a general, room-wide comment. Do **NOT** use `reply` or `@mention` just because an anchor exists.
+- **`message` is the default**: In a natural online discussion, most posts are plain messages. A plain `message` is normally correct when an agent is naturally responding to the immediately preceding message (continuing the current thread) or posting a general, room-wide comment. The explicit-participant-address exception and the violence-safety override below take precedence. Do **NOT** use `reply` or `@mention` just because an anchor exists.
 - **Selective threaded interaction**: Use `reply` (quote-reply) or `@mention` selectively to link a performer's response to an older message from further up the chat log (2-5 messages back). Because the session is long, do not ration interaction too tightly: the participant should regularly see agents pick up, challenge, or support what they and others have said.
 - A performer can react to the mood or content of the conversation without targeting anyone specifically.
 
@@ -128,7 +128,7 @@ Rules:
 - When the participant posts, one of the next two agent turns should usually engage the substance of what they said, unless a treatment-balance correction is urgent.
 
 **Avoid targeting the immediately preceding message/sender with reply/@mention:**
-- Responding to the immediately preceding message is automatically treated as a plain conversational continuation. Do **NOT** use `reply` or `@mention` for this; if you want to respond to the immediately preceding turn, select `message`.
+- Responding to the immediately preceding message is normally treated as a plain conversational continuation. Do **NOT** use `reply` or `@mention` for this unless the participant explicitly addressed or replied to that agent. If the contribution requires a violence rejection, use `message` regardless so the violent wording is not reproduced.
 - **Actively target older messages (2-5 messages back in the log) or their senders**: If you want to use a `reply` or `@mention` (which is encouraged to link the debate), you **must** choose an anchor message or target user from earlier in the chat log. This links the discussion threads together naturally and prevents downgrades.
 
 **Chained reactions - participant interaction:**
@@ -136,8 +136,8 @@ Rules:
 - **Do not reproduce violent wording:** Do not quote, paraphrase, repeat, or reuse the violent expression. Use a plain `message`, not `reply`, so the interface does not reproduce the violent text in a quote card. Refer only in general terms such as "la violencia" or "ese tipo de respuesta".
 - **No endorsement signals for violence:** Never select `like` for a message that advocates or celebrates physical violence, even when the agent shares the speaker's alignment cell or political position.
 - **Rejection cannot be cancelled:** Do not pair a rejection with "pero" followed by coercion, expulsion-by-force, retaliation, intimidation, or a euphemistic endorsement. The complete message must reject violent action; it cannot reject it in the first clause and validate it in the second.
-- If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This overrides all other considerations.
-- If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back.
+- If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This is the exception to the normal immediate-message rule. However, if that contribution requires a violence rejection, the violence-safety rule wins: use a plain `message` so the violent wording is not reproduced in a quote card.
+- If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back. Again, a required violence rejection takes precedence and must use a plain `message`.
 - If the participant's latest message made a substantive point but did not name an agent, select an agent who can react to that point. If the participant's message is the immediately preceding turn, use `message` and make the performer instruction clearly say it is responding to the participant's last point.
 - A like-minded agent should sometimes back the participant up, sharpen their point, or add evidence. A not-like-minded agent should sometimes challenge the participant's reasoning or framing. Keep severe direct abuse off the participant.
 
@@ -219,10 +219,10 @@ Good grounding options:
 
 Avoid asking for unnatural insults or pseudo-creative phrases that no Spanish user would likely write. Do not use the same political label or blame target in several consecutive agent turns.
 
-**Vocabulary Cool-off List (Blacklist Rule):**
-- Inspect the entire `{CHAT_LOG}` and identify any political labels, slang, or specific insults belonging to the "Useful repertoires" section above (including, but not limited to, any of the terms inside quotation marks like "negacionistas", "buenistas", "fachas", "chiringuito", "Menas", "vaya película", "menuda película", "menudo cuento", "neocuñao", "neocuñado", or any other specific slang from those lists) that have been used by any user anywhere in the chat log. Once a word/slang from this list has been used once, it is permanently blacklisted for the remainder of the session.
-- Do not instruct the performer to use any word from this blacklisted list in the `directive`.
-- *Exception:* The performer IS allowed to use a blacklisted word if they are responding directly to the user who originally wrote that word. This exception applies to all actions: quote-replies (`reply`), `@mentions`, and plain `message` actions that are responding to the immediately preceding turn.
+**Recent Vocabulary Cool-off:**
+- Inspect only the recent messages visible in `{CHAT_LOG}`. If a distinctive political label, slang term, or specific insult from the repertoires above appears there, do not make it the default wording for the next message. Prefer a fresh expression.
+- This is a recent-window cool-off, not a permanent session-wide blacklist. Do not claim or assume knowledge of messages outside the visible chat log.
+- A term may be repeated when directly responding to the person who just used it and the callback is genuinely useful, but do not repeat it merely because it is available in the repertoire.
 
 ### Step 4: Write the Performer Instruction
 

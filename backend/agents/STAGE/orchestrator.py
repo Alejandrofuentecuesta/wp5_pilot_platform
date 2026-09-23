@@ -2220,7 +2220,11 @@ class Orchestrator:
         # Downgrade replies/mentions that target the immediately preceding message/sender to plain messages
         if self.state.messages:
             last_msg = self.state.messages[-1]
-            if action_type == "reply" and target_message_id == last_msg.message_id:
+            if (
+                action_type == "reply"
+                and target_message_id == last_msg.message_id
+                and not addressed_agent
+            ):
                 self.logger.log_event("action_normalization", {
                     "normalization_type": "downgrade_immediate_reply",
                     "agent_name": agent_name,
@@ -2547,6 +2551,15 @@ class Orchestrator:
             if incivility_instructions:
                 performer_user_prompt = performer_user_prompt.rstrip() + "\n\n" + incivility_instructions
 
+        required_performer_user_prompt = performer_user_prompt
+        retry_corrections: List[str] = []
+
+        def prompt_with_retry_correction(correction: str) -> str:
+            """Preserve treatment requirements while accumulating retry feedback."""
+            if correction not in retry_corrections:
+                retry_corrections.append(correction)
+            return required_performer_user_prompt.rstrip() + "\n\n" + "\n\n".join(retry_corrections)
+
 
         content = None
         classification = {}
@@ -2713,8 +2726,7 @@ class Orchestrator:
                     f"Generated message for '{agent_name}' did not clearly reject recent violence; retrying",
                     context={"action_type": action_type},
                 )
-                performer_user_prompt = (
-                    f"{base_performer_user_prompt}\n\n"
+                performer_user_prompt = prompt_with_retry_correction(
                     "Important safety correction:\n"
                     "The latest violent suggestion must be rejected clearly and explicitly. "
                     "State naturally in Spanish that violence is never an acceptable solution. "
@@ -2737,8 +2749,7 @@ class Orchestrator:
                     f"Generated message for '{agent_name}' validated '{target_agent_for_validation}' across alignment cells; retrying",
                     context={"action_type": action_type},
                 )
-                performer_user_prompt = (
-                    f"{base_performer_user_prompt}\n\n"
+                performer_user_prompt = prompt_with_retry_correction(
                     "Important correction:\n"
                     "Your last draft sounded validating toward an agent from a different alignment cell.\n"
                     "Rewrite it so you stay clearly inside your own cell. You may attack the same opponent or "
@@ -2765,8 +2776,7 @@ class Orchestrator:
                     f"Generated message for '{agent_name}' attacked same-cell participant '{self.state.user_name}'; retrying",
                     context={"action_type": action_type},
                 )
-                performer_user_prompt = (
-                    f"{base_performer_user_prompt}\n\n"
+                performer_user_prompt = prompt_with_retry_correction(
                     "Important correction:\n"
                     "Your last draft turned against the participant even though your exact alignment cell matches theirs.\n"
                     "Rewrite it so you support, defend, or sharpen the participant's case. Do not scold them, call them names, "

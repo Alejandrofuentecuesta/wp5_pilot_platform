@@ -618,7 +618,10 @@ class TestExecuteTurnMessage:
             sender="participant",
             content="Habría que molerlos a palos",
         ))
-        orch, logger = _make_orchestrator(state=state)
+        orch, logger = _make_orchestrator(
+            state=state,
+            agent_traits={"Alice": {"incivility": "uncivil"}},
+        )
         orch.director_llm.generate_response = AsyncMock(
             return_value=_action_json(next_performer="Alice", action_type="message")
         )
@@ -632,6 +635,9 @@ class TestExecuteTurnMessage:
         assert result is not None and result.message is not None
         assert result.message.content.startswith("La violencia nunca")
         assert orch.performer_llm.generate_response.call_count == 2
+        retry_prompt = orch.performer_llm.generate_response.call_args_list[1].args[0]
+        assert "## Incivility Requirements:" in retry_prompt
+        assert "Important safety correction:" in retry_prompt
         logger.log_error.assert_any_call(
             "performer_violence_rejection_retry",
             "Generated message for 'Alice' did not clearly reject recent violence; retrying",
@@ -845,7 +851,10 @@ class TestExecuteTurnMessage:
         orch, logger = _make_orchestrator(
             state=state,
             agent_traits={
-                "Alice": {"alignment_cell": "anti_policy_pro_topic"},
+                "Alice": {
+                    "alignment_cell": "anti_policy_pro_topic",
+                    "incivility": "uncivil",
+                },
                 "Bob": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
@@ -877,6 +886,9 @@ class TestExecuteTurnMessage:
         assert result.message is not None
         assert result.message.content == "No, eso no arregla nada y lo planteas desde otro marco."
         assert orch.performer_llm.generate_response.call_count == 2
+        retry_prompt = orch.performer_llm.generate_response.call_args_list[1].args[0]
+        assert "## Incivility Requirements:" in retry_prompt
+        assert "Your last draft sounded validating" in retry_prompt
         logger.log_error.assert_any_call(
             "performer_cross_cell_validation_retry",
             "Generated message for 'Alice' validated 'Bob' across alignment cells; retrying",
@@ -898,7 +910,10 @@ class TestExecuteTurnMessage:
         orch, logger = _make_orchestrator(
             state=state,
             agent_traits={
-                "Alice": {"alignment_cell": "anti_policy_pro_topic"},
+                "Alice": {
+                    "alignment_cell": "anti_policy_pro_topic",
+                    "incivility": "uncivil",
+                },
                 "Bob": {"alignment_cell": "anti_policy_anti_topic"},
             },
         )
@@ -933,6 +948,9 @@ class TestExecuteTurnMessage:
             "Lo de fondo que dices es verdad: esto deja demasiada mano al empresario y no protege bien a la gente migrante."
         )
         assert orch.performer_llm.generate_response.call_count == 2
+        retry_prompt = orch.performer_llm.generate_response.call_args_list[1].args[0]
+        assert "## Incivility Requirements:" in retry_prompt
+        assert "Your last draft turned against the participant" in retry_prompt
         logger.log_error.assert_any_call(
             "performer_like_minded_participant_attack_retry",
             "Generated message for 'Alice' attacked same-cell participant 'participant'; retrying",
@@ -1131,9 +1149,50 @@ class TestExecuteTurnReply:
 
         assert result is not None
         assert result.agent_name == "Alice"
-        # The immediate reply is normalized to a plain conversational
-        # continuation, but the responding identity must remain Alice.
+        assert result.action_type == "reply"
+        assert result.target_message_id == participant_reply.message_id
+        assert result.message.reply_to == participant_reply.message_id
+
+    @pytest.mark.asyncio
+    async def test_violence_overrides_direct_participant_reply_metadata(self):
+        state = _make_state(
+            simulation_config={"participant_target_reply_probability": 1.0},
+        )
+        agent_message = Message.create(sender="Alice", content="Mi opinión")
+        state.add_message(agent_message)
+        participant_reply = Message.create(
+            sender="participant",
+            content="Entonces habría que molerlos a palos",
+            reply_to=agent_message.message_id,
+            quoted_text=agent_message.content,
+        )
+        state.add_message(participant_reply)
+        orch, _ = _make_orchestrator(state=state)
+        orch._director_evaluate = AsyncMock()
+        orch._director_action = AsyncMock(return_value={
+            "next_performer": "Bob",
+            "action_type": "message",
+            "priority": "test",
+            "performer_rationale": "test",
+            "action_rationale": "test",
+            "violence_requires_rejection": True,
+            "performer_instruction": {
+                "objective": "Engage",
+                "motivation": "Respond",
+                "directive": "Be direct",
+            },
+        })
+        orch.performer_llm.generate_response = AsyncMock(
+            return_value="La violencia nunca es una solución.",
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.agent_name == "Alice"
         assert result.action_type == "message"
+        assert result.target_message_id is None
+        assert result.message.reply_to is None
 
     @pytest.mark.asyncio
     async def test_addressed_agent_excluded_from_allowed_performers_is_not_forced(self):

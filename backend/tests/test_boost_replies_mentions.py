@@ -33,6 +33,16 @@ def _make_logger():
     return logger
 
 
+def test_boosted_template_reuses_default_political_repertoires():
+    def repertoire_section(template):
+        return template.split("Useful repertoires:", 1)[1].split(
+            "**Cell structure is strict, not fuzzy:**",
+            1,
+        )[0]
+
+    assert repertoire_section(_BOOSTED_ACTION_TEMPLATE) == repertoire_section(_ACTION_TEMPLATE)
+
+
 def _make_orchestrator(boost_replies_mentions=False, state=None):
     if state is None:
         state = _make_state()

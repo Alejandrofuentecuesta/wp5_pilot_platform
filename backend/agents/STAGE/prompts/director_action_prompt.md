@@ -119,7 +119,7 @@ Select exactly one action type:
 
 Rules:
 - `message` is the default. Only use `reply` or `@mention` when the quoting or calling-out adds something — tension, precision, drama. Do not use them just because an anchor exists.
-- If the performer is responding to the immediately preceding message, select `message`, not `reply` or `@mention`. A direct continuation of the latest turn is already clear in the chat and does not need quote metadata.
+- If the performer is responding to the immediately preceding message, normally select `message`, not `reply` or `@mention`. The explicit-participant-address exception and the violence-safety override below take precedence over this normal rule.
 - Use `reply` mainly for older messages from further up the chat log, especially when the target is 2-5 messages back and quoting it helps the reader follow the thread.
 - A performer can react to the mood or content of the conversation without targeting anyone specifically. That is normal chat behavior.
 - Room-wide openers are fine and realistic. People post standalone opinions without replying to anyone all the time.
@@ -135,8 +135,8 @@ Rules:
 - **Do not reproduce violent wording:** Do not quote, paraphrase, repeat, or reuse the violent expression. Use a plain `message`, not `reply`, so the interface does not reproduce the violent text in a quote card. Refer only in general terms such as "la violencia" or "ese tipo de respuesta".
 - **No endorsement signals for violence:** Never select `like` for a message that advocates or celebrates physical violence, even when the agent shares the speaker's alignment cell or political position.
 - **Rejection cannot be cancelled:** Do not pair a rejection with "pero" followed by coercion, expulsion-by-force, retaliation, intimidation, or a euphemistic endorsement. The complete message must reject violent action; it cannot reject it in the first clause and validate it in the second.
-- If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This overrides all other considerations.
-- If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back.
+- If the human participant's most recent message @mentioned or addressed a specific agent by name, and no agent has replied yet, that agent MUST reply (use `reply` with the participant's `message_id`). This is the exception to the normal immediate-message rule. However, if that contribution requires a violence rejection, the violence-safety rule wins: use a plain `message` so the violent wording is not reproduced in a quote card.
+- If the participant replied to an agent's message (i.e. `reply_to` points at an agent message), that same agent should be the next performer and reply back. Again, a required violence rejection takes precedence and must use a plain `message`.
 - If the participant's latest message made a substantive point but did not name an agent, select an agent who can react to that point. If the participant's message is the immediately preceding turn, use `message` and make the performer instruction clearly say it is responding to the participant's last point.
 - A like-minded agent should sometimes back the participant up, sharpen their point, or add evidence. A not-like-minded agent should sometimes challenge the participant's reasoning or framing. Keep severe direct abuse off the participant.
 
@@ -222,10 +222,10 @@ Good grounding options:
 
 Avoid asking for unnatural insults or pseudo-creative phrases that no Spanish user would likely write. Do not use the same political label or blame target in several consecutive agent turns.
 
-**Vocabulary Cool-off List (Blacklist Rule):**
-- Inspect the entire `{CHAT_LOG}` and identify any political labels, slang, or specific insults belonging to the "Useful repertoires" section above (including, but not limited to, any of the terms inside quotation marks like "negacionistas", "buenistas", "fachas", "chiringuito", "Menas", "vaya película", "menuda película", "menudo cuento", "neocuñao", "neocuñado", or any other specific slang from those lists) that have been used by any user anywhere in the chat log. Once a word/slang from this list has been used once, it is permanently blacklisted for the remainder of the session.
-- Do not instruct the performer to use any word from this blacklisted list in the `directive`.
-- *Exception:* The performer IS allowed to use a blacklisted word if they are responding directly to the user who originally wrote that word. This exception applies to all actions: quote-replies (`reply`), `@mentions`, and plain `message` actions that are responding to the immediately preceding turn.
+**Recent Vocabulary Cool-off:**
+- Inspect only the recent messages visible in `{CHAT_LOG}`. If a distinctive political label, slang term, or specific insult from the repertoires above appears there, do not make it the default wording for the next message. Prefer a fresh expression.
+- This is a recent-window cool-off, not a permanent session-wide blacklist. Do not claim or assume knowledge of messages outside the visible chat log.
+- A term may be repeated when directly responding to the person who just used it and the callback is genuinely useful, but do not repeat it merely because it is available in the repertoire.
 
 ### Step 4: Write the Performer Instruction
 

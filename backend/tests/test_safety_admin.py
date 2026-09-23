@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 import main
 from db.repositories.config_repo import validate_safety_config
+from utils.safety import load_policy
 
 KEY = "correct-passphrase"
 HDR = {"X-Admin-Key": KEY}
@@ -289,9 +290,7 @@ class TestSessionActions:
 class TestPolicyEndpoints:
     def _cfg(self, locked=False):
         return {"simulation": {}, "experimental": {"safety": {
-            "enabled": True, "locked": locked, "context_mode": "always",
-            "categories": [{"code": "S10", "title": "Hate", "enabled": True},
-                           {"code": "S13", "title": "Elections", "enabled": False}]}}}
+            "enabled": True, "locked": locked}}}
 
     def test_draft_classifier_config_can_be_tested_without_saving(self, client):
         result = {"ok": True, "transport": "anthropic_messages", "model": "claude-haiku"}
@@ -309,82 +308,20 @@ class TestPolicyEndpoints:
         assert safety["model"] == "claude-haiku"
         assert safety["timeout_s"] == 10
 
-    def test_get_expands_all_categories(self, client):
+    def test_get_shows_settings_and_fixed_policy(self, client):
         with patch.object(main, "_get_pool", return_value=MagicMock()), \
              patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg())):
             r = client.get("/admin/safety/policy/e1", headers=HDR)
         assert r.status_code == 200
         body = r.json()
-        rows = {c["code"]: c for c in body["categories"]}
-        assert len(rows) == 14
-        assert rows["S10"]["enabled"] is True and rows["S13"]["enabled"] is False
-        assert rows["S1"]["enabled"] is False  # omitted from a saved policy = off
-        assert body["context_mode"] == "always" and body["locked"] is False
+        assert body["enabled"] is True and body["locked"] is False
+        assert "categories" not in body and "context_mode" not in body
+        policy = load_policy()
+        assert body["policy"] == {"name": policy.name, "version": policy.version, "text": policy.text}
 
-    def test_put_updates_block_only(self, client):
-        with patch.object(main, "_get_pool", return_value=MagicMock()), \
-             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg())), \
-             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
-            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
-                "context_mode": "none",
-                "categories": [{"code": "S10", "title": "Hate", "enabled": True, "definition": " d "},
-                               {"code": "S1", "title": "Violent Crimes", "enabled": False}]})
-        assert r.status_code == 200, r.text
-        saved = upd.call_args[0][2]
-        assert saved["context_mode"] == "none" and saved["enabled"] is True
-        assert saved["categories"][0] == {"code": "S10", "title": "Hate", "enabled": True, "definition": "d"}
-        assert "definition" not in saved["categories"][1]
-
-    def test_put_policy_preserves_model_routing_when_fields_are_omitted(self, client):
-        cfg = self._cfg()
-        cfg["experimental"]["safety"].update({
-            "transport": "anthropic_messages",
-            "model": "claude-haiku",
-        })
-        with patch.object(main, "_get_pool", return_value=MagicMock()), \
-             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=cfg)), \
-             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
-            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
-                "context_mode": "none",
-                "categories": [{"code": "S10", "title": "Hate", "enabled": True}],
-            })
-        assert r.status_code == 200, r.text
-        saved = upd.call_args.args[2]
-        assert saved["transport"] == "anthropic_messages"
-        assert saved["model"] == "claude-haiku"
-
-    def test_put_anthropic_transport_preserves_llama_guard_base_url(self, client):
-        cfg = self._cfg()
-        cfg["experimental"]["safety"]["base_url"] = "https://whatif.inf.uni-konstanz.de"
-        with patch.object(main, "_get_pool", return_value=MagicMock()), \
-             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=cfg)), \
-             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
-            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
-                "context_mode": "always",
-                "transport": "anthropic_messages",
-                "model": "claude-haiku-4-5-20251001",
-                "categories": [{"code": "S10", "title": "Hate", "enabled": True}],
-            })
-        assert r.status_code == 200, r.text
-        saved = upd.call_args[0][2]
-        assert saved["transport"] == "anthropic_messages"
-        assert saved["base_url"] == "https://whatif.inf.uni-konstanz.de"
-
-    def test_put_refused_when_locked(self, client):
-        with patch.object(main, "_get_pool", return_value=MagicMock()), \
-             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg(locked=True))), \
-             patch("main.config_repo.update_safety_block", new=AsyncMock()) as upd:
-            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
-                "context_mode": "none", "categories": [{"code": "S10", "title": "Hate", "enabled": True}]})
-        assert r.status_code == 409
-        upd.assert_not_awaited()
-
-    def test_put_all_disabled_is_400(self, client):
-        with patch.object(main, "_get_pool", return_value=MagicMock()), \
-             patch("main.config_repo.get_experiment_config", new=AsyncMock(return_value=self._cfg())):
-            r = client.put("/admin/safety/policy/e1", headers=HDR, json={
-                "context_mode": "none", "categories": [{"code": "S10", "title": "Hate", "enabled": False}]})
-        assert r.status_code == 400
+    def test_policy_cannot_be_edited_through_the_api(self, client):
+        r = client.put("/admin/safety/policy/e1", headers=HDR, json={"categories": []})
+        assert r.status_code == 405
 
     def test_lock_endpoint(self, client):
         with patch.object(main, "_get_pool", return_value=MagicMock()), \
@@ -397,31 +334,25 @@ class TestPolicyEndpoints:
 
 class TestSafetyConfigValidation:
     def test_absent_is_disabled(self):
-        out = validate_safety_config(None)
-        assert out["enabled"] is False and out["locked"] is False
-        assert out["context_mode"] == "conditional"
+        assert validate_safety_config(None) == {"enabled": False, "locked": False}
 
-    def test_context_mode_and_enabled_flags(self):
-        with pytest.raises(ValueError):
-            validate_safety_config({"context_mode": "sometimes"})
-        with pytest.raises(ValueError):
-            validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": "yes"}]})
-        out = validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": False}]})
-        assert out["enabled"] is False
-        with pytest.raises(ValueError):
-            validate_safety_config({"enabled": True, "categories": [{"code": "S1", "title": "x", "enabled": False}]})
-        out = validate_safety_config({"categories": [{"code": "S1", "title": "x", "enabled": True}]})
-        assert out["context_mode"] == "conditional"
+    def test_legacy_llama_guard_settings_fall_back_to_safeguard_defaults(self):
+        out = validate_safety_config({
+            "enabled": True, "locked": True, "transport": "openai_completions",
+            "model": "meta-llama/Llama-Guard-3-8B", "timeout_s": 8,
+            "base_url": "https://whatif.inf.uni-konstanz.de", "context_mode": "always",
+            "categories": [{"code": "S10", "title": "Hate"}], "num_ctx": 4096,
+        })
+        assert out == {"enabled": True, "locked": True, "base_url": "https://whatif.inf.uni-konstanz.de"}
+
+    def test_current_settings_are_kept(self):
+        cfg = {"enabled": True, "locked": False, "transport": "anthropic_messages",
+               "model": "claude-haiku-4-5-20251001", "timeout_s": 15.0}
+        assert validate_safety_config(cfg) == cfg
 
     def test_bad_transport_rejected(self):
         with pytest.raises(ValueError):
             validate_safety_config({"enabled": True, "transport": "grpc"})
-
-    def test_categories_shape(self):
-        with pytest.raises(ValueError):
-            validate_safety_config({"categories": [{"code": "S1"}]})
-        out = validate_safety_config({"categories": [{"code": "S10", "title": "Hate", "definition": "d"}]})
-        assert out["categories"][0]["definition"] == "d"
 
     def test_timeout_positive_number(self):
         with pytest.raises(ValueError):

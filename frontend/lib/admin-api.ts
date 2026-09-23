@@ -598,28 +598,6 @@ export async function getSafetyPolicy(key: string, experimentId: string): Promis
   return res.json()
 }
 
-export async function saveSafetyPolicy(
-  key: string,
-  experimentId: string,
-  body: {
-    enabled?: boolean
-    context_mode: SafetyPolicy["context_mode"]
-    categories: { code: string; title: string; enabled: boolean; definition?: string }[]
-    transport?: string | null
-    model?: string | null
-  },
-): Promise<SafetyPolicy> {
-  const res = await adminFetch(`/admin/safety/policy/${encodeURIComponent(experimentId)}`, key, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  })
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Save failed" }))
-    throw new Error(err.detail || "Save failed")
-  }
-  return res.json()
-}
-
 export type SafetyClassifierTestResult = {
   ok: boolean
   transport?: string
@@ -629,6 +607,7 @@ export type SafetyClassifierTestResult = {
   categories?: string[]
   rationale?: string | null
   raw?: string
+  policy_version?: string
   latency_ms?: number
   error?: string | null
 }

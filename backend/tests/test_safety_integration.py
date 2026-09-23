@@ -27,7 +27,7 @@ def _manager_with_screen(publish: bool):
     state = _make_state()
     screen = MagicMock()
     screen.screen_agent = AsyncMock(
-        return_value=ScreenOutcome(publish=publish, verdict=SafetyVerdict(status="safe"), user_turn="")
+        return_value=ScreenOutcome(publish=publish, verdict=SafetyVerdict(status="safe"), context="")
     )
     screen.after_publish = AsyncMock()
     logger = MagicMock()
@@ -117,7 +117,7 @@ class TestAgentManagerGate:
         outcome = ScreenOutcome(
             publish=False,
             verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
-            user_turn="",
+            context="",
             flag_id="f1",
         )
         with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()) as sleep, \
@@ -153,7 +153,7 @@ class TestAgentManagerGate:
         outcome = ScreenOutcome(
             publish=False,
             verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
-            user_turn="",
+            context="",
             flag_id="f1",
         )
         with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()), \
@@ -180,7 +180,7 @@ class TestAgentManagerGate:
         outcome = ScreenOutcome(
             publish=False,
             verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
-            user_turn="",
+            context="",
             flag_id="f1",
         )
         with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()), \
@@ -204,7 +204,7 @@ class TestAgentManagerGate:
         outcome = ScreenOutcome(
             publish=False,
             verdict=SafetyVerdict(status="unsafe", categories=["S1"]),
-            user_turn="",
+            context="",
             flag_id="f1",
         )
         with patch("agents.agent_manager.asyncio.sleep", new=AsyncMock()), \
@@ -218,8 +218,8 @@ class TestAgentManagerGate:
 def _safety_config(enabled=True, **extra):
     cfg = copy.deepcopy(MINIMAL_CONFIG)
     cfg["experimental"]["safety"] = {
-        "enabled": enabled, "transport": "ollama_raw",
-        "base_url": "https://sal.example", "model": "llama-guard3:8b", **extra,
+        "enabled": enabled, "transport": "openai_chat",
+        "base_url": "https://sal.example", "model": "gpt-oss-safeguard:20b", **extra,
     }
     return cfg
 
@@ -235,15 +235,26 @@ class TestSessionConstruction:
         with _patch_externals():
             session, _ = _create_session(config=_safety_config())
             assert session.safety_screen.enabled is True
-            assert session.safety_screen.client.transport == "ollama_raw"
-            assert session.safety_screen.client.model == "llama-guard3:8b"
+            assert session.safety_screen.client.transport == "openai_chat"
+            assert session.safety_screen.client.model == "gpt-oss-safeguard:20b"
 
-    def test_enabled_without_endpoint_fails_at_construction(self, monkeypatch):
-        monkeypatch.delenv("SAFETY_BASE_URL", raising=False)
+    def test_legacy_llama_guard_config_starts_with_safeguard_defaults(self, monkeypatch):
         monkeypatch.delenv("SAFETY_MODEL", raising=False)
+        monkeypatch.delenv("SAFETY_TRANSPORT", raising=False)
+        with _patch_externals():
+            session, _ = _create_session(config=_safety_config(
+                transport="openai_completions", model="meta-llama/Llama-Guard-3-8B",
+                context_mode="conditional", categories=[{"code": "S10", "title": "Hate"}],
+            ))
+            client = session.safety_screen.client
+            assert session.safety_screen.enabled is True
+            assert client.transport == "openai_chat"
+            assert client.model == "openai/gpt-oss-safeguard-20b"
+
+    def test_enabled_with_unknown_transport_fails_at_construction(self):
         with _patch_externals():
             with pytest.raises(ValueError):
-                _create_session(config=_safety_config(base_url="", model=""))
+                _create_session(config=_safety_config(transport="nonsense"))
 
     async def test_participant_message_is_screened(self):
         with _patch_externals():
@@ -251,6 +262,7 @@ class TestSessionConstruction:
             session.running = True
             session.safety_screen.screen_participant = AsyncMock()
             await session.handle_user_message("hola")
+            await asyncio.gather(*session._participant_screen_tasks)
             session.safety_screen.screen_participant.assert_awaited_once()
             assert session.safety_screen.screen_participant.call_args[0][0].content == "hola"
 

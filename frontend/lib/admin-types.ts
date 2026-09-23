@@ -137,19 +137,12 @@ export interface NarrativePoolCell {
   narratives: string
 }
 
-export interface SafetyCategory {
-  code: string
-  title: string
-  definition?: string
-}
-
 export interface SafetyConfig {
   enabled: boolean
-  transport?: "openai_completions" | "ollama_raw" | "anthropic_messages"
+  transport?: "openai_chat" | "anthropic_messages"
   base_url?: string
   model?: string
   timeout_s?: number
-  categories?: SafetyCategory[]
 }
 
 export interface ExperimentalConfig {
@@ -257,6 +250,8 @@ export type SafetyFlag = {
   category_names: string[]
   raw_output: string | null
   rationale: string | null
+  reasoning: string | null
+  policy_version: string | null
   model: string | null
   prompt_hash: string
   unsafe_prob: number | null
@@ -290,20 +285,12 @@ export type SafetySummary = {
   category_names: Record<string, string>
 }
 
-export type SafetyPolicyCategory = {
-  code: string
-  title: string
-  name: string
-  enabled: boolean
-  definition: string
-}
-
 export type SafetyPolicy = {
   experiment_id: string
   enabled: boolean
   locked: boolean
-  context_mode: "none" | "conditional" | "always"
-  categories: SafetyPolicyCategory[]
   transport: string | null
   model: string | null
+  // The classifier policy is fixed in the backend code, not per experiment.
+  policy: { name: string; version: string; text: string }
 }

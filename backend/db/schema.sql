@@ -170,18 +170,22 @@ CREATE TABLE IF NOT EXISTS safety_flags (
     sender_type       TEXT        NOT NULL,
     sender            TEXT        NOT NULL,
     content           TEXT        NOT NULL,
-    -- The User turn the message was judged against.
+    -- The conversation excerpt the message was judged in (the column name
+    -- predates multi-message excerpts).
     context_user_turn TEXT        NOT NULL DEFAULT '',
     -- 'unsafe' | 'unavailable'
     verdict           TEXT        NOT NULL,
     categories        TEXT[]      NOT NULL DEFAULT '{}',
     raw_output        TEXT,
-    -- One-sentence explanation, when the classifier provides one (chat
-    -- classifiers like Claude Haiku always do; Llama Guard's own template
-    -- never does, so this stays NULL for those verdicts).
+    -- One-sentence explanation from the classifier's answer.
     rationale         TEXT,
+    -- The classifier's reasoning before its verdict, when the host returns it.
+    reasoning         TEXT,
+    -- Which policy text produced the verdict: "<policy name>@<sha256 prefix>".
+    policy_version    TEXT,
     model             TEXT,
     prompt_hash       TEXT        NOT NULL DEFAULT '',
+    -- Llama Guard only (first-token probability); NULL for later verdicts.
     unsafe_prob       DOUBLE PRECISION,
     latency_ms        INTEGER,
     error             TEXT,
@@ -201,5 +205,13 @@ CREATE INDEX IF NOT EXISTS idx_safety_flags_session
     ON safety_flags(session_id, created_at);
 DO $$ BEGIN
     ALTER TABLE safety_flags ADD COLUMN rationale TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE safety_flags ADD COLUMN reasoning TEXT;
+EXCEPTION WHEN duplicate_column THEN NULL;
+END $$;
+DO $$ BEGIN
+    ALTER TABLE safety_flags ADD COLUMN policy_version TEXT;
 EXCEPTION WHEN duplicate_column THEN NULL;
 END $$;

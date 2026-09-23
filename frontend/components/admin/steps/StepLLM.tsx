@@ -359,9 +359,12 @@ function LLMRoleConfig({
 }
 
 const SAFETY_MODELS = {
-  konstanz: "meta-llama/Llama-Guard-3-8B",
+  konstanz: "openai/gpt-oss-safeguard-20b",
   anthropic: "claude-haiku-4-5-20251001",
 } as const
+
+// Matches the backend default: the classifier reasons before it answers.
+const SAFETY_DEFAULT_TIMEOUT_S = 20
 
 function SafetyRoleConfig({
   safety,
@@ -386,7 +389,7 @@ function SafetyRoleConfig({
   }
   const changeProvider = (next: "konstanz" | "anthropic") => {
     set({
-      transport: next === "anthropic" ? "anthropic_messages" : "openai_completions",
+      transport: next === "anthropic" ? "anthropic_messages" : "openai_chat",
       model: SAFETY_MODELS[next],
     })
   }
@@ -396,10 +399,10 @@ function SafetyRoleConfig({
     try {
       setTestResult(await testSafetyDraft(adminKey, {
         enabled: safety.enabled,
-        transport: safety.transport || "openai_completions",
+        transport: safety.transport || "openai_chat",
         base_url: safety.base_url,
         model,
-        timeout_s: safety.timeout_s ?? 8,
+        timeout_s: safety.timeout_s ?? SAFETY_DEFAULT_TIMEOUT_S,
       }))
     } catch (e) {
       setTestResult({ ok: false, error: e instanceof Error ? e.message : "Safety test failed" })
@@ -423,7 +426,7 @@ function SafetyRoleConfig({
         <div className="px-5 pb-4 border-t border-admin-border pt-3 space-y-3">
           <div className="flex items-start justify-between gap-4">
             <p className="text-xs text-admin-muted">
-              Screens messages before publication. Categories and review behaviour are managed in the Safety tab.
+              Screens messages before publication. The policy is fixed in the code and shown in the Safety tab, where flags are reviewed.
             </p>
             <label className="flex items-center gap-2 text-xs text-admin-text shrink-0">
               <input type="checkbox" checked={safety.enabled} onChange={(e) => set({ enabled: e.target.checked })} />
@@ -459,8 +462,8 @@ function SafetyRoleConfig({
                   <label className="block text-xs font-medium text-admin-muted mb-1">Timeout (seconds)</label>
                   <input
                     type="number" min={1} step={1}
-                    value={safety.timeout_s ?? 8}
-                    onChange={(e) => set({ timeout_s: Number(e.target.value) || 8 })}
+                    value={safety.timeout_s ?? SAFETY_DEFAULT_TIMEOUT_S}
+                    onChange={(e) => set({ timeout_s: Number(e.target.value) || SAFETY_DEFAULT_TIMEOUT_S })}
                     className={inputClass}
                   />
                 </div>

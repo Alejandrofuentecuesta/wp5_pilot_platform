@@ -21,27 +21,21 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Dict, Optional, Set, Tuple
 
 from db import connection as db_conn
 from db.repositories import safety_repo
 from models.message import Message
-from utils.safety import (
-    NEUTRAL_USER_TURN,
-    Category,
-    SafetyClient,
-    SafetyVerdict,
-    render_chat_prompt,
-    render_prompt,
-)
+from utils.safety import Policy, SafetyClient, SafetyVerdict, load_policy, render_excerpt
 from utils.violence_guard import contains_explicit_violence_cue, explicitly_rejects_violence
 
-CONTEXT_MODES = ("none", "conditional", "always")
+
 @dataclass
 class ScreenOutcome:
     publish: bool
     verdict: SafetyVerdict
-    user_turn: str
+    # The conversation excerpt the classifier judged (stored on the flag).
+    context: str
     flag_id: Optional[str] = None
 
 
@@ -53,30 +47,17 @@ class SafetyScreen:
         experiment_id: str,
         logger,
         client: Optional[SafetyClient],
-        categories: List[Category],
         enabled: bool,
         user_name: str,
-        seed_text: str = "",
-        context_mode: str = "conditional",
+        policy: Optional[Policy] = None,
     ) -> None:
         self.session_id = session_id
         self.experiment_id = experiment_id
         self.logger = logger
         self.client = client
-        self.categories = categories
         self.enabled = bool(enabled and client is not None)
         self.user_name = user_name
-        self.seed_text = (seed_text or "").strip()
-        if context_mode not in CONTEXT_MODES:
-            raise ValueError(f"unknown safety context_mode {context_mode!r}")
-        # How much of the participant's side the agent screen sees:
-        #   none         – never; the agent message is judged on its own
-        #   conditional  – only when the participant's last message was itself
-        #                  flagged (the case where endorsement matters)
-        #   always       – the participant's last message every time
-        self.context_mode = context_mode
-        # message_id -> verdict status of participant messages screened here.
-        self._participant_verdicts: Dict[str, str] = {}
+        self.policy = policy or load_policy()
         # agent_name -> open flag_ids blocking them. While an agent has any
         # unreviewed withheld message, the Director must not pick them again —
         # otherwise a second turn from the same agent can publish before the
@@ -111,56 +92,35 @@ class SafetyScreen:
                 if not flags:
                     del self._pending_review_agents[name]
 
-    # ── conversation mapping ──────────────────────────────────────────────
-
-    def _latest_participant(self, state) -> Optional[Message]:
-        for m in reversed(getattr(state, "messages", []) or []):
-            if m.sender == self.user_name and (m.content or "").strip():
-                return m
-        return None
-
-    def _agent_conversation(self, message: Message, state) -> Tuple[List[Tuple[str, str]], str]:
-        last = self._latest_participant(state)
-        if self.context_mode == "always":
-            user_turn = last.content if last else (self.seed_text or NEUTRAL_USER_TURN)
-        elif self.context_mode == "conditional" and last is not None and (
-            self._participant_verdicts.get(last.message_id) == "unsafe"
-            or contains_explicit_violence_cue(last.content)
-        ):
-            user_turn = last.content
-        else:
-            user_turn = NEUTRAL_USER_TURN
-        return [("user", user_turn), ("assistant", message.content)], user_turn
-
     # ── classification ────────────────────────────────────────────────────
 
-    async def _classify(self, conversation: List[Tuple[str, str]]) -> SafetyVerdict:
-        # The Anthropic transport takes a chat-style system/user pair and its
-        # own natural-language prompt instead of Llama Guard's raw template;
-        # every other transport keeps using the single rendered prompt.
-        chat_mode = getattr(self.client, "transport", None) == "anthropic_messages"
+    def _excerpt(self, message: Message, state) -> str:
+        """The excerpt ending in ``message``, built from the chat before it."""
+        messages = list(getattr(state, "messages", []) or [])
+        end = next((i for i, m in enumerate(messages) if m.message_id == message.message_id), len(messages))
+        return render_excerpt(message, messages[:end], self.user_name)
+
+    async def _classify(self, message: Message, state) -> Tuple[SafetyVerdict, str]:
+        """Classify ``message`` in context. Never raises; failures are ``unavailable``."""
         try:
-            if chat_mode:
-                system, user = render_chat_prompt(conversation, self.categories)
-                prompt = f"{system}\n\n{user}"
-            else:
-                prompt = render_prompt(conversation, self.categories)
+            excerpt = self._excerpt(message, state)
         except Exception as exc:
-            return SafetyVerdict(status="unavailable", error=f"render: {exc}")
+            return SafetyVerdict(status="unavailable", error=f"render: {exc}"), ""
         try:
-            verdict = await (self.client.classify_chat(system, user) if chat_mode else self.client.classify(prompt))
+            verdict = await self.client.classify(self.policy.text, excerpt)
         except Exception as exc:  # the client should never raise; belt and braces
             verdict = SafetyVerdict(status="unavailable", error=f"client: {exc}")
+        verdict.policy_version = self.policy.version
         try:
             self.logger.log_llm_call(
                 agent_name="__safety__",
-                prompt=prompt,
+                prompt=excerpt,
                 response=verdict.raw or None,
                 error=verdict.error,
             )
         except Exception:
             pass
-        return verdict
+        return verdict, excerpt
 
     # ── agent path ────────────────────────────────────────────────────────
 
@@ -171,20 +131,15 @@ class SafetyScreen:
         is unsafe. The withheld text is retained in a flag for review.
         """
         if not self.enabled:
-            return ScreenOutcome(publish=True, verdict=SafetyVerdict(status="unscreened"), user_turn="")
-        try:
-            conversation, user_turn = self._agent_conversation(message, state)
-            verdict = await self._classify(conversation)
-        except Exception as exc:
-            verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
-            user_turn = ""
+            return ScreenOutcome(publish=True, verdict=SafetyVerdict(status="unscreened"), context="")
+        verdict, context = await self._classify(message, state)
 
         if verdict.status in ("unsafe", "unavailable"):
             flag_id = await self._flag(
                 sender_type="agent",
                 sender=message.sender,
                 content=message.content,
-                user_turn=user_turn,
+                context=context,
                 verdict=verdict,
                 message_id=None,
                 displayed_at=None,
@@ -199,9 +154,9 @@ class SafetyScreen:
                     "categories": verdict.categories,
                 },
             )
-            return ScreenOutcome(publish=False, verdict=verdict, user_turn=user_turn, flag_id=flag_id)
+            return ScreenOutcome(publish=False, verdict=verdict, context=context, flag_id=flag_id)
 
-        return ScreenOutcome(publish=True, verdict=verdict, user_turn=user_turn)
+        return ScreenOutcome(publish=True, verdict=verdict, context=context)
 
     async def after_publish(self, message: Message, outcome: ScreenOutcome) -> None:
         """Record the verdict on the published message and open a flag if unsafe."""
@@ -217,7 +172,7 @@ class SafetyScreen:
                 sender_type="agent",
                 sender=message.sender,
                 content=message.content,
-                user_turn=outcome.user_turn,
+                context=outcome.context,
                 verdict=outcome.verdict,
                 message_id=message.message_id,
                 displayed_at=datetime.now(timezone.utc),
@@ -230,14 +185,11 @@ class SafetyScreen:
 
     # ── participant path ──────────────────────────────────────────────────
 
-    async def screen_participant(self, message: Message) -> Optional[SafetyVerdict]:
+    async def screen_participant(self, message: Message, state) -> Optional[SafetyVerdict]:
         """Classify a participant message that is already in the room. Flag only."""
         if not self.enabled:
             return None
-        try:
-            verdict = await self._classify([("user", message.content)])
-        except Exception as exc:
-            verdict = SafetyVerdict(status="unavailable", error=f"screen: {exc}")
+        verdict, context = await self._classify(message, state)
         if contains_explicit_violence_cue(message.content) and not explicitly_rejects_violence(message.content):
             categories = list(dict.fromkeys([*verdict.categories, "S1"]))
             verdict = SafetyVerdict(
@@ -246,12 +198,12 @@ class SafetyScreen:
                 raw=verdict.raw,
                 model=verdict.model,
                 latency_ms=verdict.latency_ms,
-                unsafe_prob=verdict.unsafe_prob,
                 error=verdict.error,
                 prompt_hash=verdict.prompt_hash,
                 rationale=verdict.rationale,
+                reasoning=verdict.reasoning,
+                policy_version=verdict.policy_version,
             )
-        self._participant_verdicts[message.message_id] = verdict.status
         try:
             pool = db_conn.get_pool()
             await safety_repo.set_message_safety_verdict(
@@ -266,7 +218,7 @@ class SafetyScreen:
                 sender_type="participant",
                 sender=message.sender,
                 content=message.content,
-                user_turn="",
+                context=context,
                 verdict=verdict,
                 message_id=message.message_id,
                 displayed_at=message.timestamp,
@@ -286,7 +238,7 @@ class SafetyScreen:
         sender_type: str,
         sender: str,
         content: str,
-        user_turn: str,
+        context: str,
         verdict: SafetyVerdict,
         message_id: Optional[str],
         displayed_at: Optional[datetime],
@@ -303,14 +255,15 @@ class SafetyScreen:
                 sender_type=sender_type,
                 sender=sender,
                 content=content,
-                context_user_turn=user_turn,
+                context_user_turn=context,
                 verdict=verdict.status,
                 categories=verdict.categories,
                 raw_output=verdict.raw or None,
                 rationale=verdict.rationale,
+                reasoning=verdict.reasoning,
+                policy_version=verdict.policy_version,
                 model=verdict.model or None,
                 prompt_hash=verdict.prompt_hash,
-                unsafe_prob=verdict.unsafe_prob,
                 latency_ms=verdict.latency_ms,
                 error=verdict.error,
                 displayed_at=displayed_at,

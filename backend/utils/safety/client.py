@@ -1,62 +1,61 @@
-"""Transport client for the safety model.
+"""Transport client for the safety classifier.
 
-Sends a pre-rendered Llama Guard prompt to one of two hosts and returns a
-``SafetyVerdict``. The client never raises: every failure becomes a verdict
-with ``status="unavailable"`` and ``error`` set, and the caller decides what
-to do with that (the screen withholds the turn).
+Sends the policy (system message) and the conversation excerpt (user message)
+to the classifier and returns a ``SafetyVerdict``. The client never raises:
+every failure becomes a verdict with ``status="unavailable"`` and ``error``
+set, and the caller decides what to do with that (the screen withholds the
+turn).
 
 Transports
 ----------
-``openai_completions``
-    vLLM's OpenAI-compatible ``POST {base_url}/v1/completions`` with the raw
-    prompt. Requests one logprob per token so the unsafe probability of the
-    first token can be recorded alongside the verdict.
-``ollama_raw``
-    Ollama's native ``POST {base_url}/api/generate`` with ``raw: true`` so
-    Ollama's own template is bypassed and the prompt is used verbatim.
-    ``base_url`` is the Ollama root: ``http://host:11434`` for a direct
-    host, or ``https://<open-webui>/ollama`` through Open WebUI's proxy.
+``openai_chat``
+    OpenAI-compatible ``POST {base_url}/v1/chat/completions``: Konstanz's vLLM
+    serving gpt-oss-safeguard in production, or Ollama for local tests. Sends
+    ``reasoning_effort`` and keeps the model's reasoning, which vLLM returns
+    as ``reasoning_content`` and Ollama as ``reasoning``.
 ``anthropic_messages``
     Anthropic's ``POST {base_url}/v1/messages`` (default host:
-    ``https://api.anthropic.com``). Used for a chat-completions classifier
-    (e.g. Claude Haiku) instead of a self-hosted Llama Guard. Takes a
-    system/user pair (see ``classify_chat`` and
-    ``utils.safety.prompt.render_chat_prompt``) rather than one raw prompt.
+    ``https://api.anthropic.com``), for Claude as an alternative classifier.
+    It receives the same policy and excerpt.
 """
 from __future__ import annotations
 
 import hashlib
-import math
 import os
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import httpx
 
 from utils.safety.prompt import parse_verdict
 
-TRANSPORTS = ("openai_completions", "ollama_raw", "anthropic_messages")
+TRANSPORTS = ("openai_chat", "anthropic_messages")
 ANTHROPIC_DEFAULT_BASE_URL = "https://api.anthropic.com"
 ANTHROPIC_VERSION = "2023-06-01"
 KONSTANZ_DEFAULT_BASE_URL = "https://whatif.inf.uni-konstanz.de/v1"
-LLAMA_GUARD_DEFAULT_MODEL = "meta-llama/Llama-Guard-3-8B"
+SAFEGUARD_DEFAULT_MODEL = "openai/gpt-oss-safeguard-20b"
+DEFAULT_TIMEOUT_S = 20.0
+# The model reasons before it answers; the answer itself is one short JSON
+# object. The cap covers both.
+DEFAULT_MAX_TOKENS = 2000
+REASONING_EFFORT = "medium"
 
 
 @dataclass
 class SafetyVerdict:
-    status: str  # "safe" | "unsafe" | "unavailable"
+    status: str  # "safe" | "unsafe" | "unavailable" | "unscreened"
     categories: List[str] = field(default_factory=list)
     raw: str = ""
     model: str = ""
     latency_ms: int = 0
-    unsafe_prob: Optional[float] = None
     error: Optional[str] = None
     prompt_hash: str = ""
-    # One-sentence explanation, when the classifier provides one. Llama
-    # Guard's own template never asks for this; a chat-completions
-    # classifier (see ``SafetyClient.classify_chat``) always does.
     rationale: Optional[str] = None
+    # The model's reasoning before its answer, when the host returns it.
+    reasoning: Optional[str] = None
+    # Set by the screen: which policy text produced this verdict.
+    policy_version: Optional[str] = None
 
 
 class SafetyClient:
@@ -67,53 +66,43 @@ class SafetyClient:
         base_url: str,
         model: str,
         api_key: Optional[str] = None,
-        timeout_s: float = 8.0,
-        # 20 used to be enough for Llama Guard's own two-line output. A chat
-        # classifier (anthropic_messages) is also asked for a one-sentence
-        # rationale, which needs more room. Harmless either way: Llama Guard
-        # stops at its own EOS right after the two lines regardless of the cap.
-        max_tokens: int = 80,
-        num_ctx: int = 4096,
+        timeout_s: float = DEFAULT_TIMEOUT_S,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
         transport_layer: Optional[httpx.AsyncBaseTransport] = None,
     ) -> None:
         if transport not in TRANSPORTS:
             raise ValueError(f"unknown safety transport {transport!r}; expected one of {TRANSPORTS}")
         if not model:
             raise ValueError("safety client needs a model")
-        if not base_url and transport != "anthropic_messages":
-            raise ValueError("safety client needs base_url and model")
+        base = (base_url or "").rstrip("/")
+        if transport == "anthropic_messages":
+            base = base or ANTHROPIC_DEFAULT_BASE_URL
+        elif not base:
+            raise ValueError("safety client needs a base_url")
+        # Konstanz is configured with a /v1 base elsewhere in the platform;
+        # the endpoints below add /v1 themselves.
+        if base.endswith("/v1"):
+            base = base[:-3]
         self.transport = transport
-        normalized_base_url = base_url.rstrip("/")
-        # The shared Konstanz/OpenAI client is configured with a /v1 base,
-        # while this raw-completions client appends /v1/completions itself.
-        if transport == "openai_completions" and normalized_base_url.endswith("/v1"):
-            normalized_base_url = normalized_base_url[:-3]
-        self.base_url = normalized_base_url or (
-            ANTHROPIC_DEFAULT_BASE_URL if transport == "anthropic_messages" else ""
-        )
+        self.base_url = base
         self.model = model
-        self.api_key = api_key if api_key is not None else os.getenv("SAFETY_API_KEY", "")
+        # Environment fallbacks live in from_config only, per transport.
+        self.api_key = api_key or ""
         self.timeout_s = timeout_s
         self.max_tokens = max_tokens
-        # Ollama only: context window to load the model with. Llama Guard
-        # prompts are short, and the server default (often 32k) would reserve
-        # far more GPU memory than needed.
-        self.num_ctx = num_ctx
         # httpx transport override, used by tests to fake the host.
         self._transport_layer = transport_layer
 
     @classmethod
     def from_config(cls, cfg: dict) -> "SafetyClient":
         """Build from ``experimental.safety`` with environment fallbacks."""
-        transport = cfg.get("transport") or os.getenv("SAFETY_TRANSPORT", "openai_completions")
+        transport = cfg.get("transport") or os.getenv("SAFETY_TRANSPORT", "openai_chat")
         if transport == "anthropic_messages":
-            # SAFETY_BASE_URL/API_KEY normally identify the self-hosted Llama
-            # Guard service. Reusing them for Claude routes /v1/messages to
-            # the vLLM host and can also leak the wrong credential. Anthropic
-            # therefore has provider-specific fallbacks and otherwise uses
-            # the official API host filled in by __init__.
+            # Never fall back to the Konstanz URL or key: that would send the
+            # Konstanz credential to Anthropic.
             base_url = os.getenv("ANTHROPIC_BASE_URL", "")
-            api_key = os.getenv("ANTHROPIC_API_KEY", "") or os.getenv("SAFETY_API_KEY", "")
+            api_key = os.getenv("ANTHROPIC_API_KEY", "")
+            model = cfg.get("model") or ""
         else:
             base_url = (
                 cfg.get("base_url")
@@ -121,29 +110,28 @@ class SafetyClient:
                 or os.getenv("KONSTANZ_BASE_URL", KONSTANZ_DEFAULT_BASE_URL)
             )
             api_key = os.getenv("SAFETY_API_KEY", "") or os.getenv("KONSTANZ_API_KEY", "")
+            model = cfg.get("model") or os.getenv("SAFETY_MODEL", "") or SAFEGUARD_DEFAULT_MODEL
         return cls(
             transport=transport,
             base_url=base_url,
-            model=(
-                cfg.get("model")
-                or os.getenv("SAFETY_MODEL", "")
-                or (LLAMA_GUARD_DEFAULT_MODEL if transport == "openai_completions" else "")
-            ),
+            model=model,
             api_key=api_key or None,
-            timeout_s=float(cfg.get("timeout_s", 8.0)),
-            num_ctx=int(cfg.get("num_ctx", 4096)),
+            timeout_s=float(cfg.get("timeout_s", DEFAULT_TIMEOUT_S)),
         )
 
     # ── public ────────────────────────────────────────────────────────────
 
-    async def classify(self, prompt: str) -> SafetyVerdict:
-        """Classify one rendered raw prompt (Llama Guard transports). One retry on transport error."""
-        prompt_hash = hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+    async def classify(self, policy: str, excerpt: str) -> SafetyVerdict:
+        """Classify one excerpt against the policy. One retry on transport error."""
+        prompt_hash = hashlib.sha256(f"{policy}\n\n{excerpt}".encode("utf-8")).hexdigest()
         t0 = time.monotonic()
         last_error: Optional[str] = None
-        for attempt in (1, 2):
+        for _attempt in (1, 2):
             try:
-                raw, unsafe_prob = await self._request(prompt)
+                if self.transport == "anthropic_messages":
+                    raw, reasoning = await self._anthropic_messages(policy, excerpt)
+                else:
+                    raw, reasoning = await self._openai_chat(policy, excerpt)
             except Exception as exc:  # transport, timeout, HTTP status, bad JSON
                 last_error = f"{type(exc).__name__}: {exc}"
                 continue
@@ -154,44 +142,8 @@ class SafetyClient:
                 raw=raw,
                 model=self.model,
                 latency_ms=int((time.monotonic() - t0) * 1000),
-                unsafe_prob=unsafe_prob,
                 rationale=rationale,
-                error=None if status != "unavailable" else f"unparseable output: {raw[:200]!r}",
-                prompt_hash=prompt_hash,
-            )
-        return SafetyVerdict(
-            status="unavailable",
-            model=self.model,
-            latency_ms=int((time.monotonic() - t0) * 1000),
-            error=last_error,
-            prompt_hash=prompt_hash,
-        )
-
-    async def classify_chat(self, system: str, user: str) -> SafetyVerdict:
-        """Classify a System/User prompt pair (the ``anthropic_messages`` transport).
-
-        Parallel to ``classify()`` for classifiers that take a chat-style
-        system/user pair (see ``utils.safety.prompt.render_chat_prompt``)
-        instead of one raw completion prompt. Same never-raise, one-retry
-        behaviour.
-        """
-        prompt_hash = hashlib.sha256(f"{system}\n\n{user}".encode("utf-8")).hexdigest()
-        t0 = time.monotonic()
-        last_error: Optional[str] = None
-        for attempt in (1, 2):
-            try:
-                raw = await self._anthropic_messages(system, user)
-            except Exception as exc:
-                last_error = f"{type(exc).__name__}: {exc}"
-                continue
-            status, categories, rationale = parse_verdict(raw)
-            return SafetyVerdict(
-                status=status,
-                categories=categories,
-                raw=raw,
-                model=self.model,
-                latency_ms=int((time.monotonic() - t0) * 1000),
-                rationale=rationale,
+                reasoning=reasoning,
                 error=None if status != "unavailable" else f"unparseable output: {raw[:200]!r}",
                 prompt_hash=prompt_hash,
             )
@@ -205,60 +157,37 @@ class SafetyClient:
 
     # ── transports ────────────────────────────────────────────────────────
 
-    def _headers(self) -> dict:
-        headers = {"Content-Type": "application/json"}
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        return headers
-
     def _http(self) -> httpx.AsyncClient:
         return httpx.AsyncClient(timeout=self.timeout_s, transport=self._transport_layer)
 
-    async def _request(self, prompt: str):
-        if self.transport == "openai_completions":
-            return await self._openai_completions(prompt)
-        return await self._ollama_raw(prompt)
-
-    async def _openai_completions(self, prompt: str):
+    async def _openai_chat(self, policy: str, excerpt: str) -> Tuple[str, Optional[str]]:
         body = {
             "model": self.model,
-            "prompt": prompt,
-            "max_tokens": self.max_tokens,
+            "messages": [
+                {"role": "system", "content": policy},
+                {"role": "user", "content": excerpt},
+            ],
             "temperature": 0,
-            "logprobs": 1,
+            "max_tokens": self.max_tokens,
+            "reasoning_effort": REASONING_EFFORT,
         }
+        headers = {"Content-Type": "application/json"}
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
         async with self._http() as client:
-            resp = await client.post(f"{self.base_url}/v1/completions", json=body, headers=self._headers())
+            resp = await client.post(f"{self.base_url}/v1/chat/completions", json=body, headers=headers)
         resp.raise_for_status()
-        data = resp.json()
-        choice = data["choices"][0]
-        text = choice.get("text") or ""
-        unsafe_prob = _first_token_unsafe_prob(choice.get("logprobs"))
-        return text, unsafe_prob
+        message = resp.json()["choices"][0]["message"]
+        reasoning = message.get("reasoning_content") or message.get("reasoning") or None
+        return (message.get("content") or "").strip(), reasoning
 
-    async def _ollama_raw(self, prompt: str):
-        body = {
-            "model": self.model,
-            "prompt": prompt,
-            "raw": True,
-            "stream": False,
-            "options": {"temperature": 0, "num_predict": self.max_tokens, "num_ctx": self.num_ctx},
-        }
-        async with self._http() as client:
-            resp = await client.post(
-                f"{self.base_url}/api/generate", json=body, headers=self._headers()
-            )
-        resp.raise_for_status()
-        data = resp.json()
-        return data.get("response") or "", None
-
-    async def _anthropic_messages(self, system: str, user: str) -> str:
+    async def _anthropic_messages(self, policy: str, excerpt: str) -> Tuple[str, Optional[str]]:
         body = {
             "model": self.model,
             "max_tokens": self.max_tokens,
             "temperature": 0,
-            "system": system,
-            "messages": [{"role": "user", "content": user}],
+            "system": policy,
+            "messages": [{"role": "user", "content": excerpt}],
         }
         headers = {
             "Content-Type": "application/json",
@@ -268,39 +197,9 @@ class SafetyClient:
         async with self._http() as client:
             resp = await client.post(f"{self.base_url}/v1/messages", json=body, headers=headers)
         resp.raise_for_status()
-        data = resp.json()
         parts = [
             block.get("text", "")
-            for block in data.get("content", [])
+            for block in resp.json().get("content", [])
             if isinstance(block, dict) and block.get("type") == "text"
         ]
-        return "".join(parts).strip()
-
-
-def _first_token_unsafe_prob(logprobs: Optional[dict]) -> Optional[float]:
-    """Probability of the first generated token being 'unsafe', when available.
-
-    vLLM returns ``top_logprobs`` as a list of ``{token: logprob}`` per
-    position. The model card defines the unsafe score as the probability of
-    the first token; if the first token is 'unsafe' its own probability is
-    used, if it is 'safe' the complement is reported when 'unsafe' appears
-    among the alternatives, otherwise ``None``.
-    """
-    if not logprobs:
-        return None
-    tops = logprobs.get("top_logprobs") or []
-    tokens = logprobs.get("tokens") or []
-    token_lps = logprobs.get("token_logprobs") or []
-    if not tokens or not token_lps or token_lps[0] is None:
-        return None
-    first = tokens[0].strip().lower()
-    first_p = math.exp(token_lps[0])
-    if first == "unsafe":
-        return first_p
-    if first == "safe":
-        alts = tops[0] if tops else {}
-        for tok, lp in (alts or {}).items():
-            if tok.strip().lower() == "unsafe" and lp is not None:
-                return math.exp(lp)
-        return None
-    return None
+        return "".join(parts).strip(), None

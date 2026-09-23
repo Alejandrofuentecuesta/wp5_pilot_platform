@@ -192,12 +192,12 @@ INCIVILITY_DIMENSIONS = {
     },
     "hate_speech": {
         "title": "Hate Speech and Stereotyping",
-        "definition": "Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or derogatory labels is included. Groups may be defined by race, nationality, religion, ideology, social class, age, or political camp.",
+        "definition": "Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or derogatory labels is included. Groups may be defined by race, nationality, religion, ideology, social class, age, or political camp. Never dehumanize vulnerable or protected groups, and never attribute rape or sexual violence to a group.",
         "examples": (
-            "  - [Clima · Izquierda]: 'Los negacionistas sois psicópatas sin empatía', 'Los empresarios son parásitos que destruyen el planeta', 'La generación boomer es un cáncer egoísta', 'Los fachas sois ignorantes que aplaudís que arda el mundo'.\n"
-            "  - [Clima · Derecha]: 'Los ecologistas sois unos vagos perroflautas sin oficio', 'La juventud progre son tarados histéricos', 'Los burócratas del clima son parásitos chiringuiteros', 'Los zurdos sois una secta fanática y enferma'.\n"
-            "  - [Inmigración · Izquierda]: 'Los racistas de este país sois escoria sin humanidad', 'Votar a la derecha te hace cómplice de asesinatos en el mar', 'La policía de fronteras son sádicos torturadores', 'Los de Vox sois una panda de matones xenófobos'.\n"
-            "  - [Inmigración · Derecha]: 'Los menas son delincuentes y navajeros que vienen a violar', 'Los moros solo vienen a chupar de paguitas y del cuento', 'Los musulmanes son incompatibles con nuestra civilización', 'Las ONGs pro-inmigración son mafias negreras'."
+            "  - [Clima · Izquierda]: 'Los negacionistas sois psicópatas sin empatía', 'Los grandes empresarios son unos explotadores que arrasan el planeta', 'La generación boomer ha sido egoísta con el clima', 'Los fachas sois ignorantes que aplaudís que arda el mundo'.\n"
+            "  - [Clima · Derecha]: 'Los ecologistas sois unos vagos perroflautas sin oficio', 'La juventud progre son tarados histéricos', 'Los burócratas del clima son unos caraduras chiringuiteros', 'Los zurdos sois una secta fanática'.\n"
+            "  - [Inmigración · Izquierda]: 'Los racistas de este país sois unos miserables sin humanidad', 'Votar a la derecha te hace cómplice de las muertes en el mar', 'La policía de fronteras actúa como una panda de sádicos', 'Los de Vox sois unos matones xenófobos'.\n"
+            "  - [Inmigración · Derecha]: 'Los que llegan irregularmente se creen con derecho a saltarse las normas', 'Demasiados inmigrantes vienen esperando que aquí se les resuelva todo', 'En algunos barrios la inmigración magrebí vive de espaldas a nuestras costumbres', 'Sean magrebíes, latinoamericanos o subsaharianos, los recién llegados tienen que adaptarse y dejar de exigir privilegios', 'Las ONGs pro-inmigración son unas mafias que viven del buenismo'."
         )
     },
     "democratic_threats": {
@@ -205,8 +205,8 @@ INCIVILITY_DIMENSIONS = {
         "definition": "Messages that explicitly advocate, endorse, or promote actions or beliefs that undermine democratic rights, democratic institutions, or political pluralism. This includes restricting freedoms, delegitimizing elections or courts, promoting autocratic rule, suspending constitutions, or using authoritarian patriotic slogans.",
         "examples": (
             "  - [Clima · Izquierda]: 'Comité de científicos y gobernar por decreto ya', 'Ilegalizar a los partidos negacionistas de inmediato', 'Cierre forzoso y cárcel para medios que nieguen el cambio climático', 'Expropiación forzosa de la industria contaminante sin indemnización'.\n"
-            "  - [Clima · Derecha]: 'Romper unilateralmente con Bruselas y desobedecer sus leyes verdes', 'Ilegalizar a las organizaciones ecologistas por terroristas', 'Esto con Franco no pasaba, ¡Arriba España y fuera la Agenda 2030!', 'Disolver el Parlamento y echar a los burócratas verdes por la fuerza'.\n"
-            "  - [Inmigración · Izquierda]: 'Ilegalizar a Vox y a los partidos racistas por decreto', 'El gobierno debe desobedecer a los jueces que ordenen expulsiones', 'Derribar las vallas fronterizas por la fuerza y abolir extranjería', 'Cerrar por orden gubernamental a los medios que critiquen la inmigración'.\n"
+            "  - [Clima · Derecha]: 'Romper unilateralmente con Bruselas y desobedecer sus leyes verdes', 'Ilegalizar a las organizaciones ecologistas por terroristas', 'Esto con Franco no pasaba, ¡Arriba España y fuera la Agenda 2030!', 'Disolver el Parlamento y expulsar del gobierno a los burócratas verdes'.\n"
+            "  - [Inmigración · Izquierda]: 'Ilegalizar a Vox y a los partidos racistas por decreto', 'El gobierno debe desobedecer a los jueces que ordenen expulsiones', 'Retirar por decreto las vallas fronterizas y abolir extranjería', 'Cerrar por orden gubernamental a los medios que critiquen la inmigración'.\n"
             "  - [Inmigración · Derecha]: 'Con Franco no entraba ni un ilegal, ¡Arriba España!', 'Militarizar la frontera y suspender el derecho de asilo por decreto', 'Estado de excepción en Ceuta y expulsiones masivas sin juicio', 'Hace falta un caudillo militar que vuelva a poner al país en la senda correcta'."
         )
     }

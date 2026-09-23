@@ -21,7 +21,25 @@ from agents.STAGE.orchestrator import (
     TARGET_ELIGIBLE_SPEAKER_COUNT,
     default_message_length_range,
     _looks_truncated_response,
+    _merge_prompt_context,
 )
+
+
+def test_merge_prompt_context_sanitizes_legacy_unsafe_few_shots():
+    legacy_framework = (
+        "Los menas son delincuentes y navajeros que vienen a violar. "
+        "Los empresarios son parásitos que destruyen el planeta. "
+        "Derribar las vallas fronterizas por la fuerza y abolir extranjería."
+    )
+
+    merged = _merge_prompt_context("Article", legacy_framework)
+
+    assert "vienen a violar" not in merged
+    assert "son parásitos" not in merged
+    assert "por la fuerza" not in merged
+    assert "Los que llegan irregularmente" in merged
+    assert "unos explotadores" in merged
+    assert "Retirar por decreto" in merged
 
 
 # â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

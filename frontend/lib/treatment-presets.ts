@@ -51,19 +51,20 @@ export const INCIVILITY_FRAMEWORK_3X3 = `Incivility in this experiment is define
   Do not code this dimension if the message only describes, reports on, or analyses threats to democracy without endorsing them.
   Examples by topic and stance:
   - [Clima · Izquierda]: "Comité de científicos y gobernar por decreto ya", "Ilegalizar a los partidos negacionistas de inmediato", "Cierre forzoso y cárcel para medios que nieguen el cambio climático", "Expropiación forzosa de la industria contaminante sin indemnización".
-  - [Clima · Derecha]: "Romper unilateralmente con Bruselas y desobedecer sus leyes verdes", "Ilegalizar a las organizaciones ecologistas por terroristas", "Esto con Franco no pasaba, ¡Arriba España y fuera la Agenda 2030!", "Disolver el Parlamento y echar a los burócratas verdes por la fuerza".
-  - [Inmigración · Izquierda]: "Ilegalizar a Vox y a los partidos racistas por decreto", "El gobierno debe desobedecer a los jueces que ordenen expulsiones", "Derribar las vallas fronterizas por la fuerza y abolir extranjería", "Cerrar por orden gubernamental a los medios que critiquen la inmigración".
+  - [Clima · Derecha]: "Romper unilateralmente con Bruselas y desobedecer sus leyes verdes", "Ilegalizar a las organizaciones ecologistas por terroristas", "Esto con Franco no pasaba, ¡Arriba España y fuera la Agenda 2030!", "Disolver el Parlamento y expulsar del gobierno a los burócratas verdes".
+  - [Inmigración · Izquierda]: "Ilegalizar a Vox y a los partidos racistas por decreto", "El gobierno debe desobedecer a los jueces que ordenen expulsiones", "Retirar por decreto las vallas fronterizas y abolir extranjería", "Cerrar por orden gubernamental a los medios que critiquen la inmigración".
   - [Inmigración · Derecha]: "Con Franco no entraba ni un ilegal, ¡Arriba España!", "Militarizar la frontera y suspender el derecho de asilo por decreto", "Estado de excepción en Ceuta y expulsiones masivas sin juicio", "Hace falta un caudillo militar que vuelva a poner al país en la senda correcta".
+  Authoritarian or dictatorial preferences are allowed examples of this dimension only when they do not call for killing, serious physical violence, or violence to impose the system.
 
 - Hate Speech and Stereotyping:
   Hostility, prejudice, or discrimination directed at identity-based groups, or stereotyped generalizations about such groups. Use of slurs or derogatory labels is included.
   Groups may be defined by race, nationality, religion, ideology, social class, age, or political camp.
-  This also includes fake claims used to dehumanize or discriminate against identity-based groups.
+  This includes discriminatory stereotypes, but never dehumanizing comparisons or labels directed at vulnerable or protected groups and never collective claims that such groups commit rape or sexual violence.
   Examples by topic and stance:
-  - [Clima · Izquierda]: "Los negacionistas sois psicópatas sin empatía", "Los empresarios son parásitos que destruyen el planeta", "La generación boomer es un cáncer egoísta", "Los fachas sois ignorantes que aplaudís que arda el mundo".
-  - [Clima · Derecha]: "Los ecologistas sois unos vagos perroflautas sin oficio", "La juventud progre son tarados histéricos", "Los burócratas del clima son parásitos chiringuiteros", "Los zurdos sois una secta fanática y enferma".
-  - [Inmigración · Izquierda]: "Los racistas de este país sois escoria sin humanidad", "Votar a la derecha te hace cómplice de asesinatos en el mar", "La policía de fronteras son sádicos torturadores", "Los de Vox sois una panda de matones xenófobos".
-  - [Inmigración · Derecha]: "Los menas son delincuentes y navajeros que vienen a violar", "Los moros solo vienen a chupar de paguitas y del cuento", "Los musulmanes son incompatibles con nuestra civilización", "Las ONGs pro-inmigración son mafias negreras".
+  - [Clima · Izquierda]: "Los negacionistas sois psicópatas sin empatía", "Los grandes empresarios son unos explotadores que arrasan el planeta", "La generación boomer ha sido egoísta con el clima", "Los fachas sois ignorantes que aplaudís que arda el mundo".
+  - [Clima · Derecha]: "Los ecologistas sois unos vagos perroflautas sin oficio", "La juventud progre son tarados histéricos", "Los burócratas del clima son unos caraduras chiringuiteros", "Los zurdos sois una secta fanática".
+  - [Inmigración · Izquierda]: "Los racistas de este país sois unos miserables sin humanidad", "Votar a la derecha te hace cómplice de las muertes en el mar", "La policía de fronteras actúa como una panda de sádicos", "Los de Vox sois unos matones xenófobos".
+  - [Inmigración · Derecha]: "Los que llegan irregularmente se creen con derecho a saltarse las normas", "Demasiados inmigrantes vienen esperando que aquí se les resuelva todo", "En algunos barrios la inmigración magrebí vive de espaldas a nuestras costumbres", "Sean magrebíes, latinoamericanos o subsaharianos, los recién llegados tienen que adaptarse y dejar de exigir privilegios", "Las ONGs pro-inmigración son unas mafias que viven del buenismo".
  
 
 Treatment interpretation rules:

@@ -152,13 +152,66 @@ def _looks_truncated_response(text: Optional[str]) -> bool:
     return False
 
 
+_LEGACY_UNSAFE_INCIVILITY_REPLACEMENTS = (
+    (
+        "Los empresarios son parásitos que destruyen el planeta",
+        "Los grandes empresarios son unos explotadores que arrasan el planeta",
+    ),
+    (
+        "La generación boomer es un cáncer egoísta",
+        "La generación boomer ha sido egoísta con el clima",
+    ),
+    (
+        "Los burócratas del clima son parásitos chiringuiteros",
+        "Los burócratas del clima son unos caraduras chiringuiteros",
+    ),
+    (
+        "Los racistas de este país sois escoria sin humanidad",
+        "Los racistas de este país sois unos miserables sin humanidad",
+    ),
+    (
+        "Los menas son delincuentes y navajeros que vienen a violar",
+        "Los que llegan irregularmente se creen con derecho a saltarse las normas",
+    ),
+    (
+        "Los moros solo vienen a chupar de paguitas y del cuento",
+        "Demasiados inmigrantes vienen esperando que aquí se les resuelva todo",
+    ),
+    (
+        "Los musulmanes son incompatibles con nuestra civilización",
+        "En algunos barrios la inmigración magrebí vive de espaldas a nuestras costumbres",
+    ),
+    (
+        "Las ONGs pro-inmigración son mafias negreras",
+        "Las ONGs pro-inmigración son unas mafias que viven del buenismo",
+    ),
+    (
+        "Disolver el Parlamento y echar a los burócratas verdes por la fuerza",
+        "Disolver el Parlamento y expulsar del gobierno a los burócratas verdes",
+    ),
+    (
+        "Derribar las vallas fronterizas por la fuerza y abolir extranjería",
+        "Retirar por decreto las vallas fronterizas y abolir extranjería",
+    ),
+)
+
+
+def _sanitize_legacy_incivility_framework(incivility_framework: str) -> str:
+    """Remove superseded unsafe few-shots from saved experiment configs."""
+    sanitized = incivility_framework
+    for unsafe_example, replacement in _LEGACY_UNSAFE_INCIVILITY_REPLACEMENTS:
+        sanitized = sanitized.replace(unsafe_example, replacement)
+    return sanitized
+
+
 def _merge_prompt_context(chatroom_context: str = "", incivility_framework: str = "") -> str:
     """Combine shared experiment context blocks for prompt injection."""
     parts = []
     if chatroom_context.strip():
         parts.append(chatroom_context.strip())
     if incivility_framework.strip():
-        parts.append(f"Incivility framework:\n{incivility_framework.strip()}")
+        sanitized_framework = _sanitize_legacy_incivility_framework(incivility_framework)
+        parts.append(f"Incivility framework:\n{sanitized_framework.strip()}")
     return "\n\n".join(parts)
 
 

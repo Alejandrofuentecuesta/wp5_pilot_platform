@@ -1415,10 +1415,28 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
 def _with_live_refresh(html: str, status: str) -> str:
     """Make the report tab reload itself every 5s while the session is still
     running, so an admin can watch it progress instead of reopening the
-    report. A no-op once the session has ended."""
+    report. A no-op once the session has ended.
+
+    Every prompt/response/event-data block in the report is a <details>
+    element (see render_llm_call in log_viewer.py); a reload collapses all
+    of them and drops scroll position, which is disruptive mid-read. So
+    each tick checks first and skips the reload — rescheduling itself
+    instead — while any <details> is open, i.e. while someone's reading one.
+    """
     if status == "ended":
         return html
-    refresh_script = "<script>setTimeout(function(){location.reload();}, 5000);</script>"
+    refresh_script = """<script>
+(function () {
+  function tick() {
+    if (document.querySelector("details[open]")) {
+      setTimeout(tick, 5000);
+    } else {
+      location.reload();
+    }
+  }
+  setTimeout(tick, 5000);
+})();
+</script>"""
     if "</body>" in html:
         return html.replace("</body>", refresh_script + "</body>", 1)
     return html + refresh_script

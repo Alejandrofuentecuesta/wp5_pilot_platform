@@ -98,3 +98,9 @@ class TestLiveRefreshInjection:
     def test_missing_body_tag_still_appends(self):
         html = main._with_live_refresh("<p>no body tag</p>", "active")
         assert "setTimeout" in html
+
+    def test_pauses_while_a_details_block_is_open(self):
+        """A prompt/response/event-data block is a <details> element; reading
+        one open must not get collapsed out from under the admin."""
+        html = main._with_live_refresh("<html><body>hi</body></html>", "active")
+        assert 'document.querySelector("details[open]")' in html

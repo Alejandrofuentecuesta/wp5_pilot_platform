@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useState } from "react"
 import type { AgentImpression, FinalReportBlockSurvey } from "@/lib/types"
 
 interface AgentImpressionSurveyProps {
@@ -11,18 +11,9 @@ interface AgentImpressionSurveyProps {
   onSubmit: (ratings: AgentImpression[], finalReportBlockSurvey: FinalReportBlockSurvey) => void
 }
 
-const RATING_SCORES = [1, 2, 3, 4, 5] as const
-const RATING_LABELS: Record<(typeof RATING_SCORES)[number], string> = {
-  1: "Muy mal",
-  2: "Mal",
-  3: "Neutral",
-  4: "Bien",
-  5: "Muy bien",
-}
-
-// Shared by the block and report sections below — the underlying content
-// concerns are the same regardless of which action the participant took
-// (or considered taking).
+// Shared by the "actually blocked" and "tempted to block/report" branches
+// below — the underlying content concerns are the same regardless of which
+// action the participant took (or considered taking).
 const CONTENT_REASONS = [
   "Porque sus mensajes contenían insultos u ofensas",
   "Porque era hostil o atacaba personalmente a alguien",
@@ -53,7 +44,7 @@ function ReasonChecklist({
   const otherSelected = selectedReasons.includes(OTHER_REASON)
 
   return (
-    <fieldset className="space-y-2">
+    <fieldset className="mt-4 space-y-2">
       <legend className="text-sm font-semibold text-primary">{title}</legend>
       <div className="space-y-2">
         {[...reasons, OTHER_REASON].map((reason) => {
@@ -92,10 +83,10 @@ function ReasonChecklist({
   )
 }
 
-function toggleReason(current: string[], reason: string) {
-  return current.includes(reason)
-    ? current.filter((item) => item !== reason)
-    : [...current, reason]
+function toggleItem(current: string[], item: string) {
+  return current.includes(item)
+    ? current.filter((value) => value !== item)
+    : [...current, item]
 }
 
 function AgentNameChecklist({
@@ -112,7 +103,7 @@ function AgentNameChecklist({
   if (names.length === 0) return null
 
   return (
-    <fieldset className="mt-4 space-y-2">
+    <fieldset className="space-y-2">
       <legend className="text-sm font-semibold text-primary">{title}</legend>
       <div className="flex flex-wrap gap-2">
         {names.map((name) => {
@@ -148,58 +139,38 @@ export default function AgentImpressionSurvey({
   error,
   onSubmit,
 }: AgentImpressionSurveyProps) {
-  const [selected, setSelected] = useState<Record<string, boolean>>({})
-  const [ratings, setRatings] = useState<Record<string, AgentImpression["rating"]>>({})
-  const [comments, setComments] = useState<Record<string, string>>({})
   const [blockReasons, setBlockReasons] = useState<string[]>([])
   const [blockOther, setBlockOther] = useState("")
-  const [temptedToBlock, setTemptedToBlock] = useState<boolean | null>(null)
-  const [temptedBlockNames, setTemptedBlockNames] = useState<string[]>([])
-  const [reportReasons, setReportReasons] = useState<string[]>([])
-  const [reportOther, setReportOther] = useState("")
-  const [temptedToReport, setTemptedToReport] = useState<boolean | null>(null)
-  const [temptedReportNames, setTemptedReportNames] = useState<string[]>([])
+  const [temptedNames, setTemptedNames] = useState<string[]>([])
+  const [temptedReasons, setTemptedReasons] = useState<string[]>([])
+  const [temptedOther, setTemptedOther] = useState("")
 
-  const selectedNames = useMemo(
-    () => agentNames.filter((name) => selected[name]),
-    [agentNames, selected],
-  )
-
-  const agentRatingsComplete = selectedNames.every((name) => ratings[name] !== undefined)
   const hasBlocks = blockedAgentNames.length > 0
   const blockOtherComplete = !blockReasons.includes(OTHER_REASON) || blockOther.trim().length > 0
-  const blockSectionComplete = hasBlocks
-    ? blockReasons.length > 0 && blockOtherComplete
-    : temptedToBlock === false || (temptedToBlock === true && blockReasons.length > 0 && blockOtherComplete)
-  const reportOtherComplete = !reportReasons.includes(OTHER_REASON) || reportOther.trim().length > 0
-  const reportSectionComplete =
-    temptedToReport === false ||
-    (temptedToReport === true && reportReasons.length > 0 && reportOtherComplete)
-  const complete = agentRatingsComplete && blockSectionComplete && reportSectionComplete
+  const blockSectionComplete = !hasBlocks || (blockReasons.length > 0 && blockOtherComplete)
+
+  const temptedOtherComplete = !temptedReasons.includes(OTHER_REASON) || temptedOther.trim().length > 0
+  const temptedSectionComplete = temptedNames.length === 0 || (temptedReasons.length > 0 && temptedOtherComplete)
+
+  const complete = blockSectionComplete && temptedSectionComplete
 
   const submitSelected = () => {
     if (!complete) return
+    const tempted = temptedNames.length > 0
     const finalReportBlockSurvey: FinalReportBlockSurvey = {
       reported_message_ids: [],
       reported_examples: [],
-      report_reasons: temptedToReport ? reportReasons : [],
-      report_other: reportReasons.includes(OTHER_REASON) ? reportOther.trim() || null : null,
-      tempted_to_report: temptedToReport,
-      tempted_report_agent_names: temptedToReport ? temptedReportNames : [],
+      report_reasons: tempted ? temptedReasons : [],
+      report_other: temptedReasons.includes(OTHER_REASON) ? temptedOther.trim() || null : null,
+      tempted_to_report: tempted,
+      tempted_report_agent_names: temptedNames,
       blocked_agent_names: blockedAgentNames,
-      block_reasons: hasBlocks || temptedToBlock ? blockReasons : [],
+      block_reasons: hasBlocks ? blockReasons : [],
       block_other: blockReasons.includes(OTHER_REASON) ? blockOther.trim() || null : null,
-      tempted_to_block: hasBlocks ? null : temptedToBlock,
-      tempted_block_agent_names: !hasBlocks && temptedToBlock ? temptedBlockNames : [],
+      tempted_to_block: hasBlocks ? null : tempted,
+      tempted_block_agent_names: hasBlocks ? [] : temptedNames,
     }
-    onSubmit(
-      selectedNames.map((name) => ({
-        agent_name: name,
-        rating: ratings[name],
-        comment: (comments[name] || "").trim() || null,
-      })),
-      finalReportBlockSurvey,
-    )
+    onSubmit([], finalReportBlockSurvey)
   }
 
   return (
@@ -218,221 +189,63 @@ export default function AgentImpressionSurvey({
         </div>
 
         <div className="space-y-5 px-4 py-4 sm:px-6">
-          <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
-            <h2 className="m-0 text-base font-semibold text-primary">Usuarios bloqueados</h2>
-            {hasBlocks ? (
-              <>
-                <p className="mt-1 text-sm leading-6 text-secondary">
-                  {blockedAgentNames.length > 2
-                    ? "Has bloqueado usuarios como estos. ¿Por qué los has bloqueado?"
-                    : "Has bloqueado estos usuarios. ¿Por qué los has bloqueado?"}
-                </p>
-                <div className="my-3 flex flex-wrap gap-2">
-                  {blockedAgentNames.slice(0, 2).map((name) => (
-                    <span
-                      key={name}
-                      className="rounded-full border border-border bg-bg-surface px-3 py-1 text-sm font-semibold text-primary"
-                    >
-                      {name}
-                    </span>
-                  ))}
-                </div>
-                <ReasonChecklist
-                  title="Selecciona todos los motivos que correspondan."
-                  reasons={CONTENT_REASONS}
-                  selectedReasons={blockReasons}
-                  otherValue={blockOther}
-                  onToggle={(reason) => setBlockReasons((current) => toggleReason(current, reason))}
-                  onOtherChange={setBlockOther}
-                />
-              </>
-            ) : (
-              <>
-                <p className="mt-1 text-sm leading-6 text-secondary">
-                  No has bloqueado ningún usuario. ¿Te has sentido tentado/a de bloquear a alguien?
-                </p>
-                <div className="mt-3 flex gap-2">
-                  {[{ label: "Sí", value: true }, { label: "No", value: false }].map((option) => (
-                    <button
-                      key={option.label}
-                      type="button"
-                      onClick={() => setTemptedToBlock(option.value)}
-                      className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
-                        temptedToBlock === option.value
-                          ? "border-accent bg-accent text-white"
-                          : "border-border bg-bg-surface text-primary hover:border-accent"
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-                {temptedToBlock && (
-                  <div className="mt-4">
-                    <ReasonChecklist
-                      title="¿Por qué te has sentido tentado/a?"
-                      reasons={CONTENT_REASONS}
-                      selectedReasons={blockReasons}
-                      otherValue={blockOther}
-                      onToggle={(reason) => setBlockReasons((current) => toggleReason(current, reason))}
-                      onOtherChange={setBlockOther}
-                    />
-                    <AgentNameChecklist
-                      title="¿A quién?"
-                      names={agentNames}
-                      selected={temptedBlockNames}
-                      onToggle={(name) => setTemptedBlockNames((current) => toggleReason(current, name))}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </section>
-
-          <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
-            <h2 className="m-0 text-base font-semibold text-primary">Mensajes reportados</h2>
-            <p className="mt-1 text-sm leading-6 text-secondary">
-              ¿Te has sentido tentado/a de reportar algún mensaje?
-            </p>
-            <div className="mt-3 flex gap-2">
-              {[{ label: "Sí", value: true }, { label: "No", value: false }].map((option) => (
-                <button
-                  key={option.label}
-                  type="button"
-                  onClick={() => setTemptedToReport(option.value)}
-                  className={`rounded-lg border px-4 py-2 text-sm font-semibold transition-colors ${
-                    temptedToReport === option.value
-                      ? "border-accent bg-accent text-white"
-                      : "border-border bg-bg-surface text-primary hover:border-accent"
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
-            </div>
-            {temptedToReport && (
-              <div className="mt-4">
-                <ReasonChecklist
-                  title="¿Por qué te has sentido tentado/a?"
-                  reasons={CONTENT_REASONS}
-                  selectedReasons={reportReasons}
-                  otherValue={reportOther}
-                  onToggle={(reason) => setReportReasons((current) => toggleReason(current, reason))}
-                  onOtherChange={setReportOther}
-                />
-                <AgentNameChecklist
-                  title="¿A quién?"
-                  names={agentNames}
-                  selected={temptedReportNames}
-                  onToggle={(name) => setTemptedReportNames((current) => toggleReason(current, name))}
-                />
-              </div>
-            )}
-          </section>
-
-          {agentNames.length > 0 && (
+          {hasBlocks && (
             <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
-              <h2 className="m-0 text-base font-semibold text-primary">Valoración opcional de usuarios</h2>
+              <h2 className="m-0 text-base font-semibold text-primary">Usuarios bloqueados</h2>
               <p className="mt-1 text-sm leading-6 text-secondary">
-                Si quieres, selecciona uno o varios usuarios, puntúalos del 1 (muy mal) al 5 (muy bien) y explica brevemente el motivo.
+                {blockedAgentNames.length > 2
+                  ? "Has bloqueado usuarios como estos. ¿Por qué los has bloqueado?"
+                  : "Has bloqueado estos usuarios. ¿Por qué los has bloqueado?"}
               </p>
-              <div className="mt-3 space-y-3">
-                {agentNames.map((name) => {
-                  const isSelected = Boolean(selected[name])
-                  return (
-                    <section
-                      key={name}
-                      className={`rounded-xl border px-4 py-3 transition-colors ${
-                        isSelected
-                          ? "border-accent bg-accent-soft/40"
-                          : "border-border bg-bg-surface"
-                      }`}
-                    >
-                      <label className="flex cursor-pointer items-center gap-3 text-sm font-semibold text-primary">
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={() =>
-                            setSelected((current) => ({
-                              ...current,
-                              [name]: !current[name],
-                            }))
-                          }
-                          className="h-4 w-4 rounded border-border text-accent focus:ring-accent"
-                        />
-                        <span>{name}</span>
-                      </label>
-
-                      {isSelected && (
-                        <div className="mt-4 space-y-3">
-                          <fieldset>
-                            <legend className="mb-2 text-xs font-semibold text-secondary">
-                              ¿Qué impresión te ha causado?
-                            </legend>
-                            <div className="grid grid-cols-5 gap-1.5">
-                              {RATING_SCORES.map((score) => {
-                                const scoreSelected = ratings[name] === score
-                                return (
-                                  <button
-                                    key={score}
-                                    type="button"
-                                    aria-label={`${name}: ${RATING_LABELS[score]}`}
-                                    aria-pressed={scoreSelected}
-                                    onClick={() =>
-                                      setRatings((current) => ({
-                                        ...current,
-                                        [name]: score,
-                                      }))
-                                    }
-                                    className={`rounded-lg border px-1 py-2 text-center transition-colors ${
-                                      scoreSelected
-                                        ? "border-accent bg-accent text-white"
-                                        : "border-border bg-bg-surface text-primary hover:border-accent"
-                                    }`}
-                                  >
-                                    <span className="block text-sm font-semibold">{score}</span>
-                                    <span className="hidden text-[10px] sm:block">
-                                      {RATING_LABELS[score]}
-                                    </span>
-                                  </button>
-                                )
-                              })}
-                            </div>
-                          </fieldset>
-
-                          <div>
-                            <label
-                              htmlFor={`agent-comment-${name}`}
-                              className="mb-1.5 block text-xs font-semibold text-secondary"
-                            >
-                              ¿Por qué? (opcional)
-                            </label>
-                            <textarea
-                              id={`agent-comment-${name}`}
-                              rows={3}
-                              maxLength={1000}
-                              value={comments[name] || ""}
-                              onChange={(event) =>
-                                setComments((current) => ({
-                                  ...current,
-                                  [name]: event.target.value,
-                                }))
-                              }
-                              placeholder="Puedes explicar brevemente el motivo..."
-                              className="w-full resize-y rounded-xl border border-border bg-bg-surface px-3 py-2 text-sm leading-relaxed text-primary outline-none focus:border-accent focus:ring-1 focus:ring-accent/20"
-                            />
-                            <p className="mt-1 text-right text-[11px] text-tertiary">
-                              {(comments[name] || "").length}/1000
-                            </p>
-                          </div>
-                        </div>
-                      )}
-                    </section>
-                  )
-                })}
+              <div className="my-3 flex flex-wrap gap-2">
+                {blockedAgentNames.slice(0, 2).map((name) => (
+                  <span
+                    key={name}
+                    className="rounded-full border border-border bg-bg-surface px-3 py-1 text-sm font-semibold text-primary"
+                  >
+                    {name}
+                  </span>
+                ))}
               </div>
+              <ReasonChecklist
+                title="Selecciona todos los motivos que correspondan."
+                reasons={CONTENT_REASONS}
+                selectedReasons={blockReasons}
+                otherValue={blockOther}
+                onToggle={(reason) => setBlockReasons((current) => toggleItem(current, reason))}
+                onOtherChange={setBlockOther}
+              />
             </section>
           )}
+
+          <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
+            <h2 className="m-0 text-base font-semibold text-primary">
+              {hasBlocks ? "¿Alguien más?" : "¿A quién te has sentido tentado/a de bloquear o reportar?"}
+            </h2>
+            <p className="mt-1 text-sm leading-6 text-secondary">
+              {hasBlocks
+                ? "Además de a quien ya has bloqueado, ¿te has sentido tentado/a de bloquear o reportar a alguien más?"
+                : "Selecciona a quién, si aplica. Si no ha sido nadie, deja esto vacío."}
+            </p>
+            <div className="mt-3">
+              <AgentNameChecklist
+                title="A quién"
+                names={agentNames}
+                selected={temptedNames}
+                onToggle={(name) => setTemptedNames((current) => toggleItem(current, name))}
+              />
+            </div>
+            {temptedNames.length > 0 && (
+              <ReasonChecklist
+                title="¿Por qué?"
+                reasons={CONTENT_REASONS}
+                selectedReasons={temptedReasons}
+                otherValue={temptedOther}
+                onToggle={(reason) => setTemptedReasons((current) => toggleItem(current, reason))}
+                onOtherChange={setTemptedOther}
+              />
+            )}
+          </section>
         </div>
 
         <div className="border-t border-border px-6 py-4">

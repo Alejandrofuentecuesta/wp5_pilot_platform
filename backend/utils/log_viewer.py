@@ -131,6 +131,7 @@ HTML_HEAD = """\
   .event.ev-websocket_detach::before {{ border-color: var(--gray); background: var(--gray-light); }}
   .event.ev-session_end::before {{ border-color: var(--red); background: var(--red-light); }}
   .event.ev-emotions_checkup_response::before {{ border-color: var(--orange); background: var(--orange-light); }}
+  .event.ev-agent_impressions::before {{ border-color: var(--red); background: var(--red-light); }}
 
   .event-card {{
     background: var(--card);
@@ -165,6 +166,7 @@ HTML_HEAD = """\
   .badge-session_end {{ background: var(--red-light); color: var(--red); }}
   .badge-like {{ background: var(--orange-light); color: var(--orange); }}
   .badge-emotions_checkup_response {{ background: var(--orange-light); color: var(--orange); }}
+  .badge-agent_impressions {{ background: var(--red-light); color: var(--red); }}
 
   .event-time {{
     font-size: 0.75rem;
@@ -851,6 +853,65 @@ def render_emotions_checkup_response(ev: dict) -> str:
 </div>"""
 
 
+def render_agent_impressions(ev: dict) -> str:
+    """End-of-session block/report survey, shown as readable answers rather
+    than buried in a collapsed JSON blob."""
+    data = ev.get("data") or {}
+    ts = _format_time(ev["timestamp"])
+    survey = data.get("report_block_survey") or {}
+
+    def names(values) -> str:
+        return ", ".join(_esc(str(v)) for v in values or []) or "—"
+
+    def reasons(values, other) -> str:
+        items = [_esc(str(v)) for v in values or []]
+        if other:
+            items.append(f"Otros: {_esc(str(other))}")
+        return "; ".join(items) or "—"
+
+    rows = []
+    blocked = survey.get("blocked_agent_names") or []
+    if blocked:
+        rows.append(("Bloqueó a", names(blocked)))
+        rows.append(("Motivos del bloqueo", reasons(survey.get("block_reasons"), survey.get("block_other"))))
+
+    tempted = survey.get("tempted_report_agent_names") or survey.get("tempted_block_agent_names") or []
+    if survey:
+        rows.append(("Tentado/a de bloquear o reportar a", names(tempted) if tempted else "Nadie"))
+        if tempted:
+            rows.append(("Motivos", reasons(survey.get("report_reasons"), survey.get("report_other"))))
+
+    for rating in data.get("ratings") or []:
+        comment = f" — {_esc(str(rating.get('comment')))}" if rating.get("comment") else ""
+        rows.append((f"Valoración de {_esc(str(rating.get('agent_name', '?')))}", f"{_esc(str(rating.get('rating', '?')))}/5{comment}"))
+
+    if not rows:
+        rows.append(("Respuesta", "Sin datos"))
+
+    body = "\n".join(
+        f'      <div style="margin-top: 0.25rem;"><strong>{label}:</strong> {value}</div>'
+        for label, value in rows
+    )
+    data_str = json.dumps(data, indent=2, ensure_ascii=False)
+
+    return f"""\
+<div class="event ev-agent_impressions">
+  <div class="event-card" style="border-left: 4px solid var(--red);">
+    <div class="event-header">
+      <span class="event-badge badge-agent_impressions">Encuesta final: bloquear / reportar</span>
+      <span class="event-time">{ts}</span>
+    </div>
+    <div style="font-size: 0.9rem; line-height: 1.5; margin-top: 0.5rem; color: var(--text);">
+{body}
+    </div>
+    <details>
+      <summary>Event data</summary>
+      <div class="detail-content">{_esc(data_str)}</div>
+    </details>
+  </div>
+</div>"""
+
+
 def render_generic(ev: dict) -> str:
     ts = _format_time(ev["timestamp"])
     etype = ev.get("event_type", "unknown")
@@ -904,6 +965,11 @@ def _render_events(events: list, session_id: str) -> str:
                 parts.append('<div class="timeline">')
                 timeline_opened = True
             parts.append(render_emotions_checkup_response(ev))
+        elif etype == "agent_impressions":
+            if not timeline_opened:
+                parts.append('<div class="timeline">')
+                timeline_opened = True
+            parts.append(render_agent_impressions(ev))
         else:
             if not timeline_opened:
                 parts.append('<div class="timeline">')

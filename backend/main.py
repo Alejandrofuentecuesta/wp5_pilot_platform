@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Literal, Optional
 import uuid
 
-from fastapi import FastAPI, Header, Request, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import FastAPI, Header, Query, Request, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
@@ -1412,14 +1412,36 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
 
 # ── HTML report endpoint ──────────────────────────────────────────────────────
 
+def _with_live_refresh(html: str, status: str) -> str:
+    """Make the report tab reload itself every 5s while the session is still
+    running, so an admin can watch it progress instead of reopening the
+    report. A no-op once the session has ended."""
+    if status == "ended":
+        return html
+    refresh_script = "<script>setTimeout(function(){location.reload();}, 5000);</script>"
+    if "</body>" in html:
+        return html.replace("</body>", refresh_script + "</body>", 1)
+    return html + refresh_script
+
+
 @app.get("/session/{session_id}/report", response_class=HTMLResponse)
-async def session_report(session_id: str, x_admin_key: str = Header(None)):
+async def session_report(
+    session_id: str,
+    x_admin_key: str = Header(None),
+    admin_key: str = Query(None),
+):
     """Generate and return an HTML session report from the DB.
 
     Admin-only: the report contains the treatment group and every LLM
     prompt, so a participant reaching it would unblind themselves.
+
+    Accepts the key via query string as well as the header: this report
+    is opened as its own browser tab (not fetched via JS), and while the
+    session is still running that tab reloads itself every few seconds to
+    show new messages/events, which only works if the URL it reloads
+    carries its own auth.
     """
-    _require_admin(x_admin_key)
+    _require_admin(x_admin_key or admin_key)
     pool = _get_pool()
 
     row = await session_repo.get_session(pool, session_id)
@@ -1467,6 +1489,9 @@ async def session_report(session_id: str, x_admin_key: str = Header(None)):
     # rendering it can take seconds, so run it off the event loop to avoid
     # stalling live sessions.
     html = await asyncio.to_thread(_render)
+    # reload() re-requests the same URL, so the query-string admin_key (if
+    # that's how this tab was opened) travels with it.
+    html = _with_live_refresh(html, row.get("status"))
     return HTMLResponse(content=html)
 
 

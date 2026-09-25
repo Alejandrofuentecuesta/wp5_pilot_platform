@@ -369,15 +369,13 @@ export async function viewSessionReport(
   key: string,
   sessionId: string,
 ): Promise<void> {
-  const res = await adminFetch(`/session/${encodeURIComponent(sessionId)}/report`, key)
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Report failed" }))
-    throw new Error(err.detail || "Report failed")
-  }
-  const blob = await res.blob()
-  const url = URL.createObjectURL(blob)
+  // Opened as its own tab pointed directly at the report URL (admin_key in
+  // the query string, not fetched via JS) so that tab's own self-refresh
+  // (while the session is still running — see the report endpoint) can
+  // reload the same URL and keep showing fresh data, instead of a detached
+  // blob: URL that could never be re-fetched.
+  const url = `${API_BASE}/session/${encodeURIComponent(sessionId)}/report?admin_key=${encodeURIComponent(key)}`
   window.open(url, "_blank", "noopener")
-  window.setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
 
 export async function saveSessionEvaluation(

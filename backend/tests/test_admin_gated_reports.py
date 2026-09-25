@@ -48,3 +48,53 @@ class TestReportEndpointsRequireAdmin:
         with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
             response = client.get(path, headers={"X-Admin-Key": "correct-passphrase"})
         assert response.status_code == 503
+
+
+class TestReportAcceptsQueryStringKey:
+    """The report endpoint is opened as its own tab (not fetched via JS) and
+    self-refreshes while the session runs, so it also accepts the key via
+    ?admin_key= — the messages-csv endpoint is unaffected, header-only."""
+
+    def test_correct_query_key_passes_the_gate(self, client):
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.get(
+                "/session/some-session-id/report?admin_key=correct-passphrase"
+            )
+        assert response.status_code == 503
+
+    def test_wrong_query_key_is_401(self, client):
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.get("/session/some-session-id/report?admin_key=wrong")
+        assert response.status_code == 401
+
+    def test_header_takes_precedence_over_query(self, client):
+        """If both are somehow present, the header (the more deliberate,
+        JS-driven fetch path) wins over a stray query string."""
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.get(
+                "/session/some-session-id/report?admin_key=wrong",
+                headers={"X-Admin-Key": "correct-passphrase"},
+            )
+        assert response.status_code == 503
+
+
+class TestLiveRefreshInjection:
+    """The report tab reloads itself while the session is still running so
+    an admin can watch it without reopening — stops once it has ended."""
+
+    def test_running_session_gets_refresh_script(self):
+        html = main._with_live_refresh("<html><body>hi</body></html>", "active")
+        assert "setTimeout" in html
+        assert html.index("setTimeout") < html.index("</body>")
+
+    def test_pending_session_gets_refresh_script(self):
+        html = main._with_live_refresh("<html><body>hi</body></html>", "pending")
+        assert "setTimeout" in html
+
+    def test_ended_session_is_untouched(self):
+        original = "<html><body>hi</body></html>"
+        assert main._with_live_refresh(original, "ended") == original
+
+    def test_missing_body_tag_still_appends(self):
+        html = main._with_live_refresh("<p>no body tag</p>", "active")
+        assert "setTimeout" in html

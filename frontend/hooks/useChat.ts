@@ -79,6 +79,11 @@ export function useChat() {
   const [sessionEnded, setSessionEnded] = useState(false)
   const [safetyIntervention, setSafetyIntervention] = useState(false)
   const [redirectUrl, setRedirectUrl] = useState<string | null>(null)
+  // Reason the backend gave for session_end — used to decide whether the
+  // deception debriefing must be shown before redirecting (researcher-
+  // initiated early ends: safety_stop). Normal completion/self-exit rely on
+  // the external survey's own debriefing page, as before.
+  const [sessionEndReason, setSessionEndReason] = useState<string | null>(null)
   const [sessionAgentNames, setSessionAgentNames] = useState<string[]>([])
   const [agentImpressionSurveyOpen, setAgentImpressionSurveyOpen] = useState(false)
   const [agentImpressionsSubmitting, setAgentImpressionsSubmitting] = useState(false)
@@ -211,6 +216,7 @@ export function useChat() {
           )
         : []
       const feedbackAlreadySubmitted = Boolean(obj.agent_feedback_submitted)
+      setSessionEndReason(reason)
       if (reason === "participant_safety") {
         setTypingCount(0)
         setRedirectUrl(url || null)
@@ -875,6 +881,7 @@ export function useChat() {
     sessionEnded,
     safetyIntervention,
     redirectUrl,
+    sessionEndReason,
     sessionAgentNames,
     agentImpressionSurveyOpen,
     agentImpressionsSubmitting,

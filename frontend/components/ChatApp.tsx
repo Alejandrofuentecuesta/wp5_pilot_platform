@@ -64,7 +64,7 @@ export default function ChatApp() {
   }
 
   if (chat.sessionEnded) {
-    return <ThankYouScreen redirectUrl={chat.redirectUrl} />
+    return <ThankYouScreen redirectUrl={chat.redirectUrl} reason={chat.sessionEndReason} />
   }
 
   if (chat.queueToken && !chat.sessionId) {

@@ -1,5 +1,7 @@
 "use client"
 
+import DebriefingNotice from "./DebriefingNotice"
+
 interface SafetyInterventionScreenProps {
   redirectUrl: string | null
 }
@@ -67,6 +69,13 @@ export default function SafetyInterventionScreen({
           >
             Información oficial sobre la Línea 024
           </a>
+
+          <div className="mt-7 border-t border-border pt-5">
+            <h2 className="text-sm font-semibold text-primary">Sobre el estudio</h2>
+            <div className="mt-2">
+              <DebriefingNotice />
+            </div>
+          </div>
 
           <div className="mt-7 border-t border-border pt-5 text-center">
             <p className="text-sm text-secondary">

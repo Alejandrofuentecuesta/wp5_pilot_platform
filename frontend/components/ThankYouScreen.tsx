@@ -8,30 +8,31 @@ interface ThankYouScreenProps {
   reason?: string | null
 }
 
-// Reasons where the platform itself ended the session early, before the
-// participant reaches the external survey's own debriefing page. These
-// pause on a manual "continuar" instead of auto-redirecting after 2s, and
-// show the deception debriefing directly — see SafetyInterventionScreen for
-// participant_safety, which gets the same content on its own crisis-first
-// layout.
+// Reasons where the session ended before the participant reached the
+// external survey's own debriefing page: the platform cut it short
+// (a researcher closing it from the Safety tab), or the participant chose
+// to leave early via the exit button. These pause on a manual "continuar"
+// instead of auto-redirecting after 2s, and show the deception debriefing
+// directly — see SafetyInterventionScreen for participant_safety, which
+// gets the same content on its own crisis-first layout.
 //
 // Note: the backend's real reason for a researcher-initiated close is
 // "safety_stop", but chatroom.py deliberately relabels it "closed_by_researcher"
 // for the browser (end_for_safety() passes client_reason=), so that's the
 // string that actually arrives here — see _publish_session_end.
-const EARLY_SYSTEM_END_REASONS = new Set(["closed_by_researcher"])
+const EARLY_END_REASONS = new Set(["closed_by_researcher", "user_exit"])
 
 export default function ThankYouScreen({ redirectUrl, reason }: ThankYouScreenProps) {
-  const isEarlySystemEnd = !!reason && EARLY_SYSTEM_END_REASONS.has(reason)
+  const isEarlyEnd = !!reason && EARLY_END_REASONS.has(reason)
 
   useEffect(() => {
-    if (redirectUrl && !isEarlySystemEnd) {
+    if (redirectUrl && !isEarlyEnd) {
       const timer = setTimeout(() => {
         window.location.href = redirectUrl
       }, 2000)
       return () => clearTimeout(timer)
     }
-  }, [redirectUrl, isEarlySystemEnd])
+  }, [redirectUrl, isEarlyEnd])
 
   const leaveExperiment = () => {
     if (redirectUrl) window.location.href = redirectUrl
@@ -63,12 +64,12 @@ export default function ThankYouScreen({ redirectUrl, reason }: ThankYouScreenPr
             ¡Gracias por participar!
           </h1>
           <p className="text-sm text-secondary mt-3">
-            {isEarlySystemEnd
+            {isEarlyEnd
               ? "La sesión se ha cerrado antes de tiempo. Tus aportaciones han quedado registradas."
               : "La discusión ha terminado. Tus aportaciones han quedado registradas."}
           </p>
 
-          {isEarlySystemEnd ? (
+          {isEarlyEnd ? (
             <>
               <div className="mt-6 border-t border-border pt-5">
                 <DebriefingNotice />

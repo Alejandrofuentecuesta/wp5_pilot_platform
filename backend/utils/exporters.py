@@ -235,7 +235,7 @@ Safety events link the classifier decision to `message_id` and include
 `should_stop`, `category` (`self_harm`, `severe_distress`, or `none`),
 `confidence`, and a short `rationale`. A positive result additionally emits
 `participant_safety_triggered` and ends the session with reason
-`participant_safety`; this outcome is compensated as complete (`r=1`).
+`participant_safety`; this outcome is treated as non-complete (`r=2`).
 
 | event_type | meaning | key payload fields |
 |---|---|---|

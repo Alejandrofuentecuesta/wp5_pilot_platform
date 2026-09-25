@@ -105,8 +105,8 @@ def build_return_url(redirect_url: str, token: str, reason: str) -> str:
     """Append the panel hand-back parameters (token + completion status) to
     the configured return URL. r=1: full session duration received (complete);
     r=3: participant chose to leave via the exit button; r=2: any other
-    outcome (non-complete). A safety intervention is compensated as complete
-    even when it ends the exposure early."""
+    outcome (non-complete), including a safety intervention ending the
+    exposure early."""
     if not redirect_url:
         return ""
     if not token:
@@ -116,9 +116,8 @@ def build_return_url(redirect_url: str, token: str, reason: str) -> str:
     # of wall-clock time while nobody was watching (restart + disconnected
     # participant), so the participant may have received only a fraction of
     # the exposure. When in doubt, under-claim completion.
-    if reason == "participant_safety" or (
-        reason.startswith("duration_expired")
-        and not reason.startswith("duration_expired_on_recovery")
+    if reason.startswith("duration_expired") and not reason.startswith(
+        "duration_expired_on_recovery"
     ):
         r_code = "1"
     elif reason.startswith("user_exit"):

@@ -104,10 +104,12 @@ export interface FinalReportBlockSurvey {
   report_reasons: string[]
   report_other: string | null
   tempted_to_report: boolean | null
+  tempted_report_agent_names: string[]
   blocked_agent_names: string[]
   block_reasons: string[]
   block_other: string | null
   tempted_to_block: boolean | null
+  tempted_block_agent_names: string[]
 }
 
 export interface QueueJoinResponse {

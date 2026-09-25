@@ -463,10 +463,12 @@ class FinalReportBlockSurveyRequest(BaseModel):
     report_reasons: List[str] = Field(default_factory=list)
     report_other: Optional[str] = None
     tempted_to_report: Optional[bool] = None
+    tempted_report_agent_names: List[str] = Field(default_factory=list)
     blocked_agent_names: List[str] = Field(default_factory=list)
     block_reasons: List[str] = Field(default_factory=list)
     block_other: Optional[str] = None
     tempted_to_block: Optional[bool] = None
+    tempted_block_agent_names: List[str] = Field(default_factory=list)
 
 
 class AgentImpressionsRequest(BaseModel):
@@ -907,6 +909,21 @@ async def submit_agent_impressions(session_id: str, payload: AgentImpressionsReq
             raise HTTPException(status_code=422, detail="Too many reported message examples")
         if len(survey.blocked_agent_names) > 20:
             raise HTTPException(status_code=422, detail="Too many blocked agent references")
+        if len(survey.tempted_report_agent_names) > 20:
+            raise HTTPException(status_code=422, detail="Too many tempted-to-report references")
+        if len(survey.tempted_block_agent_names) > 20:
+            raise HTTPException(status_code=422, detail="Too many tempted-to-block references")
+
+        tempted_names = {
+            name.strip()
+            for name in survey.tempted_report_agent_names + survey.tempted_block_agent_names
+            if name.strip()
+        }
+        if tempted_names - appeared_agents:
+            raise HTTPException(
+                status_code=422,
+                detail="Tempted-to-block/report names may only reference agents who posted in the session",
+            )
 
         valid_message_ids = {str(message["message_id"]) for message in messages}
         reported_ids = [mid.strip() for mid in survey.reported_message_ids if mid.strip()]
@@ -930,10 +947,16 @@ async def submit_agent_impressions(session_id: str, payload: AgentImpressionsReq
             "report_reasons": [reason.strip()[:200] for reason in survey.report_reasons if reason.strip()],
             "report_other": (survey.report_other or "").strip()[:1000] or None,
             "tempted_to_report": survey.tempted_to_report,
+            "tempted_report_agent_names": [
+                name.strip()[:100] for name in survey.tempted_report_agent_names if name.strip()
+            ],
             "blocked_agent_names": [name.strip()[:100] for name in survey.blocked_agent_names if name.strip()],
             "block_reasons": [reason.strip()[:200] for reason in survey.block_reasons if reason.strip()],
             "block_other": (survey.block_other or "").strip()[:1000] or None,
             "tempted_to_block": survey.tempted_to_block,
+            "tempted_block_agent_names": [
+                name.strip()[:100] for name in survey.tempted_block_agent_names if name.strip()
+            ],
         }
 
     existing = await event_repo.get_session_events(

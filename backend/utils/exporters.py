@@ -227,7 +227,15 @@ are UTC ISO-8601 unless noted. Files:
 `agent_impressions_open`, `agent_impressions`
 (open-ended reason the participant gave when leaving early; payload key
 `reason`; optional final agent ratings use `ratings`, each with
-`agent_name`, a 1–5 `rating`, and an optional `comment`),
+`agent_name`, a 1–5 `rating`, and an optional `comment`; the same event's
+`report_block_survey` (nullable) holds the end-of-session block/report
+survey: `tempted_to_block`/`tempted_to_report` (nullable bool, asked only
+when the participant didn't actually block/report anyone), `block_reasons`/
+`report_reasons` plus a free-text `block_other`/`report_other`,
+`tempted_block_agent_names`/`tempted_report_agent_names` (who they say they
+considered blocking/reporting without doing it), `blocked_agent_names` (who
+they actually blocked), and `reported_message_ids`/`reported_examples` for
+messages actually reported),
 `websocket_attach`, `websocket_detach`, …) and **client
 behavioural telemetry** (prefixed `client_`):
 

@@ -23,10 +23,10 @@ def _ended_session():
 
 def _messages():
     return [
-        {"sender": "[news]", "msg_type": "news_article"},
-        {"sender": "Laia"},
-        {"sender": "Candela"},
-        {"sender": "Diego"},
+        {"sender": "[news]", "msg_type": "news_article", "message_id": "m0"},
+        {"sender": "Laia", "message_id": "m1"},
+        {"sender": "Candela", "message_id": "m2"},
+        {"sender": "Diego", "message_id": "m3"},
     ]
 
 
@@ -119,6 +119,60 @@ async def test_submit_agent_impressions_only_after_full_session(monkeypatch):
         )
 
     assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_submit_agent_impressions_persists_tempted_names(monkeypatch):
+    insert_event = AsyncMock()
+    monkeypatch.setattr(main, "_get_pool", lambda: object())
+    monkeypatch.setattr(main.session_repo, "get_session", AsyncMock(return_value=_ended_session()))
+    monkeypatch.setattr(main.message_repo, "get_session_messages", AsyncMock(return_value=_messages()))
+    monkeypatch.setattr(main.event_repo, "get_session_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(main.event_repo, "insert_event_strict", insert_event)
+
+    response = await main.submit_agent_impressions(
+        SESSION_ID,
+        main.AgentImpressionsRequest(
+            ratings=[],
+            report_block_survey=main.FinalReportBlockSurveyRequest(
+                tempted_to_block=True,
+                block_reasons=["Porque era hostil o atacaba personalmente a alguien"],
+                tempted_block_agent_names=[" Candela "],
+                tempted_to_report=True,
+                report_reasons=["Porque difundía información falsa"],
+                tempted_report_agent_names=[" Diego "],
+            ),
+        ),
+    )
+
+    assert response.status_code == 204
+    survey = insert_event.await_args.kwargs["data"]["report_block_survey"]
+    assert survey["tempted_block_agent_names"] == ["Candela"]
+    assert survey["tempted_report_agent_names"] == ["Diego"]
+    assert survey["tempted_to_block"] is True
+    assert survey["tempted_to_report"] is True
+
+
+@pytest.mark.asyncio
+async def test_submit_agent_impressions_rejects_unseen_tempted_name(monkeypatch):
+    monkeypatch.setattr(main, "_get_pool", lambda: object())
+    monkeypatch.setattr(main.session_repo, "get_session", AsyncMock(return_value=_ended_session()))
+    monkeypatch.setattr(main.message_repo, "get_session_messages", AsyncMock(return_value=_messages()))
+    monkeypatch.setattr(main.event_repo, "get_session_events", AsyncMock(return_value=[]))
+
+    with pytest.raises(HTTPException) as exc:
+        await main.submit_agent_impressions(
+            SESSION_ID,
+            main.AgentImpressionsRequest(
+                ratings=[],
+                report_block_survey=main.FinalReportBlockSurveyRequest(
+                    tempted_to_report=True,
+                    tempted_report_agent_names=["No apareció"],
+                ),
+            ),
+        )
+
+    assert exc.value.status_code == 422
 
 
 @pytest.mark.asyncio

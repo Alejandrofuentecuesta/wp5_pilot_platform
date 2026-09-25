@@ -109,6 +109,7 @@ export default function ChatApp() {
       displayName={chat.username}
       isConnected={chat.isConnected}
       inputValue={chat.inputValue}
+      inputDisabled={Boolean(chat.safetyHoldNotice)}
       setInputValue={chat.setInputValue}
       replyTo={chat.replyTo}
       setReplyTo={chat.setReplyTo}

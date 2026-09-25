@@ -32,7 +32,7 @@ def _patched(*, live_rows, config_found=True, unfrozen=0):
     mocks = SimpleNamespace(
         counter=AsyncMock(return_value=live_rows),
         activate=AsyncMock(),
-        unfreeze=MagicMock(return_value=unfrozen),
+        unfreeze=AsyncMock(return_value=unfrozen),
     )
     with patch.object(main, "_require_admin", lambda key: None), \
          patch.object(main, "_experiment_id", CURRENT), \

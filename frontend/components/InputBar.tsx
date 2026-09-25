@@ -13,6 +13,9 @@ interface InputBarProps {
   replyTo: Message | null
   onCancelReply: () => void
   onSend: () => void
+  // While the room is frozen by a researcher nothing can be typed or sent;
+  // disabling the textarea also drops keyboard focus from behind the notice.
+  disabled?: boolean
 }
 
 export default function InputBar({
@@ -21,6 +24,7 @@ export default function InputBar({
   replyTo,
   onCancelReply,
   onSend,
+  disabled = false,
 }: InputBarProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -39,10 +43,10 @@ export default function InputBar({
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
-        onSend()
+        if (!disabled) onSend()
       }
     },
-    [onSend],
+    [onSend, disabled],
   )
 
   return (
@@ -93,6 +97,7 @@ export default function InputBar({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            disabled={disabled}
             maxLength={2000}
             placeholder="Escribe un mensaje..."
             className="max-h-32 flex-1 resize-none overflow-y-hidden bg-transparent text-sm leading-5 text-primary outline-none placeholder:text-tertiary"
@@ -101,7 +106,8 @@ export default function InputBar({
         </div>
         <button
           onClick={onSend}
-          className="px-4 h-[42px] rounded-lg bg-accent hover:bg-accent-hover flex items-center justify-center shrink-0 transition-colors text-white"
+          disabled={disabled}
+          className="px-4 h-[42px] rounded-lg bg-accent hover:bg-accent-hover flex items-center justify-center shrink-0 transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Enviar mensaje"
         >
           <SendIcon />

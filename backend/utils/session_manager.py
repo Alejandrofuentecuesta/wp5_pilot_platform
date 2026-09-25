@@ -59,17 +59,48 @@ class SessionManager:
 
     # ── Experiment-level pause/resume ─────────────────────────────────────────
 
-    def set_experiment_paused(self, experiment_id: str, paused: bool) -> int:
-        """Propagate pause/resume to all active in-memory sessions for an experiment.
+    def count_running(self, experiment_id: str) -> int:
+        """Number of live in-memory sessions of an experiment."""
+        return sum(
+            1 for s in self._sessions.values()
+            if s.experiment_id == experiment_id and s.running
+        )
 
-        Returns the number of sessions affected.
+    async def set_experiment_paused(self, experiment_id: str, paused: bool) -> int:
+        """Freeze or unfreeze every live in-memory session of an experiment.
+
+        Pausing an experiment freezes its sessions like a safety hold (no
+        turns, countdown stopped, neutral notice) until the experiment is
+        resumed. Returns the number of sessions whose state changed.
         """
+        async with self._lock:
+            sessions = [
+                s for s in self._sessions.values()
+                if s.experiment_id == experiment_id and s.running
+            ]
         count = 0
-        for session in self._sessions.values():
-            if session.experiment_id == experiment_id:
-                session._paused = paused
-                count += 1
+        for session in sessions:
+            if paused:
+                changed = await session.pause_for_experiment()
+            else:
+                changed = session._experiment_paused
+                await session.resume_from_experiment()
+            count += int(bool(changed))
         return count
+
+    async def _apply_experiment_pause(self, session: SimulationSession) -> None:
+        """Freeze a newly created or rebuilt session if its experiment is paused.
+
+        A participant whose token was accepted before the pause can still
+        connect after it; their session must start frozen like the others.
+        """
+        try:
+            row = await config_repo.get_experiment(db_conn.get_pool(), session.experiment_id)
+        except Exception as exc:
+            print(f"[SessionManager] Could not read pause state for {session.session_id}: {exc}")
+            return
+        if row and row.get("paused"):
+            await session.pause_for_experiment()
 
     # ── Pending reservation (HTTP → WebSocket handoff) ────────────────────────
 
@@ -151,6 +182,7 @@ class SessionManager:
         except Exception as exc:
             await self._discard_failed_session(session_id, session)
             raise RuntimeError(f"Session start failed for {session_id}: {exc}") from exc
+        await self._apply_experiment_pause(session)
 
         # Cache metadata in Redis for other workers.
         r = redis_client.get_redis()
@@ -369,6 +401,7 @@ class SessionManager:
             raise RuntimeError(
                 f"Session reconstruction failed for {session_id}: {exc}"
             ) from exc
+        await self._apply_experiment_pause(session)
 
         r = redis_client.get_redis()
         await redis_client.cache_session(r, session_id, {

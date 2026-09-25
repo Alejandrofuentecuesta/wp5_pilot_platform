@@ -161,7 +161,7 @@ export class ActivationBlockedError extends Error {
 export async function activateExperiment(
   key: string,
   experimentId: string,
-): Promise<{ status: string; experiment_id: string }> {
+): Promise<{ status: string; experiment_id: string; sessions_resumed?: number }> {
   const res = await adminFetch(`/admin/experiment/${encodeURIComponent(experimentId)}/activate`, key, {
     method: "POST",
   })
@@ -180,16 +180,36 @@ export async function activateExperiment(
   return res.json()
 }
 
+/** Raised when pausing would freeze live sessions and needs confirmation. */
+export class PauseNeedsConfirmError extends Error {
+  total: number
+
+  constructor(message: string, total: number) {
+    super(message)
+    this.name = "PauseNeedsConfirmError"
+    this.total = total
+  }
+}
+
 export async function pauseExperiment(
   key: string,
   experimentId: string,
-): Promise<{ status: string; experiment_id: string }> {
-  const res = await adminFetch(`/admin/experiment/${encodeURIComponent(experimentId)}/pause`, key, {
+  confirm = false,
+): Promise<{ status: string; experiment_id: string; sessions_paused: number }> {
+  const query = confirm ? "?confirm=true" : ""
+  const res = await adminFetch(`/admin/experiment/${encodeURIComponent(experimentId)}/pause${query}`, key, {
     method: "POST",
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Pause failed" }))
-    throw new Error(err.detail || "Pause failed")
+    const detail = err.detail
+    if (res.status === 409 && detail && typeof detail === "object" && detail.reason === "sessions_would_freeze") {
+      throw new PauseNeedsConfirmError(
+        detail.message || "Sessions are in progress.",
+        typeof detail.total === "number" ? detail.total : 0,
+      )
+    }
+    throw new Error(typeof detail === "string" ? detail : "Pause failed")
   }
   return res.json()
 }

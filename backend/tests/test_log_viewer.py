@@ -11,19 +11,22 @@ def _impressions_event(survey):
     }
 
 
-def test_agent_impressions_shows_who_and_why():
+def test_agent_impressions_shows_block_and_report_separately():
     rendered = render_agent_impressions(_impressions_event({
         "tempted_to_block": True,
         "tempted_block_agent_names": ["Candela"],
+        "block_reasons": ["Porque me resulta molesto o incómodo"],
         "tempted_to_report": True,
-        "tempted_report_agent_names": ["Candela"],
+        "tempted_report_agent_names": ["Diego"],
         "report_reasons": ["Porque difundía información falsa"],
         "report_other": None,
         "blocked_agent_names": [],
     }))
 
-    assert "Tentado/a de bloquear o reportar a:</strong> Candela" in rendered
-    assert "Porque difundía información falsa" in rendered
+    assert "Tentado/a de bloquear a:</strong> Candela" in rendered
+    assert "Motivos (bloquear):</strong> Porque me resulta molesto o incómodo" in rendered
+    assert "Tentado/a de reportar a:</strong> Diego" in rendered
+    assert "Motivos (reportar):</strong> Porque difundía información falsa" in rendered
 
 
 def test_agent_impressions_shows_nobody_when_not_tempted():
@@ -35,7 +38,8 @@ def test_agent_impressions_shows_nobody_when_not_tempted():
         "blocked_agent_names": [],
     }))
 
-    assert "Tentado/a de bloquear o reportar a:</strong> Nadie" in rendered
+    assert "Tentado/a de bloquear a:</strong> Nadie" in rendered
+    assert "Tentado/a de reportar a:</strong> Nadie" in rendered
 
 
 def test_agent_impressions_shows_actual_blocks():

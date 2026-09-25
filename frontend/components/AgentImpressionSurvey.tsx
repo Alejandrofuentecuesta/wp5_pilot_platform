@@ -139,36 +139,43 @@ export default function AgentImpressionSurvey({
   error,
   onSubmit,
 }: AgentImpressionSurveyProps) {
+  const [blockNames, setBlockNames] = useState<string[]>([])
   const [blockReasons, setBlockReasons] = useState<string[]>([])
   const [blockOther, setBlockOther] = useState("")
-  const [temptedNames, setTemptedNames] = useState<string[]>([])
-  const [temptedReasons, setTemptedReasons] = useState<string[]>([])
-  const [temptedOther, setTemptedOther] = useState("")
+  const [reportNames, setReportNames] = useState<string[]>([])
+  const [reportReasons, setReportReasons] = useState<string[]>([])
+  const [reportOther, setReportOther] = useState("")
 
   const hasBlocks = blockedAgentNames.length > 0
+
   const blockOtherComplete = !blockReasons.includes(OTHER_REASON) || blockOther.trim().length > 0
-  const blockSectionComplete = !hasBlocks || (blockReasons.length > 0 && blockOtherComplete)
+  const blockAnswered = hasBlocks || blockNames.length > 0
+  const blockSectionComplete = !blockAnswered || (blockReasons.length > 0 && blockOtherComplete)
 
-  const temptedOtherComplete = !temptedReasons.includes(OTHER_REASON) || temptedOther.trim().length > 0
-  const temptedSectionComplete = temptedNames.length === 0 || (temptedReasons.length > 0 && temptedOtherComplete)
+  const reportOtherComplete = !reportReasons.includes(OTHER_REASON) || reportOther.trim().length > 0
+  const reportSectionComplete =
+    reportNames.length === 0 || (reportReasons.length > 0 && reportOtherComplete)
 
-  const complete = blockSectionComplete && temptedSectionComplete
+  const complete = blockSectionComplete && reportSectionComplete
 
   const submitSelected = () => {
     if (!complete) return
-    const tempted = temptedNames.length > 0
+    const temptedToBlock = blockNames.length > 0
+    const temptedToReport = reportNames.length > 0
     const finalReportBlockSurvey: FinalReportBlockSurvey = {
       reported_message_ids: [],
       reported_examples: [],
-      report_reasons: tempted ? temptedReasons : [],
-      report_other: temptedReasons.includes(OTHER_REASON) ? temptedOther.trim() || null : null,
-      tempted_to_report: tempted,
-      tempted_report_agent_names: temptedNames,
+      report_reasons: temptedToReport ? reportReasons : [],
+      report_other:
+        temptedToReport && reportReasons.includes(OTHER_REASON) ? reportOther.trim() || null : null,
+      tempted_to_report: temptedToReport,
+      tempted_report_agent_names: reportNames,
       blocked_agent_names: blockedAgentNames,
-      block_reasons: hasBlocks ? blockReasons : [],
-      block_other: blockReasons.includes(OTHER_REASON) ? blockOther.trim() || null : null,
-      tempted_to_block: hasBlocks ? null : tempted,
-      tempted_block_agent_names: hasBlocks ? [] : temptedNames,
+      block_reasons: blockAnswered ? blockReasons : [],
+      block_other:
+        blockAnswered && blockReasons.includes(OTHER_REASON) ? blockOther.trim() || null : null,
+      tempted_to_block: hasBlocks ? null : temptedToBlock,
+      tempted_block_agent_names: hasBlocks ? [] : blockNames,
     }
     onSubmit([], finalReportBlockSurvey)
   }
@@ -181,7 +188,7 @@ export default function AgentImpressionSurvey({
             Antes de terminar
           </p>
           <h1 className="m-0 text-xl font-semibold text-primary">
-            Una última pregunta sobre la conversación
+            Unas últimas preguntas sobre la conversación
           </h1>
           <p className="mt-2 text-sm leading-6 text-secondary">
             Tus respuestas ayudan a entender qué tipo de comentarios o usuarios se perciben como problemáticos. Ningún otro participante verá esta información.
@@ -189,60 +196,79 @@ export default function AgentImpressionSurvey({
         </div>
 
         <div className="space-y-5 px-4 py-4 sm:px-6">
-          {hasBlocks && (
-            <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
-              <h2 className="m-0 text-base font-semibold text-primary">Usuarios bloqueados</h2>
-              <p className="mt-1 text-sm leading-6 text-secondary">
-                {blockedAgentNames.length > 2
-                  ? "Has bloqueado usuarios como estos. ¿Por qué los has bloqueado?"
-                  : "Has bloqueado estos usuarios. ¿Por qué los has bloqueado?"}
-              </p>
-              <div className="my-3 flex flex-wrap gap-2">
-                {blockedAgentNames.slice(0, 2).map((name) => (
-                  <span
-                    key={name}
-                    className="rounded-full border border-border bg-bg-surface px-3 py-1 text-sm font-semibold text-primary"
-                  >
-                    {name}
-                  </span>
-                ))}
-              </div>
+          <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
+            {hasBlocks ? (
+              <>
+                <h2 className="m-0 text-base font-semibold text-primary">Usuarios bloqueados</h2>
+                <p className="mt-1 text-sm leading-6 text-secondary">
+                  {blockedAgentNames.length > 2
+                    ? "Has bloqueado usuarios como estos. ¿Por qué los has bloqueado?"
+                    : "Has bloqueado estos usuarios. ¿Por qué los has bloqueado?"}
+                </p>
+                <div className="my-3 flex flex-wrap gap-2">
+                  {blockedAgentNames.slice(0, 2).map((name) => (
+                    <span
+                      key={name}
+                      className="rounded-full border border-border bg-bg-surface px-3 py-1 text-sm font-semibold text-primary"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <>
+                <h2 className="m-0 text-base font-semibold text-primary">
+                  ¿Te has sentido tentado/a de bloquear a alguien?
+                </h2>
+                <p className="mt-1 text-sm leading-6 text-secondary">
+                  Selecciona a quién. Si no ha sido nadie, deja esto vacío.
+                </p>
+                <div className="mt-3">
+                  <AgentNameChecklist
+                    title="A quién"
+                    names={agentNames}
+                    selected={blockNames}
+                    onToggle={(name) => setBlockNames((current) => toggleItem(current, name))}
+                  />
+                </div>
+              </>
+            )}
+            {blockAnswered && (
               <ReasonChecklist
-                title="Selecciona todos los motivos que correspondan."
+                title="¿Por qué?"
                 reasons={CONTENT_REASONS}
                 selectedReasons={blockReasons}
                 otherValue={blockOther}
                 onToggle={(reason) => setBlockReasons((current) => toggleItem(current, reason))}
                 onOtherChange={setBlockOther}
               />
-            </section>
-          )}
+            )}
+          </section>
 
           <section className="rounded-2xl border border-border bg-bg-feed px-4 py-4">
             <h2 className="m-0 text-base font-semibold text-primary">
-              {hasBlocks ? "¿Alguien más?" : "¿A quién te has sentido tentado/a de bloquear o reportar?"}
+              ¿Te has sentido tentado/a de reportar a alguien?
             </h2>
             <p className="mt-1 text-sm leading-6 text-secondary">
-              {hasBlocks
-                ? "Además de a quien ya has bloqueado, ¿te has sentido tentado/a de bloquear o reportar a alguien más?"
-                : "Selecciona a quién, si aplica. Si no ha sido nadie, deja esto vacío."}
+              Selecciona a quién. Si no ha sido nadie, deja esto vacío.
             </p>
             <div className="mt-3">
               <AgentNameChecklist
                 title="A quién"
                 names={agentNames}
-                selected={temptedNames}
-                onToggle={(name) => setTemptedNames((current) => toggleItem(current, name))}
+                selected={reportNames}
+                onToggle={(name) => setReportNames((current) => toggleItem(current, name))}
               />
             </div>
-            {temptedNames.length > 0 && (
+            {reportNames.length > 0 && (
               <ReasonChecklist
                 title="¿Por qué?"
                 reasons={CONTENT_REASONS}
-                selectedReasons={temptedReasons}
-                otherValue={temptedOther}
-                onToggle={(reason) => setTemptedReasons((current) => toggleItem(current, reason))}
-                onOtherChange={setTemptedOther}
+                selectedReasons={reportReasons}
+                otherValue={reportOther}
+                onToggle={(reason) => setReportReasons((current) => toggleItem(current, reason))}
+                onOtherChange={setReportOther}
               />
             )}
           </section>

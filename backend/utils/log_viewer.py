@@ -871,15 +871,23 @@ def render_agent_impressions(ev: dict) -> str:
 
     rows = []
     blocked = survey.get("blocked_agent_names") or []
+    tempted_block = survey.get("tempted_block_agent_names") or []
+    tempted_report = survey.get("tempted_report_agent_names") or []
+    block_why = reasons(survey.get("block_reasons"), survey.get("block_other"))
+    report_why = reasons(survey.get("report_reasons"), survey.get("report_other"))
+
     if blocked:
         rows.append(("Bloqueó a", names(blocked)))
-        rows.append(("Motivos del bloqueo", reasons(survey.get("block_reasons"), survey.get("block_other"))))
+        rows.append(("Motivos (bloquear)", block_why))
+    elif survey:
+        rows.append(("Tentado/a de bloquear a", names(tempted_block) if tempted_block else "Nadie"))
+        if tempted_block:
+            rows.append(("Motivos (bloquear)", block_why))
 
-    tempted = survey.get("tempted_report_agent_names") or survey.get("tempted_block_agent_names") or []
     if survey:
-        rows.append(("Tentado/a de bloquear o reportar a", names(tempted) if tempted else "Nadie"))
-        if tempted:
-            rows.append(("Motivos", reasons(survey.get("report_reasons"), survey.get("report_other"))))
+        rows.append(("Tentado/a de reportar a", names(tempted_report) if tempted_report else "Nadie"))
+        if tempted_report:
+            rows.append(("Motivos (reportar)", report_why))
 
     for rating in data.get("ratings") or []:
         comment = f" — {_esc(str(rating.get('comment')))}" if rating.get("comment") else ""

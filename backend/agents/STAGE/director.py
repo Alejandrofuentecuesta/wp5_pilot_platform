@@ -470,7 +470,14 @@ def build_action_user_prompt(
     agent_traits: Optional[Dict[str, Dict[str, str]]] = None,
     template: Optional[str] = None,
 ) -> str:
-    """Build the Director Action user prompt with dynamic data."""
+    """Build the Director Action user prompt with dynamic data.
+
+    The built-in action templates keep all stable instructions in the system
+    prompt.  Re-rendering their shared text here roughly doubles each request
+    and can make the Director exceed the provider timeout as the chat grows.
+    Custom templates retain the legacy rendering behaviour because their
+    shared text may intentionally contain user-message instructions.
+    """
     chat_log = format_chat_log(messages)
     profiles_str = format_agent_profiles(agent_profiles, traits=agent_traits)
     participation_summary = (
@@ -483,6 +490,45 @@ def build_action_user_prompt(
     action_summary = format_action_summary(action_counts) if action_counts else "(No actions yet)"
 
     raw = template if (isinstance(template, str) and template.strip()) else _ACTION_TEMPLATE
+    if raw in {_ACTION_TEMPLATE, _BOOSTED_ACTION_TEMPLATE}:
+        target_constraints = (
+            target_constraints_by_speaker.strip()
+            or "(No speaker-specific target constraints this turn)"
+        )
+        return f"""# Director - Design Action: Current Turn Data
+
+Use these turn-specific inputs with the decision rules and JSON output schema in the system prompt.
+
+## Validity Priority
+
+**Internal validity**: {internal_validity_summary}
+
+**Ecological validity**: {ecological_validity_summary}
+
+**Observed treatment fidelity**
+These are simple running percentages for agent messages so far.
+- Like-minded / not-like-minded percentages are structural counts based on fixed treatment roles.
+- Civil / incivil percentages are observed counts from the classifier.
+
+{treatment_fidelity_summary}
+
+## Eligible Performer Profiles
+
+{profiles_str}
+
+**Participation so far:** {participation_summary}
+
+## Recent Chat and Action State
+
+{chat_log}
+
+**Action distribution so far:** {action_summary}
+
+{target_constraints}
+
+Return exactly one JSON action using the schema defined in the system prompt.
+"""
+
     prompt = _render_prompt(raw, "user")
     prompt = prompt.replace("{CHATROOM_CONTEXT}", chatroom_context)
     prompt = prompt.replace("{PARTICIPANT_STANCE_HINT}", participant_stance_hint)

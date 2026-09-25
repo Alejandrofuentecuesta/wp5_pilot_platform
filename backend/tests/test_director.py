@@ -179,6 +179,39 @@ class TestExplicitParticipationSummaries:
         assert "Eligible speakers this turn:" in prompt
         assert "Bob: spoken=no" in prompt
 
+    def test_builtin_action_user_prompt_contains_only_turn_data(self):
+        prompt = build_action_user_prompt(
+            messages=[_msg(sender="Alice", content="Hola", msg_id="m1")],
+            agent_profiles={"Alice": "Responded sceptically", "Bob": ""},
+            internal_validity_summary="Restore the target balance.",
+            ecological_validity_summary="Respond naturally to the latest message.",
+            treatment_fidelity_summary="- Like-minded messages so far: 1/2 (50%)",
+            participation_summary="- Alice: messages=1\n- Bob: messages=0",
+            target_constraints_by_speaker="- Bob: participant target=support-only",
+        )
+
+        assert "Restore the target balance." in prompt
+        assert "Respond naturally to the latest message." in prompt
+        assert "**Alice**: recent=Responded sceptically" in prompt
+        assert "[m1] Alice: Hola" in prompt
+        assert "participant target=support-only" in prompt
+        assert "Work through the following steps in order" not in prompt
+        assert "Useful repertoires:" not in prompt
+        assert len(prompt) < 5_000
+
+    def test_custom_action_template_keeps_legacy_shared_text(self):
+        template = """Shared custom instruction.\n{#USER}\nChat: {CHAT_LOG}\n{/USER}"""
+        prompt = build_action_user_prompt(
+            messages=[_msg(sender="Alice", content="Hola", msg_id="m1")],
+            agent_profiles={"Alice": ""},
+            internal_validity_summary="ok",
+            ecological_validity_summary="ok",
+            template=template,
+        )
+
+        assert "Shared custom instruction." in prompt
+        assert "Chat: [m1] Alice: Hola" in prompt
+
 
 class TestBuildActionSystemPrompt:
     def test_uses_alignment_cells_as_primary_treatment_rule(self):

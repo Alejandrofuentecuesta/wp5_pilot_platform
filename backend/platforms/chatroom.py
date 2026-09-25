@@ -918,7 +918,16 @@ class SimulationSession:
         print(f"Session {self.session_id} resumed (crash recovery)")
 
     async def stop(self, reason: str = "completed") -> None:
-        """Stop the session and persist end state."""
+        """Stop the session and persist end state.
+
+        Idempotent: a session already stopped (e.g. one still parked in
+        session_manager's in-memory registry during its reap grace period)
+        must not be torn down and re-persisted a second time — the backend
+        shutdown handler calls stop("server_shutdown") on every in-memory
+        session regardless of whether it already ended.
+        """
+        if not self.running:
+            return
         self.running = False
         if self.clock_task:
             self.clock_task.cancel()

@@ -95,13 +95,19 @@ async def end_session(
     reason: str,
     ended_at: Optional[datetime] = None,
 ) -> None:
-    """Transition session status to 'ended'."""
+    """Transition session status to 'ended'.
+
+    Guarded by ``status != 'ended'`` so a second call (e.g. the backend
+    shutdown handler re-stopping every in-memory session, including ones
+    that already ended minutes earlier via user_exit/duration_expired/etc.)
+    can never clobber the real end_reason with "server_shutdown".
+    """
     async with pool.acquire() as conn:
         await conn.execute(
             """
             UPDATE sessions
             SET    status = 'ended', end_reason = $1, ended_at = $2
-            WHERE  session_id = $3
+            WHERE  session_id = $3 AND status != 'ended'
             """,
             reason,
             ended_at or datetime.now(timezone.utc),

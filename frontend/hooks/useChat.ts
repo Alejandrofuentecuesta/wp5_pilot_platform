@@ -121,6 +121,10 @@ export function useChat() {
   // Researcher hold (Safety tab): the room is frozen and the participant is
   // shown a neutral notice; only a server resume event clears it.
   const [safetyHoldNotice, setSafetyHoldNotice] = useState<string | null>(null)
+  // The server reports on (re)connect that the room is idle-paused. A page
+  // reload loses the local reminder, and only the participant can lift the
+  // pause, so the reminder is shown again from this flag.
+  const [serverIdlePaused, setServerIdlePaused] = useState(false)
   const [exitModalOpen, setExitModalOpen] = useState(false)
   const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
   const [initialMessageDone, setInitialMessageDone] = useState(false)
@@ -262,6 +266,7 @@ export function useChat() {
       } else {
         setSafetyHoldNotice(null)
       }
+      setServerIdlePaused(Boolean(obj.idle_paused))
       setBehaviorConfig({
         behaviorTrackingEnabled: Boolean(obj.behavior_tracking_enabled),
         idlePromptEnabled: Boolean(obj.idle_prompt_enabled),
@@ -322,7 +327,7 @@ export function useChat() {
   }, [isConnected])
 
   // Behavioural telemetry + idle "please write" reminder.
-  const { track, trackImmediately, noteActivity, idlePromptVisible } =
+  const { track, trackImmediately, noteActivity, idlePromptVisible: idleReminderDue } =
     useBehaviorTracking({
       sessionId,
       trackingEnabled: behaviorConfig.behaviorTrackingEnabled,
@@ -330,21 +335,26 @@ export function useChat() {
       idleSeconds: behaviorConfig.idlePromptSeconds,
       idleActive: initialMessageDone,
     })
+  const idlePromptVisible = idleReminderDue || serverIdlePaused
 
   // Idle past the activity floor: tell the backend to freeze the simulation
   // so the participant does not miss exposure while the reminder is shown.
-  // Fires once per idle episode (the flag only re-arms after a resume); the
-  // backend guards against a repeat restarting its away-clock.
+  // Sent when the reminder appears and again after every reconnect while it
+  // is up (a send during a reconnect gap is dropped); the backend guards
+  // against a repeat restarting its away-clock.
   useEffect(() => {
-    if (idlePromptVisible) send({ type: "idle_pause" } as any)
-  }, [idlePromptVisible, send])
+    if (idleReminderDue && isConnected) send({ type: "idle_pause" } as any)
+  }, [idleReminderDue, isConnected, send])
 
   // Dismissing the reminder resumes the simulation and starts a fresh idle
   // window. noteActivity resets the idle clock and hides the reminder, so the
-  // participant gets the full interval again before the next pause.
+  // participant gets the full interval again before the next pause. If the
+  // resume is lost to a reconnect gap, the server still reports the pause on
+  // reconnect and the reminder comes back.
   const resumeFromIdle = useCallback(() => {
     send({ type: "resume" } as any)
     noteActivity()
+    setServerIdlePaused(false)
   }, [send, noteActivity])
 
   // Per-message composition metrics (time spent typing, edit effort).
@@ -496,6 +506,9 @@ export function useChat() {
   const sendMessage = useCallback((customContent?: string): boolean => {
     const text = typeof customContent === "string" ? customContent.trim() : inputValue.trim()
     if (!text) return false
+    // Nothing is sent into a room frozen by a researcher (safety hold or
+    // paused experiment), whichever input it comes from.
+    if (safetyHoldNotice) return false
     // Self-typed occurrences of the participant's own name travel as the
     // alias; the quoted text was inbound-mapped on arrival, so it is mapped
     // back before leaving.
@@ -519,12 +532,14 @@ export function useChat() {
       char_count: content.length,
     })
     composeRef.current = { startedAt: 0, keystrokes: 0, backspaces: 0, pasted: false }
+    // Posting lifts an idle pause on the server too.
     noteActivity()
+    setServerIdlePaused(false)
 
     setInputValue("")
     setReplyTo(null)
     return true
-  }, [inputValue, replyTo, detectedMentions, send, track, noteActivity])
+  }, [inputValue, replyTo, detectedMentions, send, track, noteActivity, safetyHoldNotice])
 
   const submitInitialNewsMessage = useCallback(
     (initialMessage: string) => {

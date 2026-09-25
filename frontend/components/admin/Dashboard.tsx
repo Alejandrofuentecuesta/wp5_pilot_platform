@@ -13,6 +13,7 @@ import {
   getExperimentConfig,
   getEvents,
   pauseExperiment,
+  PauseNeedsConfirmError,
   downloadSessionsCSV,
   downloadExperimentBundle,
   downloadSessionBundle,
@@ -1128,26 +1129,34 @@ function SettingsTab({
   const [feedback, setFeedback] = useState<{ msg: string; ok: boolean } | null>(null)
   const [pauseLoading, setPauseLoading] = useState(false)
   const [pauseFeedback, setPauseFeedback] = useState<{ msg: string; ok: boolean } | null>(null)
+  // Set when pausing would freeze live sessions: the count shown in the
+  // confirmation dialog before the pause goes through.
+  const [freezeConfirm, setFreezeConfirm] = useState<number | null>(null)
 
   const selectedExperiment = experiments.find((e) => e.experiment_id === selectedExperimentId)
 
-  const handleTogglePause = async () => {
+  const handleTogglePause = async (confirmFreeze = false) => {
     if (!selectedExperiment) return
+    setFreezeConfirm(null)
     setPauseLoading(true)
     setPauseFeedback(null)
     try {
       if (selectedExperiment.paused) {
         // Resuming makes this the live experiment, pausing any other — the
         // same guarded operation as the dropdown switch.
-        await activateExperiment(adminKey, selectedExperiment.experiment_id)
-        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" is now live — participants can join again. Any other experiment is paused.`, ok: true })
+        const res = await activateExperiment(adminKey, selectedExperiment.experiment_id)
+        const resumed = res.sessions_resumed ? ` ${res.sessions_resumed} frozen session(s) resumed.` : ""
+        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" is now live — participants can join again. Any other experiment is paused.${resumed}`, ok: true })
       } else {
-        await pauseExperiment(adminKey, selectedExperiment.experiment_id)
-        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" paused — new participants will be turned away.`, ok: true })
+        const res = await pauseExperiment(adminKey, selectedExperiment.experiment_id, confirmFreeze)
+        const frozen = res.sessions_paused ? ` ${res.sessions_paused} session(s) in progress are frozen until you resume.` : ""
+        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" paused — new participants will be turned away.${frozen}`, ok: true })
       }
       onRefresh()
     } catch (e) {
-      if (e instanceof ActivationBlockedError) {
+      if (e instanceof PauseNeedsConfirmError) {
+        setFreezeConfirm(e.total)
+      } else if (e instanceof ActivationBlockedError) {
         const where = e.liveSessions.map((s) => `${s.experiment_id} (${s.count})`).join(", ")
         setPauseFeedback({ msg: `${e.message} ${e.total} session(s) still running: ${where}.`, ok: false })
       } else {
@@ -1219,13 +1228,15 @@ function SettingsTab({
                 Use the button below if you need to temporarily prevent new participants from joining.
               </p>
               <p>
-                Pausing does <strong>not</strong> affect sessions already in progress — it only prevents new tokens from being consumed.
+                Pausing turns new participants away <strong>and freezes any session in progress</strong> until you
+                resume: the agents and the session timer stop, and participants see a neutral &ldquo;Un momento&rdquo;
+                screen. The frozen time is added back on resume, so they still receive their full session.
               </p>
             </div>
 
             <div className="flex items-center gap-3">
               <button
-                onClick={handleTogglePause}
+                onClick={() => handleTogglePause()}
                 disabled={pauseLoading}
                 className={`px-4 py-2 text-xs font-medium rounded-lg transition-colors ${
                   selectedExperiment.paused
@@ -1326,6 +1337,41 @@ function SettingsTab({
       </div>
 
       {/* Confirmation modals */}
+      {freezeConfirm !== null && selectedExperiment && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+          <div className="bg-admin-surface rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden border border-admin-border">
+            <div className="px-5 pt-5 pb-3">
+              <h3 className="text-sm font-semibold text-admin-text">
+                Pause &ldquo;{selectedExperiment.experiment_id}&rdquo; and freeze {freezeConfirm} live session(s)?
+              </h3>
+              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
+                <strong>{freezeConfirm} participant(s)</strong> are in a session of this experiment right now.
+                Pausing <strong>freezes their sessions until you resume the experiment</strong>: the agents stop,
+                their session timer stops, and they see a neutral &ldquo;Un momento&rdquo; screen and cannot write.
+              </p>
+              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
+                Nothing ends on its own while the experiment is paused. The frozen time is added back when you resume,
+                so participants still receive their full session. New participants are turned away meanwhile.
+              </p>
+            </div>
+            <div className="flex border-t border-admin-border">
+              <button
+                onClick={() => setFreezeConfirm(null)}
+                className="flex-1 py-2.5 text-xs font-medium text-admin-muted hover:bg-admin-raised transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleTogglePause(true)}
+                className="flex-1 py-2.5 text-xs font-medium text-admin-pastel-amber-text hover:bg-admin-pastel-amber transition-colors border-l border-admin-border"
+              >
+                Pause and freeze {freezeConfirm} session(s)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {confirming === "reset_sessions" && matchedExperiment && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
           <div className="bg-admin-surface rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden border border-admin-border">

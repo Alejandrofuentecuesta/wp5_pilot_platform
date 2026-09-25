@@ -138,11 +138,11 @@ class SessionQueue:
             duration = getattr(session.state, "duration_minutes", 20)
             if started:
                 # Paused time extends the wall-clock end (the countdown is
-                # frozen while the participant is disconnected).
+                # frozen while the session is paused or held).
                 paused = getattr(session.state, "paused_seconds", 0.0)
-                pause_started = getattr(session, "_pause_started_monotonic", None)
-                if pause_started is not None:
-                    paused += time.monotonic() - pause_started
+                frozen_since = getattr(session, "_frozen_since", None)
+                if frozen_since is not None:
+                    paused += time.monotonic() - frozen_since
                 projected = started + timedelta(minutes=duration, seconds=paused)
                 end_times.append(projected)
 

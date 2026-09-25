@@ -21,6 +21,8 @@ interface ChatRoomProps {
   isConnected: boolean
   // Input
   inputValue: string
+  // True while a researcher freeze is shown: nothing may be sent.
+  inputDisabled?: boolean
   setInputValue: (v: string) => void
   // Reply
   replyTo: Message | null
@@ -60,6 +62,7 @@ export default function ChatRoom({
   displayName,
   isConnected,
   inputValue,
+  inputDisabled = false,
   setInputValue,
   replyTo,
   setReplyTo,
@@ -121,6 +124,7 @@ export default function ChatRoom({
         replyTo={replyTo}
         onCancelReply={() => setReplyTo(null)}
         onSend={sendMessage}
+        disabled={inputDisabled}
       />
 
       {/* Report modal */}

@@ -303,13 +303,25 @@ class SimulationSession:
         self.session_id = session_id
         self.experiment_id = experiment_id
         self.logger = Logger(session_id, experiment_id)
-        self._paused = False
+        # Set while the researcher has paused the whole experiment from the
+        # dashboard: an operator freeze like the safety hold (see
+        # ``pause_for_experiment``).
+        self._experiment_paused = False
         # Set (to a monotonic timestamp) while the session is frozen — either
         # the participant disconnected, or they went idle past the activity
         # floor. The clock loop freezes and enforces the rejoin window.
         # ``_pause_trigger`` records which so the abandon reason can differ.
         self._pause_started_monotonic: Optional[float] = None
         self._pause_trigger: Optional[str] = None
+        # One freeze clock shared by every reason the session can be frozen
+        # (participant pause, safety hold, experiment pause). It runs while
+        # any reason is active and is credited to the session clock once,
+        # when the last reason lifts, so overlapping reasons are never
+        # credited twice. ``_operator_frozen_since`` marks when a researcher
+        # freeze (hold or experiment pause) began, so that time can be kept
+        # out of the participant's rejoin window.
+        self._frozen_since: Optional[float] = None
+        self._operator_frozen_since: Optional[float] = None
 
         if not _config:
             raise RuntimeError(
@@ -552,9 +564,9 @@ class SimulationSession:
         # disconnect/idle pause so a rejoin cannot lift it; only an explicit
         # resume from the dashboard does. Restored from the DB on recovery.
         self._safety_hold_started_monotonic: Optional[float] = None
-        self._safety_hold_notified = False
         if _safety_paused_at is not None:
             self._safety_hold_started_monotonic = time.monotonic()
+            self._sync_freeze()
         self.emotions_checkup_enabled = bool(self.simulation_config.get("emotions_checkup_enabled", False))
         self.emotions_checkup_time_minutes = float(self.simulation_config.get("emotions_checkup_time_minutes", 1))
         self._emotions_checkup_triggered = False
@@ -1046,14 +1058,16 @@ class SimulationSession:
 
         while self.running:
             try:
-                # Researcher hold from the Safety tab: freeze everything, no
+                # Researcher freeze (a hold from the Safety tab or the whole
+                # experiment paused from the dashboard): freeze everything, no
                 # timers run, and nothing but an explicit resume lifts it.
-                if self.safety_held:
+                if self.operator_held:
                     await asyncio.sleep(tick_interval)
                     continue
 
-                # Participant disconnected: freeze everything and enforce the
-                # rejoin window. attach_websocket() clears the pause.
+                # Participant disconnected or idle: freeze everything and
+                # enforce the rejoin window. A rejoin clears a disconnect
+                # pause; only the participant clears an idle pause.
                 if self._pause_started_monotonic is not None:
                     away_seconds = time.monotonic() - self._pause_started_monotonic
                     if away_seconds >= REJOIN_WINDOW_MINUTES * 60:
@@ -1101,10 +1115,6 @@ class SimulationSession:
                     continue
 
                 if not self.features.agents_active(self.state):
-                    await asyncio.sleep(tick_interval)
-                    continue
-
-                if self._paused:
                     await asyncio.sleep(tick_interval)
                     continue
 
@@ -1424,6 +1434,10 @@ class SimulationSession:
         """Handle an incoming user message — persist to DB and broadcast."""
         if not self.running or self._safety_intervention_triggered:
             return  # session has ended; silently drop
+        # Posting is activity, so it lifts an idle pause. The reminder does
+        # not take keyboard focus from the input, so a participant can send
+        # a message without pressing the reminder's button.
+        await self.resume_from_idle()
         message = Message.create(
             sender=self.state.user_name,
             content=content,
@@ -1440,8 +1454,11 @@ class SimulationSession:
             now = datetime.now(timezone.utc)
             self.state.start_time = now
             # Pause credit accrued before the timer started (e.g. a disconnect
-            # on the news screen) must not extend the live session.
+            # on the news screen) must not extend the live session, and
+            # neither may a freeze still running from before it started.
             self.state.paused_seconds = 0.0
+            if self._frozen_since is not None:
+                self._frozen_since = time.monotonic()
             self.logger.log_session_start(
                 self.experimental_config, self.simulation_config,
                 self.treatment_group,
@@ -1625,13 +1642,22 @@ class SimulationSession:
             await self.stop(reason="participant_safety")
 
 
-    # ── Safety hold (researcher-initiated, from the Safety tab) ──────────────
+    # ── Researcher freezes: safety hold and experiment pause ─────────────────
 
     SAFETY_HOLD_NOTICE = "La sala está en pausa por un momento técnico. Volverá en breve."
 
     @property
     def safety_held(self) -> bool:
         return self._safety_hold_started_monotonic is not None
+
+    @property
+    def operator_held(self) -> bool:
+        """True while a researcher freeze is active (safety hold or experiment pause).
+
+        Both show the participant the same neutral notice, and neither can be
+        lifted by the participant.
+        """
+        return self.safety_held or self._experiment_paused
 
     async def pause_for_safety(self, by: str) -> bool:
         """Freeze the session on a researcher's instruction.
@@ -1644,8 +1670,9 @@ class SimulationSession:
         """
         if self.safety_held or not self.running:
             return False
+        was_held = self.operator_held
         self._safety_hold_started_monotonic = time.monotonic()
-        self._safety_hold_notified = False
+        self._sync_freeze()
         try:
             await safety_repo.set_safety_paused(
                 db_conn.get_pool(), self.session_id, datetime.now(timezone.utc)
@@ -1653,29 +1680,85 @@ class SimulationSession:
         except Exception as exc:
             self.logger.log_error("persist_safety_pause", str(exc))
         self.logger.log_event("session_paused", {"trigger": "safety", "by": by})
-        await self._notify_safety_hold(paused=True)
+        if not was_held:
+            await self._notify_hold(paused=True)
         print(f"Session {self.session_id} paused by safety reviewer {by!r}")
         return True
 
     async def resume_from_safety(self, by: str) -> float:
-        """Lift the safety hold; the held time is credited back to the session."""
+        """Lift the safety hold.
+
+        Returns the seconds credited to the session clock: the frozen time,
+        once the hold was the last reason for the freeze, else 0 (the rest is
+        credited when the last reason lifts).
+        """
         if not self.safety_held:
             return 0.0
-        paused_for = time.monotonic() - self._safety_hold_started_monotonic
+        held_for = time.monotonic() - self._safety_hold_started_monotonic
         self._safety_hold_started_monotonic = None
-        self.state.paused_seconds += paused_for
+        credited = self._sync_freeze()
         try:
             pool = db_conn.get_pool()
-            await session_repo.add_paused_seconds(pool, self.session_id, paused_for)
+            if credited:
+                await session_repo.add_paused_seconds(pool, self.session_id, credited)
             await safety_repo.set_safety_paused(pool, self.session_id, None)
         except Exception as exc:
             self.logger.log_error("persist_safety_resume", str(exc))
         self.logger.log_event(
-            "session_resumed", {"trigger": "safety", "by": by, "paused_for_seconds": round(paused_for, 1)}
+            "session_resumed",
+            {
+                "trigger": "safety",
+                "by": by,
+                "paused_for_seconds": round(held_for, 1),
+                "credited_seconds": round(credited, 1),
+            },
         )
-        await self._notify_safety_hold(paused=False)
-        print(f"Session {self.session_id} resumed by safety reviewer {by!r} after {paused_for:.0f}s")
-        return paused_for
+        if not self.operator_held:
+            await self._notify_hold(paused=False)
+        print(f"Session {self.session_id} resumed by safety reviewer {by!r} after {held_for:.0f}s")
+        return credited
+
+    async def pause_for_experiment(self) -> bool:
+        """Freeze the session because the researcher paused the whole experiment.
+
+        The same freeze as the safety hold: no turns, countdown stopped, the
+        participant sees the neutral hold notice, and only resuming the
+        experiment lifts it. Not persisted per session: the paused flag lives
+        on the experiment, and the session manager re-applies it when a
+        session is created or rebuilt. Returns False if already paused or not
+        running.
+        """
+        if self._experiment_paused or not self.running:
+            return False
+        was_held = self.operator_held
+        self._experiment_paused = True
+        self._sync_freeze()
+        self.logger.log_event("session_paused", {"trigger": "experiment"})
+        if not was_held:
+            await self._notify_hold(paused=True)
+        print(f"Session {self.session_id} paused with its experiment")
+        return True
+
+    async def resume_from_experiment(self) -> float:
+        """Lift the experiment pause; returns the seconds credited (see ``resume_from_safety``)."""
+        if not self._experiment_paused:
+            return 0.0
+        self._experiment_paused = False
+        credited = self._sync_freeze()
+        if credited:
+            try:
+                await session_repo.add_paused_seconds(
+                    db_conn.get_pool(), self.session_id, credited
+                )
+            except Exception as exc:
+                self.logger.log_error("persist_paused_seconds", str(exc))
+        self.logger.log_event(
+            "session_resumed", {"trigger": "experiment", "credited_seconds": round(credited, 1)}
+        )
+        if not self.operator_held:
+            await self._notify_hold(paused=False)
+        print(f"Session {self.session_id} resumed with its experiment")
+        return credited
 
     async def end_for_safety(self, by: str) -> None:
         """End the session on a researcher's instruction (panel return r=2)."""
@@ -1684,7 +1767,7 @@ class SimulationSession:
         await asyncio.sleep(0.5)  # let pub/sub deliver before teardown
         await self.stop(reason="safety_stop")
 
-    async def _notify_safety_hold(self, *, paused: bool) -> None:
+    async def _notify_hold(self, *, paused: bool) -> None:
         """Tell the participant's client the room is frozen (no reason given)."""
         # The participant learns only that the room is held, never why: the
         # wire trigger is neutral and the reason stays server-side.
@@ -1697,9 +1780,8 @@ class SimulationSession:
         try:
             r = redis_client.get_redis()
             await redis_client.publish_event(r, self.session_id, event)
-            self._safety_hold_notified = paused
         except Exception as exc:
-            self.logger.log_error("publish_safety_hold", str(exc))
+            self.logger.log_error("publish_hold", str(exc))
 
     # ── WebSocket attachment / detachment ─────────────────────────────────────
 
@@ -1715,6 +1797,7 @@ class SimulationSession:
             return
         self._pause_started_monotonic = time.monotonic()
         self._pause_trigger = "disconnect"
+        self._sync_freeze()
         self.logger.log_event("session_paused", {"trigger": "disconnected"})
         print(f"Session {self.session_id} paused (participant disconnected)")
 
@@ -1723,43 +1806,91 @@ class SimulationSession:
 
         Same freeze as ``pause_for_disconnect`` — the clock loop stops running
         turns and the countdown stops consuming duration, so the participant
-        does not miss exposure while an idle reminder is shown. The guard is
-        essential: the client re-sends the idle signal every reminder window,
-        and a repeat must not restart the away-clock (that would defer the
-        60-minute abandon indefinitely).
+        does not miss exposure while an idle reminder is shown. Only the
+        participant lifts it: the reminder's button (``resume_from_idle``) or
+        posting a message. A reconnect does not, so the away-clock keeps
+        running through connection drops. The guard matters because the
+        client re-sends the idle signal after every reconnect, and a repeat
+        must not restart the away-clock (that would defer the idle time-out
+        indefinitely).
         """
         if self._pause_started_monotonic is not None or not self.running:
             return
         self._pause_started_monotonic = time.monotonic()
         self._pause_trigger = "idle"
+        self._sync_freeze()
         self.logger.log_event("session_paused", {"trigger": "idle"})
         print(f"Session {self.session_id} paused (participant idle)")
 
     def resume_from_pause(self) -> float:
-        """Unfreeze after a rejoin; paused time is credited back to the session.
+        """Lift the participant pause (disconnect or idle).
 
-        Returns the seconds credited by this call (0.0 if not paused).
+        Returns the seconds credited to the session clock by this call: the
+        frozen time, once no other reason (a researcher hold) keeps the
+        session frozen, else 0.0. Callers persist a non-zero credit.
         """
         if self._pause_started_monotonic is None:
             return 0.0
         paused_for = time.monotonic() - self._pause_started_monotonic
-        self.state.paused_seconds += paused_for
         self._pause_started_monotonic = None
         self._pause_trigger = None
-        self.logger.log_event("session_resumed", {"paused_for_seconds": round(paused_for, 1)})
+        credited = self._sync_freeze()
+        self.logger.log_event(
+            "session_resumed",
+            {"paused_for_seconds": round(paused_for, 1), "credited_seconds": round(credited, 1)},
+        )
         print(f"Session {self.session_id} resumed after {paused_for:.0f}s away")
-        return paused_for
+        return credited
+
+    @property
+    def frozen(self) -> bool:
+        """True while any reason freezes turns and the session countdown."""
+        return self.operator_held or self._pause_started_monotonic is not None
+
+    def _sync_freeze(self) -> float:
+        """Start or stop the shared freeze clocks after a freeze reason changed.
+
+        Every freeze reason calls this after setting or clearing its own
+        state. Returns the seconds credited to the session clock, which is
+        non-zero only when the last reason lifts.
+
+        When a researcher freeze ends, the time it overlapped a participant
+        pause is taken off that pause's away-clock: behind the hold notice
+        the participant could not see or answer the idle reminder, and the
+        clock loop does not enforce the rejoin window during the freeze.
+        """
+        now = time.monotonic()
+        if self.operator_held:
+            if self._operator_frozen_since is None:
+                self._operator_frozen_since = now
+        elif self._operator_frozen_since is not None:
+            if self._pause_started_monotonic is not None:
+                overlap = now - max(self._operator_frozen_since, self._pause_started_monotonic)
+                self._pause_started_monotonic += overlap
+            self._operator_frozen_since = None
+        if self.frozen:
+            if self._frozen_since is None:
+                self._frozen_since = now
+            return 0.0
+        if self._frozen_since is None:
+            return 0.0
+        credited = now - self._frozen_since
+        self._frozen_since = None
+        self.state.paused_seconds += credited
+        return credited
 
     async def resume_from_idle(self) -> None:
         """Resume after an idle pause and persist the credited time.
 
-        The participant stays connected through an idle pause, so unlike a
-        rejoin there is no ``attach_websocket`` to persist the credit — this
-        does it, mirroring that path, so a restart cannot under-credit the
-        session. Agent turns resume and the client receives new messages
-        through the existing pub/sub stream; the client hides its own
-        reminder locally, so no resume broadcast is needed.
+        Lifts an idle pause only; a disconnect pause is lifted by the rejoin
+        itself (``attach_websocket``). The credit is persisted here, as on
+        that path, so a restart cannot under-credit the session. Agent turns
+        resume and the client receives new messages through the existing
+        pub/sub stream; the client hides its own reminder locally, so no
+        resume broadcast is needed.
         """
+        if self._pause_trigger != "idle":
+            return
         credited = self.resume_from_pause()
         if credited:
             try:
@@ -1785,7 +1916,12 @@ class SimulationSession:
         screen that never receives another message.
         """
         self._on_subscriber_dead = on_subscriber_dead
-        credited = self.resume_from_pause()
+        # A rejoin ends a disconnect pause only. An idle pause survives it:
+        # browsers drop and re-open the socket of a hidden or sleeping tab on
+        # their own, which says nothing about whether the participant is back.
+        credited = 0.0
+        if self._pause_trigger == "disconnect":
+            credited = self.resume_from_pause()
         if credited:
             # Persist the credit so a restart does not count disconnected
             # time against the session clock during recovery.
@@ -1846,8 +1982,12 @@ class SimulationSession:
                 "user_name": self.state.user_name,
                 # A rejoin during a researcher hold must show the frozen
                 # notice again; the hold itself is not lifted by rejoining.
-                "held": self.safety_held,
-                "hold_notice": self.SAFETY_HOLD_NOTICE if self.safety_held else None,
+                "held": self.operator_held,
+                "hold_notice": self.SAFETY_HOLD_NOTICE if self.operator_held else None,
+                # A rejoin during an idle pause (including after a page reload,
+                # which loses the client's reminder) must show the reminder
+                # again: only the participant can lift the pause.
+                "idle_paused": self._pause_trigger == "idle",
             })
         except Exception as exc:
             self.logger.log_error("send_session_config", str(exc))

@@ -131,7 +131,7 @@ class TestFlags:
         pool.acquire.return_value.__aexit__ = AsyncMock(return_value=False)
         session = MagicMock()
         session.running = True
-        session.safety_held = False
+        session.operator_held = False
         session._turn_lock.__aenter__ = AsyncMock(return_value=None)
         session._turn_lock.__aexit__ = AsyncMock(return_value=False)
         session.agent_manager._handle_message = AsyncMock()

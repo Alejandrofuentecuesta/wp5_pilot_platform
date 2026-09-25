@@ -311,7 +311,9 @@ class TestSafetyHold:
             session, _ = _create_session()
             session.running = True
             await session.pause_for_safety("Laia")
+            # Backdate the hold 30 s (the hold and the shared freeze clock).
             session._safety_hold_started_monotonic -= 30
+            session._frozen_since -= 30
             credited = await session.resume_from_safety("Laia")
             assert credited >= 30
             assert session.safety_held is False

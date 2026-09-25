@@ -1154,12 +1154,13 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             elif data.get("type") == "idle_pause":
                 # Participant idle past the activity floor: freeze the sim so
                 # they do not miss exposure while the reminder is shown. The
-                # client re-sends this every reminder window; pause_for_idle
-                # guards against restarting the away-clock.
+                # client re-sends this after every reconnect while the
+                # reminder is up; pause_for_idle guards against restarting
+                # the away-clock.
                 session.pause_for_idle()
             elif data.get("type") == "resume":
                 # Participant dismissed the reminder: unfreeze and credit the
-                # paused time back to the session clock.
+                # paused time back to the session clock (idle pauses only).
                 await session.resume_from_idle()
             elif data.get("type") == "emotions_checkup_response":
                 await session.handle_emotions_checkup_response(data)
@@ -2154,7 +2155,7 @@ async def _make_experiment_live(experiment_id: str) -> int:
             raise HTTPException(status_code=404, detail=str(exc))
 
         _experiment_id = experiment_id
-        return session_manager.set_experiment_paused(experiment_id, False)
+        return await session_manager.set_experiment_paused(experiment_id, False)
 
 
 @app.post("/admin/experiment/{experiment_id}/activate")
@@ -2166,15 +2167,38 @@ async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Heade
 
 
 @app.post("/admin/experiment/{experiment_id}/pause")
-async def admin_pause_experiment(experiment_id: str, x_admin_key: str = Header(None)):
-    """Pause an experiment — blocks new sessions and silences active ones."""
+async def admin_pause_experiment(
+    experiment_id: str,
+    confirm: bool = False,
+    x_admin_key: str = Header(None),
+):
+    """Pause an experiment: new sessions are refused and live ones are frozen.
+
+    Live sessions are frozen like a safety hold (no agent turns, session
+    timer stopped, neutral notice for the participant) until the experiment
+    is resumed. While any are live, the pause needs ``confirm=true``: the
+    first call returns 409 with the count so the dashboard can say so.
+    """
     _require_admin(x_admin_key)
+    live = session_manager.count_running(experiment_id)
+    if live and not confirm:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "reason": "sessions_would_freeze",
+                "message": (
+                    f"{live} session(s) are in progress. Pausing freezes them "
+                    "until the experiment is resumed."
+                ),
+                "total": live,
+            },
+        )
     pool = _get_pool()
     try:
         await config_repo.set_paused(pool, experiment_id, True)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
-    affected = session_manager.set_experiment_paused(experiment_id, True)
+    affected = await session_manager.set_experiment_paused(experiment_id, True)
     return {"status": "paused", "experiment_id": experiment_id, "sessions_paused": affected}
 
 
@@ -2427,8 +2451,11 @@ async def admin_safety_review(
         session = await session_manager.get_session(str(row["session_id"]))
         if not session or not session.running:
             raise HTTPException(status_code=409, detail="The withheld message can only be approved while its session is live")
-        if getattr(session, "safety_held", False):
-            raise HTTPException(status_code=409, detail="Resume the paused session before approving this message")
+        if getattr(session, "operator_held", False):
+            raise HTTPException(
+                status_code=409,
+                detail="Resume the paused session (or its paused experiment) before approving this message",
+            )
 
     ok = await safety_repo.review_flag(
         pool, flag_id=flag_id, verdict=body.verdict, reviewer=reviewer, note=body.note

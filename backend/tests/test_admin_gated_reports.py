@@ -50,29 +50,72 @@ class TestReportEndpointsRequireAdmin:
         assert response.status_code == 503
 
 
-class TestReportAcceptsQueryStringKey:
-    """The report endpoint is opened as its own tab (not fetched via JS) and
-    self-refreshes while the session runs, so it also accepts the key via
-    ?admin_key= — the messages-csv endpoint is unaffected, header-only."""
+class TestReportLinks:
+    """The report tab self-refreshes while the session runs, so its URL must
+    carry its own auth. It carries a signed token for that one session,
+    issued to an admin, never the admin passphrase itself."""
 
-    def test_correct_query_key_passes_the_gate(self, client):
+    def _link(self, client, session_id="some-session-id"):
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.post(
+                f"/admin/session/{session_id}/report-link",
+                headers={"X-Admin-Key": "correct-passphrase"},
+            )
+        assert response.status_code == 200
+        return response.json()["url"]
+
+    def test_issuing_a_link_requires_the_admin_key(self, client):
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.post("/admin/session/some-session-id/report-link")
+        assert response.status_code == 401
+
+    def test_link_url_never_contains_the_passphrase(self, client):
+        url = self._link(client)
+        assert "correct-passphrase" not in url
+        assert url.startswith("/session/some-session-id/report?t=")
+
+    def test_valid_token_passes_the_gate(self, client):
+        url = self._link(client)
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.get(url)
+        assert response.status_code == 503  # reached the DB layer
+
+    def test_token_for_another_session_is_401(self, client):
+        url = self._link(client, "other-session")
+        token = url.split("?t=", 1)[1]
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.get(f"/session/some-session-id/report?t={token}")
+        assert response.status_code == 401
+
+    def test_tampered_token_is_401(self, client):
+        url = self._link(client)
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            response = client.get(url[:-1] + ("0" if url[-1] != "0" else "1"))
+        assert response.status_code == 401
+
+    def test_expired_token_is_401(self, client):
+        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
+            token = main._report_link_token("some-session-id", int(main.time.time()) - 1)
+            response = client.get(f"/session/some-session-id/report?t={token}")
+        assert response.status_code == 401
+
+    def test_rotating_the_passphrase_revokes_links(self, client):
+        url = self._link(client)
+        with patch.object(main, "ADMIN_PASSPHRASE", "new-passphrase"):
+            response = client.get(url)
+        assert response.status_code == 401
+
+    def test_passphrase_in_the_query_string_is_no_longer_accepted(self, client):
         with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
             response = client.get(
                 "/session/some-session-id/report?admin_key=correct-passphrase"
             )
-        assert response.status_code == 503
-
-    def test_wrong_query_key_is_401(self, client):
-        with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
-            response = client.get("/session/some-session-id/report?admin_key=wrong")
         assert response.status_code == 401
 
-    def test_header_takes_precedence_over_query(self, client):
-        """If both are somehow present, the header (the more deliberate,
-        JS-driven fetch path) wins over a stray query string."""
+    def test_header_still_works(self, client):
         with patch.object(main, "ADMIN_PASSPHRASE", "correct-passphrase"):
             response = client.get(
-                "/session/some-session-id/report?admin_key=wrong",
+                "/session/some-session-id/report?t=garbage",
                 headers={"X-Admin-Key": "correct-passphrase"},
             )
         assert response.status_code == 503

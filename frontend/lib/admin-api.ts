@@ -389,13 +389,31 @@ export async function viewSessionReport(
   key: string,
   sessionId: string,
 ): Promise<void> {
-  // Opened as its own tab pointed directly at the report URL (admin_key in
-  // the query string, not fetched via JS) so that tab's own self-refresh
-  // (while the session is still running — see the report endpoint) can
-  // reload the same URL and keep showing fresh data, instead of a detached
-  // blob: URL that could never be re-fetched.
-  const url = `${API_BASE}/session/${encodeURIComponent(sessionId)}/report?admin_key=${encodeURIComponent(key)}`
-  window.open(url, "_blank", "noopener")
+  // Opened as its own tab pointed directly at the report URL (not fetched
+  // via JS) so that tab's own self-refresh (while the session is still
+  // running — see the report endpoint) can reload the same URL and keep
+  // showing fresh data. The URL carries a signed token for this one report,
+  // requested with the admin key in the header, so the passphrase never
+  // appears in the address bar, the history or the server log.
+  // The tab is opened before the request so the popup blocker still sees
+  // it as a direct result of the click.
+  const tab = window.open("", "_blank")
+  try {
+    const res = await adminFetch(`/admin/session/${encodeURIComponent(sessionId)}/report-link`, key, {
+      method: "POST",
+    })
+    if (!res.ok) throw new Error("Could not open the session report")
+    const { url } = (await res.json()) as { url: string }
+    if (tab) {
+      tab.opener = null
+      tab.location.href = `${API_BASE}${url}`
+    } else {
+      window.open(`${API_BASE}${url}`, "_blank", "noopener")
+    }
+  } catch (e) {
+    tab?.close()
+    throw e
+  }
 }
 
 export async function saveSessionEvaluation(

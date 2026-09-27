@@ -1,6 +1,7 @@
 import asyncio
 import csv
 import hashlib
+import hmac
 import io
 import json
 import os
@@ -1436,6 +1437,54 @@ async def report_message(session_id: str, message_id: str, payload: ReportReques
 
 # ── HTML report endpoint ──────────────────────────────────────────────────────
 
+# A report tab authenticates with a signed, expiring token for that one
+# session instead of the admin passphrase: the tab reloads its own URL to
+# stay live, so whatever authenticates it sits in the address bar, the
+# browser history and the server's access log.
+REPORT_LINK_TTL_SECONDS = 12 * 3600
+
+
+def _report_link_key() -> bytes:
+    """Signing key derived from the admin passphrase, so rotating the
+    passphrase invalidates every report link already issued."""
+    return hashlib.sha256(b"report-link:" + ADMIN_PASSPHRASE.encode("utf-8")).digest()
+
+
+def _report_link_signature(session_id: str, expires_at: int) -> str:
+    message = f"report:{session_id}:{expires_at}".encode("utf-8")
+    return hmac.new(_report_link_key(), message, hashlib.sha256).hexdigest()
+
+
+def _report_link_token(session_id: str, expires_at: int) -> str:
+    return f"{expires_at}.{_report_link_signature(session_id, expires_at)}"
+
+
+def _valid_report_token(session_id: str, token: Optional[str]) -> bool:
+    """True if ``token`` was issued for this session and has not expired."""
+    if not ADMIN_PASSPHRASE or not token:
+        return False
+    expires_raw, _, signature = token.partition(".")
+    try:
+        expires_at = int(expires_raw)
+    except ValueError:
+        return False
+    if expires_at < time.time():
+        return False
+    return secrets.compare_digest(
+        signature.encode("utf-8"),
+        _report_link_signature(session_id, expires_at).encode("utf-8"),
+    )
+
+
+@app.post("/admin/session/{session_id}/report-link")
+async def admin_report_link(session_id: str, x_admin_key: str = Header(None)):
+    """Issue a report URL that opens only this session's report, for a limited time."""
+    _require_admin(x_admin_key)
+    expires_at = int(time.time()) + REPORT_LINK_TTL_SECONDS
+    token = _report_link_token(session_id, expires_at)
+    return {"url": f"/session/{session_id}/report?t={token}", "expires_at": expires_at}
+
+
 def _with_live_refresh(html: str, status: str) -> str:
     """Make the report tab reload itself every 5s while the session is still
     running, so an admin can watch it progress instead of reopening the
@@ -1470,20 +1519,22 @@ def _with_live_refresh(html: str, status: str) -> str:
 async def session_report(
     session_id: str,
     x_admin_key: str = Header(None),
-    admin_key: str = Query(None),
+    t: str = Query(None),
 ):
     """Generate and return an HTML session report from the DB.
 
     Admin-only: the report contains the treatment group and every LLM
     prompt, so a participant reaching it would unblind themselves.
 
-    Accepts the key via query string as well as the header: this report
-    is opened as its own browser tab (not fetched via JS), and while the
-    session is still running that tab reloads itself every few seconds to
-    show new messages/events, which only works if the URL it reloads
-    carries its own auth.
+    Accepts the admin key in the header, or a report token (``?t=``) from
+    ``/admin/session/{id}/report-link``: this report is opened as its own
+    browser tab, and while the session is still running that tab reloads
+    itself every few seconds, which only works if the URL it reloads
+    carries its own auth. The token opens only this session's report and
+    expires, so the admin passphrase never appears in a URL.
     """
-    _require_admin(x_admin_key or admin_key)
+    if x_admin_key or not _valid_report_token(session_id, t):
+        _require_admin(x_admin_key)
     pool = _get_pool()
 
     row = await session_repo.get_session(pool, session_id)

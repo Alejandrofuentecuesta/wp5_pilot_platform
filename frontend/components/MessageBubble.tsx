@@ -81,12 +81,13 @@ export default function MessageBubble({
     document.addEventListener("pointerdown", closeOnOutsidePress)
     return () => document.removeEventListener("pointerdown", closeOnOutsidePress)
   }, [reactionPickerOpen])
-  // The backend stores the participant's chosen display name as sender, while
-  // older sessions may still use the canonical "participant" value.
+  // Own messages are recognised by the self flag (derived from the alias the
+  // server sends), never by comparing names: an agent may share the
+  // participant's name. Older sessions may still use "participant".
   const messageIsSelf =
     isSelf ||
-    message.sender === PARTICIPANT_SENDER ||
-    (displayName.length > 0 && message.sender === displayName)
+    Boolean(message.is_self) ||
+    message.sender === PARTICIPANT_SENDER
   const senderLabel = messageIsSelf ? displayName : message.sender
 
   // Replace "participant" in agent message content with the user's local

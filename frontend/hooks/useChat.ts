@@ -14,7 +14,7 @@ import {
   AtCapacityError,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
-import { apparentGender, makeNameMapper, sanitizeName, type NameMapper } from "@/lib/name"
+import { apparentGender, isOwnSender, makeNameMapper, sanitizeName, type NameMapper } from "@/lib/name"
 import type {
   Message,
   BlockedSenders,
@@ -129,13 +129,43 @@ export function useChat() {
   const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
   const [initialMessageDone, setInitialMessageDone] = useState(false)
 
-  // Derived: participants list from observed senders
+  // Derived: which messages are the participant's own. Recognised by the
+  // alias the server sends as their sender (unique in the room: the server
+  // renames any agent that would share it), never by the typed name, which
+  // an agent may share by coincidence. Derived rather than fixed on arrival
+  // because a rejoin on a fresh device replays the history before the
+  // server sends the alias.
+  const messagesWithSelf = useMemo(
+    () =>
+      messages.map((m) => {
+        const isSelf = isOwnSender(m.server_sender ?? m.sender, alias)
+        return m.is_self === isSelf ? m : { ...m, is_self: isSelf }
+      }),
+    [messages, alias],
+  )
+
+  // Derived: agents seen in the room, from the senders of messages that are
+  // not the participant's own.
+  const agentNames = useMemo(
+    () => [
+      ...new Set(
+        messagesWithSelf
+          .filter((m) => !m.is_self)
+          .map((m) => m.sender)
+          .filter((s) => !s.startsWith("[")),
+      ),
+    ],
+    [messagesWithSelf],
+  )
+
+  // Derived: participants list. The participant is counted once as
+  // themselves, separately from any agent sharing their name.
   const participants = useMemo(() => {
-    const set = new Set(
-      messages.map((m) => m.sender).filter((s) => !s.startsWith("[")),
-    )
-    return [...set]
-  }, [messages])
+    const selfName = username || alias
+    return messagesWithSelf.some((m) => m.is_self) && selfName
+      ? [...agentNames, selfName]
+      : agentNames
+  }, [agentNames, messagesWithSelf, username, alias])
 
   const newsArticle = useMemo(
     () => messages.find((m) => m.msg_type === "news_article") || null,
@@ -160,9 +190,11 @@ export function useChat() {
   // Boundary name mapper: inbound alias->typed name, outbound typed
   // name->alias. Held in a ref so the WS handler never goes stale.
   const mapperRef = useRef<NameMapper>(makeNameMapper("", ""))
+  // An agent sharing the typed name keeps that name unmapped in outgoing
+  // messages (see makeNameMapper).
   useEffect(() => {
-    mapperRef.current = makeNameMapper(alias, username || alias)
-  }, [alias, username])
+    mapperRef.current = makeNameMapper(alias, username || alias, agentNames)
+  }, [alias, username, agentNames])
 
   // Full conclusion of a session: nothing after this needs the typed name,
   // so it is removed from the browser along with the alias pairing, stance
@@ -289,6 +321,7 @@ export function useChat() {
       const mapper = mapperRef.current
       const message: Message = {
         ...raw,
+        server_sender: raw.sender,
         sender: mapper.isAlias(raw.sender) ? (usernameRef.current || raw.sender) : raw.sender,
         content: mapper.inbound(raw.content ?? ""),
         quoted_text: raw.quoted_text ? mapper.inbound(raw.quoted_text) : raw.quoted_text,
@@ -742,8 +775,9 @@ export function useChat() {
     const messageId = target.message_id
     const sender = target.sender
 
-    // Prevent reporting or blocking yourself.
-    if (sender === uid || sender === username) {
+    // Prevent reporting or blocking yourself (by the self flag, not the
+    // name: an agent may share the participant's name).
+    if (target.is_self || sender === uid) {
       setReporting(false)
       setReportModalOpen(false)
       setReportTarget(null)
@@ -828,10 +862,13 @@ export function useChat() {
   }
   // Filtered messages (respecting blocked senders)
   const visibleMessages = useMemo(() => {
-    return messages.filter((msg) => {
+    return messagesWithSelf.filter((msg) => {
       if (newsArticleModalOpen && msg.msg_type === "news_article") {
         return false
       }
+      // Blocking an agent never hides the participant's own messages, even
+      // if the agent shares their name.
+      if (msg.is_self) return true
       const blockedIso = blockedSenders[msg.sender]
       if (!blockedIso) return true
       try {
@@ -840,7 +877,7 @@ export function useChat() {
         return true
       }
     })
-  }, [messages, blockedSenders, newsArticleModalOpen])
+  }, [messagesWithSelf, blockedSenders, newsArticleModalOpen])
 
   return {
     // Session

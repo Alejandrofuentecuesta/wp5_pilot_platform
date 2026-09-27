@@ -1,5 +1,12 @@
 export interface Message {
   sender: string
+  // Client-side only. The sender exactly as the server sent it (the
+  // participant's alias for their own messages; ingress rewrites `sender`
+  // to the typed name for display), and whether this is the participant's
+  // own message, derived from that alias. Own messages are recognised by
+  // the alias, never by name: an agent may share the participant's name.
+  server_sender?: string
+  is_self?: boolean
   content: string
   timestamp: string
   message_id: string

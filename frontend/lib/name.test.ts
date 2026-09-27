@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import { apparentGender, fold, makeNameMapper, sanitizeName } from "./name"
+import { apparentGender, fold, isOwnSender, makeNameMapper, sanitizeName } from "./name"
 
 describe("sanitizeName", () => {
   it("trims, collapses whitespace and strips control characters", () => {
@@ -94,3 +94,53 @@ describe("makeNameMapper", () => {
     expect(empty.isAlias("Marina")).toBe(false)
   })
 })
+
+describe("isOwnSender", () => {
+  it("recognises the participant's alias, accent- and case-insensitively", () => {
+    expect(isOwnSender("Óscar", "Óscar")).toBe(true)
+    expect(isOwnSender("oscar", "Óscar")).toBe(true)
+  })
+
+  it("does not treat an agent who shares the typed name as the participant", () => {
+    // Participant typed "Carlos" and runs under the alias "Hugo"; an agent
+    // is called Carlos. Only the alias identifies the participant.
+    expect(isOwnSender("Carlos", "Hugo")).toBe(false)
+    expect(isOwnSender("Hugo", "Hugo")).toBe(true)
+  })
+
+  it("recognises the pre-alias placeholder sender", () => {
+    expect(isOwnSender("participant", "")).toBe(true)
+  })
+
+  it("claims nothing before the alias is known", () => {
+    expect(isOwnSender("Hugo", "")).toBe(false)
+  })
+})
+
+describe("makeNameMapper with an agent sharing the typed name", () => {
+  it("sends the name as written when an agent in the room has it", () => {
+    const m = makeNameMapper("Hugo", "Carlos", ["Carlos", "Irene"])
+    expect(m.outbound("Carlos, eso es mentira")).toBe("Carlos, eso es mentira")
+  })
+
+  it("matches the agent name accent- and case-insensitively", () => {
+    const m = makeNameMapper("Hugo", "oscar", ["Óscar"])
+    expect(m.outbound("oscar no tiene razón")).toBe("oscar no tiene razón")
+  })
+
+  it("still maps the typed name when no agent has it", () => {
+    const m = makeNameMapper("Hugo", "Carlos", ["Irene"])
+    expect(m.outbound("soy Carlos")).toBe("soy Hugo")
+  })
+
+  it("only exempts an exact match of the whole typed name", () => {
+    const m = makeNameMapper("Hugo", "Carlos García", ["Carlos"])
+    expect(m.outbound("soy Carlos García")).toBe("soy Hugo")
+  })
+
+  it("still maps the alias to the typed name inbound", () => {
+    const m = makeNameMapper("Hugo", "Carlos", ["Carlos"])
+    expect(m.inbound("Hugo tiene razón")).toBe("Carlos tiene razón")
+  })
+})
+

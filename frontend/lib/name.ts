@@ -118,16 +118,38 @@ function replaceTokenSequence(
   return out.join("")
 }
 
-export function makeNameMapper(alias: string, typedName: string): NameMapper {
+export function makeNameMapper(
+  alias: string,
+  typedName: string,
+  agentNames: string[] = [],
+): NameMapper {
   const aliasWords = [fold(alias)]
-  const typedWords = fold(sanitizeName(typedName)).split(" ").filter(Boolean)
+  const foldedTyped = fold(sanitizeName(typedName))
+  const typedWords = foldedTyped.split(" ").filter(Boolean)
   const display = sanitizeName(typedName)
   const usable = alias.length > 0 && typedWords.length > 0
+  // When an agent in the room has exactly the typed name, the name in an
+  // outgoing message most likely addresses that agent, and it is already
+  // visible in the room as the agent's name: send it as written rather
+  // than turning it into the participant's alias.
+  const sharedWithAgent = agentNames.some((name) => fold(name) === foldedTyped)
   return {
     inbound: (text) =>
       usable ? replaceTokenSequence(text, aliasWords, display) : text,
     outbound: (text) =>
-      usable ? replaceTokenSequence(text, typedWords, alias) : text,
+      usable && !sharedWithAgent ? replaceTokenSequence(text, typedWords, alias) : text,
     isAlias: (sender) => usable && fold(sender) === aliasWords[0],
   }
+}
+
+/**
+ * Whether a message is the participant's own, from the sender the server
+ * sent. The server sends the participant's alias as their sender and never
+ * gives that alias to an agent, so it identifies them reliably; the typed
+ * name does not, because an agent may share it by coincidence. Sessions
+ * from before the alias design used the literal "participant".
+ */
+export function isOwnSender(serverSender: string, alias: string): boolean {
+  if (serverSender === "participant") return true
+  return alias.length > 0 && fold(serverSender) === fold(alias)
 }

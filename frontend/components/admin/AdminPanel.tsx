@@ -82,8 +82,10 @@ function getDefaultExperimentalConfig(): ExperimentalConfig {
   return {
     ...DEFAULT_EXPERIMENTAL,
     // New experiments screen by default; the endpoint comes from the
-    // backend's SAFETY_* environment unless set here.
-    safety: { enabled: true, timeout_s: 8 },
+    // backend's SAFETY_* environment unless set here. The timeout matches
+    // the backend default (DEFAULT_TIMEOUT_S): the classifier reasons
+    // before it answers, so it needs more time than a plain completion.
+    safety: { enabled: true, timeout_s: 20 },
     agent_pool: DEFAULT_EXPERIMENTAL.agent_pool
       ? DEFAULT_EXPERIMENTAL.agent_pool.map((agent) => ({ ...agent }))
       : undefined,

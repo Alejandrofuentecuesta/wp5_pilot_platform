@@ -90,9 +90,9 @@ export default function MessageFeed({
         <Fragment key={group.dateKey}>
           <DateSeparator label={group.label} />
           {group.messages.map((msg, idx) => {
+            // By the self flag, not the name: an agent may share it.
             const isSelf =
-              msg.sender === PARTICIPANT_SENDER ||
-              (displayName.length > 0 && msg.sender === displayName)
+              Boolean(msg.is_self) || msg.sender === PARTICIPANT_SENDER
 
             if (msg.msg_type === "news_article") {
               return (

@@ -946,13 +946,13 @@ class TestExecuteTurnMessage:
         )
         orch.performer_llm.generate_response = AsyncMock(
             side_effect=[
-                "Martin, deja de decir estupideces, no todo es racismo.",
+                "Tomas, deja de decir estupideces, no todo es racismo.",
                 "Lo de fondo que dices es verdad: esto deja demasiada mano al empresario y no protege bien a la gente migrante.",
             ]
         )
         orch.moderator_llm.generate_response = AsyncMock(
             side_effect=[
-                "Martin, deja de decir estupideces, no todo es racismo.",
+                "Tomas, deja de decir estupideces, no todo es racismo.",
                 "Lo de fondo que dices es verdad: esto deja demasiada mano al empresario y no protege bien a la gente migrante.",
             ]
         )
@@ -1416,7 +1416,7 @@ class TestPerformerPromptNames:
             },
         )
         anon_lucia = "Lucia"
-        orch.agent_profiles[anon_lucia] = "Lucia ha defendido a Martin frente a Pilar sin perder la calma."
+        orch.agent_profiles[anon_lucia] = "Lucia ha defendido a Tomas frente a Pilar sin perder la calma."
 
         captured = {}
 
@@ -1441,7 +1441,7 @@ class TestPerformerPromptNames:
         assert "Your name in this chatroom is **Lucia**" in captured["system_prompt"]
         assert "The human participant's name is **participant**" in captured["system_prompt"]
         assert "Pilar: Esto es una idea nefasta." in captured["user_prompt"]
-        assert "Lucia ha defendido a Martin frente a Pilar sin perder la calma." in captured["user_prompt"]
+        assert "Lucia ha defendido a Tomas frente a Pilar sin perder la calma." in captured["user_prompt"]
         assert "Recent Messages From Other People In The Room" in captured["user_prompt"]
         assert "- Pilar: Esto es una idea nefasta." in captured["user_prompt"]
         assert "Performer " not in captured["user_prompt"]
@@ -1817,7 +1817,7 @@ class TestFixedStanceGuard:
         assert "Civil messages so far: 1/2 (50%)" in summary
 
     def test_detects_direct_attack_language_on_participant(self):
-        assert Orchestrator._looks_like_attack_on_participant("Martin, deja de decir estupideces.") is True
+        assert Orchestrator._looks_like_attack_on_participant("Tomas, deja de decir estupideces.") is True
         assert Orchestrator._looks_like_attack_on_participant(
             "Lo de fondo que dices es verdad y habría que ir más lejos."
         ) is False

@@ -218,7 +218,7 @@ class TestBuildActionSystemPrompt:
         prompt = build_action_system_prompt(
             chatroom_context="Debate climatico",
             participant_stance_hint="participant self-report: against the article",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "Primary alignment rule" in prompt
         assert "`like-minded` performers are agents whose `alignment_cell` exactly matches" in prompt
@@ -229,7 +229,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate climatico",
             participant_stance_hint="participant self-report: broadly in favor of the article's direction, but with important reservations about the specific measure",
             participant_alignment_cell="participant alignment cell: pro_policy_pro_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "Resolved Participant Alignment Cell" in prompt
         assert "`participant alignment cell: pro_policy_pro_topic`" in prompt
@@ -240,7 +240,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "Keep `ideology` as a realism trait" in prompt
         assert "do **not** use ideology alone to decide who is like-minded" in prompt
@@ -251,7 +251,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "If using `message` for an underrepresented side" in prompt
         assert "must not validate or echo" in prompt
@@ -262,7 +262,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "`message` is the default" in prompt
         assert "Room-wide openers are fine and realistic" in prompt
@@ -273,7 +273,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "Protect the participant from severe direct abuse" in prompt
         assert 'Mild direct labels such as "ingenuo" or "ignorante" are acceptable' in prompt
@@ -284,7 +284,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "No same-cell infighting" in prompt
         assert "share the same fixed `alignment_cell`" in prompt
@@ -295,7 +295,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "No cross-cell validation" in prompt
         assert "do not have one praise, validate, echo, pile on in support of" in prompt
@@ -307,7 +307,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "Use real agent names as stable labels" in prompt
         assert "do **not** change from turn to turn" in prompt
@@ -320,7 +320,7 @@ class TestBuildActionSystemPrompt:
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
-            participant_name="Martin",
+            participant_name="Tomas",
         )
         assert "Resolved Participant Alignment Cell" in prompt
         assert "Keep the evaluation compact and operational" in prompt

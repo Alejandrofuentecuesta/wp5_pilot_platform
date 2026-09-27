@@ -95,7 +95,7 @@ class TestCollisionRename:
 
     def test_no_rename_without_collision(self):
         with _patch_externals():
-            session = _make_session("Rupert")
+            session = _make_session("Tomas")
 
             assert session._agent_names == ["Alice", "Bob"]
 

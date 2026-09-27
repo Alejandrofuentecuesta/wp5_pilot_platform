@@ -75,10 +75,10 @@ async def test_flag_lifecycle(db_pool, seed):
     assert summary["open_flags"] >= 1
     assert summary["live_sessions"] >= 1
 
-    assert await safety_repo.review_flag(db_pool, flag_id=fid, verdict="no_concern", reviewer="Laia") is True
+    assert await safety_repo.review_flag(db_pool, flag_id=fid, verdict="no_concern", reviewer="Reviewer") is True
     assert not [x for x in await safety_repo.list_flags(db_pool, status="open") if x["flag_id"] == fid]
     reviewed = [x for x in await safety_repo.list_flags(db_pool, status="reviewed") if x["flag_id"] == fid]
-    assert reviewed[0]["reviewed_by"] == "Laia" and reviewed[0]["review_verdict"] == "no_concern"
+    assert reviewed[0]["reviewed_by"] == "Reviewer" and reviewed[0]["review_verdict"] == "no_concern"
 
     verdicts = await safety_repo.verdicts_for_session(db_pool, SESSION)
     assert verdicts[mid] == "unsafe"

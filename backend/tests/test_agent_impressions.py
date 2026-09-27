@@ -17,14 +17,14 @@ def _ended_session():
         "experiment_id": "final",
         "status": "ended",
         "end_reason": "duration_expired",
-        "user_name": "Laia",
+        "user_name": "Tomas",
     }
 
 
 def _messages():
     return [
         {"sender": "[news]", "msg_type": "news_article", "message_id": "m0"},
-        {"sender": "Laia", "message_id": "m1"},
+        {"sender": "Tomas", "message_id": "m1"},
         {"sender": "Candela", "message_id": "m2"},
         {"sender": "Diego", "message_id": "m3"},
     ]
@@ -177,9 +177,9 @@ async def test_submit_agent_impressions_rejects_unseen_tempted_name(monkeypatch)
 
 @pytest.mark.asyncio
 async def test_participant_cannot_report_own_message(monkeypatch):
-    own_message = MagicMock(sender="Laia", message_id="own-message")
+    own_message = MagicMock(sender="Tomas", message_id="own-message")
     session = SimpleNamespace(
-        state=SimpleNamespace(user_name="Laia", messages=[own_message]),
+        state=SimpleNamespace(user_name="Tomas", messages=[own_message]),
     )
     monkeypatch.setattr(
         main.session_manager,

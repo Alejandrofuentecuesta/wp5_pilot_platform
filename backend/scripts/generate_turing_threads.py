@@ -2127,7 +2127,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--scrape-only", action="store_true")
     parser.add_argument("--names-source", choices=["fictic", "real"], default="fictic")
-    parser.add_argument("--participant-name", default="Alex")
+    parser.add_argument("--participant-name", default="Tomas")
     parser.add_argument("--participant-stance", default="pro_topic")
     parser.add_argument("--director-model", default="claude-sonnet-4-6")
     parser.add_argument("--haiku-model", default="claude-haiku-4-5")

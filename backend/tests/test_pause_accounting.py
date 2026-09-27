@@ -38,13 +38,13 @@ async def test_disconnect_during_hold_is_credited_once():
         session.running = True
 
         # Hold began 100 s ago; the participant left 50 s ago.
-        await session.pause_for_safety("Laia")
+        await session.pause_for_safety("Reviewer")
         _backdate(session, frozen=100, hold=100)
         session.pause_for_disconnect()
         _backdate(session, pause=50)
 
         # Lifting the hold credits nothing: the room is still frozen.
-        assert await session.resume_from_safety("Laia") == 0.0
+        assert await session.resume_from_safety("Reviewer") == 0.0
         mocks["session_repo"].add_paused_seconds.assert_not_awaited()
 
         # The rejoin credits the whole frozen span, once.
@@ -67,10 +67,10 @@ async def test_hold_during_idle_pause_is_credited_once_and_spares_the_rejoin_win
         # Idle for 100 s, of which the last 40 s under a researcher hold.
         session.pause_for_idle()
         _backdate(session, frozen=100, pause=100)
-        await session.pause_for_safety("Laia")
+        await session.pause_for_safety("Reviewer")
         _backdate(session, hold=40)
 
-        assert await session.resume_from_safety("Laia") == 0.0
+        assert await session.resume_from_safety("Reviewer") == 0.0
         # The 40 held seconds do not count toward the idle time-out.
         away = time.monotonic() - session._pause_started_monotonic
         assert away == pytest.approx(60, abs=1)
@@ -92,12 +92,12 @@ async def test_hold_ending_last_credits_the_whole_span():
         # Disconnected 100 s ago; hold began 60 s ago; rejoined while held.
         session.pause_for_disconnect()
         _backdate(session, frozen=100, pause=100)
-        await session.pause_for_safety("Laia")
+        await session.pause_for_safety("Reviewer")
         _backdate(session, hold=60)
         await session.attach_websocket(AsyncMock())
         mocks["session_repo"].add_paused_seconds.assert_not_awaited()
 
-        credited = await session.resume_from_safety("Laia")
+        credited = await session.resume_from_safety("Reviewer")
 
         assert credited == pytest.approx(100, abs=1)
         assert session.state.paused_seconds == pytest.approx(100, abs=1)
@@ -122,7 +122,7 @@ async def test_first_message_restarts_a_running_freeze_clock():
         session, _ = _create_session()
         session.running = True
 
-        await session.pause_for_safety("Laia")
+        await session.pause_for_safety("Reviewer")
         _backdate(session, frozen=100, hold=100)
         await session.handle_user_message("hola")
 
@@ -196,12 +196,12 @@ async def test_hold_and_experiment_pause_share_one_notice_and_one_credit():
         session, _ = _create_session()
         session.running = True
 
-        await session.pause_for_safety("Laia")
+        await session.pause_for_safety("Reviewer")
         _backdate(session, frozen=100, hold=100)
         await session.pause_for_experiment()
 
         # Lifting the hold leaves the room frozen and the notice up.
-        assert await session.resume_from_safety("Laia") == 0.0
+        assert await session.resume_from_safety("Reviewer") == 0.0
         assert session.operator_held
         assert [e["event_type"] for e in _hold_events(mocks)] == ["session_paused"]
 

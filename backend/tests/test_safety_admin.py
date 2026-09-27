@@ -93,7 +93,7 @@ class TestFlags:
         with patch.object(main, "_get_pool", return_value=pool), \
              patch("main.safety_repo.review_flag", new=AsyncMock(return_value=False)) as review:
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
-                            json={"verdict": "no_concern", "reviewer": "Laia"})
+                            json={"verdict": "no_concern", "reviewer": "Reviewer"})
         assert r.status_code == 404
         review.assert_not_awaited()
 
@@ -107,11 +107,11 @@ class TestFlags:
              patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)) as rv, \
              patch("main.event_repo.insert_event", new=AsyncMock()) as ev:
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
-                            json={"verdict": "concern", "reviewer": "Laia", "note": "check"})
+                            json={"verdict": "concern", "reviewer": "Reviewer", "note": "check"})
         assert r.status_code == 200
         assert rv.call_args.kwargs["verdict"] == "concern"
         assert ev.call_args.kwargs["event_type"] == "safety_flag_reviewed"
-        assert ev.call_args.kwargs["data"]["by"] == "Laia"
+        assert ev.call_args.kwargs["data"]["by"] == "Reviewer"
 
     def test_no_concern_publishes_withheld_agent_message(self, client):
         pool = MagicMock()
@@ -150,7 +150,7 @@ class TestFlags:
              patch("main.event_repo.insert_event", new=AsyncMock()), \
              patch("main.asyncio.sleep", new=AsyncMock()) as sleep_mock:
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
-                            json={"verdict": "no_concern", "reviewer": "Laia"})
+                            json={"verdict": "no_concern", "reviewer": "Reviewer"})
 
         assert r.status_code == 200
         assert r.json()["published"] is True
@@ -195,7 +195,7 @@ class TestFlags:
              patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
              patch("main.event_repo.insert_event", new=AsyncMock()):
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
-                            json={"verdict": "concern", "reviewer": "Laia"})
+                            json={"verdict": "concern", "reviewer": "Reviewer"})
 
         assert r.status_code == 200
         assert r.json()["published"] is False
@@ -228,7 +228,7 @@ class TestFlags:
              patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
              patch("main.event_repo.insert_event", new=AsyncMock()):
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
-                            json={"verdict": "no_concern", "reviewer": "Laia"})
+                            json={"verdict": "no_concern", "reviewer": "Reviewer"})
 
         assert r.status_code == 200
         assert r.json()["published"] is False
@@ -257,7 +257,7 @@ class TestFlags:
              patch("main.safety_repo.review_flag", new=AsyncMock(return_value=True)), \
              patch("main.event_repo.insert_event", new=AsyncMock()):
             r = client.post("/admin/safety/flags/f1/review", headers=HDR,
-                            json={"verdict": "no_concern", "reviewer": "Laia"})
+                            json={"verdict": "no_concern", "reviewer": "Reviewer"})
 
         assert r.status_code == 200
         get_session.assert_not_awaited()
@@ -266,7 +266,7 @@ class TestFlags:
 class TestSessionActions:
     def test_pause_unknown_session_is_404(self, client):
         with patch("main.session_manager.get_session", new=AsyncMock(return_value=None)):
-            r = client.post("/admin/safety/sessions/s1/pause", headers=HDR, json={"reviewer": "Laia"})
+            r = client.post("/admin/safety/sessions/s1/pause", headers=HDR, json={"reviewer": "Reviewer"})
         assert r.status_code == 404
 
     def test_pause_resume_end_delegate_to_session(self, client):
@@ -277,14 +277,14 @@ class TestSessionActions:
         session.end_for_safety = AsyncMock()
         with patch("main.session_manager.get_session", new=AsyncMock(return_value=session)):
             assert client.post("/admin/safety/sessions/s1/pause", headers=HDR,
-                               json={"reviewer": "Laia"}).json()["status"] == "paused"
+                               json={"reviewer": "Reviewer"}).json()["status"] == "paused"
             assert client.post("/admin/safety/sessions/s1/resume", headers=HDR,
-                               json={"reviewer": "Laia"}).json()["credited_seconds"] == 12.0
+                               json={"reviewer": "Reviewer"}).json()["credited_seconds"] == 12.0
             assert client.post("/admin/safety/sessions/s1/end", headers=HDR,
-                               json={"reviewer": "Laia"}).json()["status"] == "ended"
-        session.pause_for_safety.assert_awaited_once_with("Laia")
-        session.resume_from_safety.assert_awaited_once_with("Laia")
-        session.end_for_safety.assert_awaited_once_with("Laia")
+                               json={"reviewer": "Reviewer"}).json()["status"] == "ended"
+        session.pause_for_safety.assert_awaited_once_with("Reviewer")
+        session.resume_from_safety.assert_awaited_once_with("Reviewer")
+        session.end_for_safety.assert_awaited_once_with("Reviewer")
 
 
 class TestPolicyEndpoints:

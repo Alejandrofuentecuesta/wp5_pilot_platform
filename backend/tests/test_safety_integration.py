@@ -273,7 +273,7 @@ class TestSafetyHold:
             sr.set_safety_paused = AsyncMock()
             session, _ = _create_session()
             session.running = True
-            assert await session.pause_for_safety("Laia") is True
+            assert await session.pause_for_safety("Reviewer") is True
             assert session.safety_held is True
             sr.set_safety_paused.assert_awaited_once()
             assert sr.set_safety_paused.call_args[0][2] is not None
@@ -282,13 +282,13 @@ class TestSafetyHold:
             assert event["trigger"] == "hold"
             assert "pausa" in event["notice"]
             # Second pause is a no-op.
-            assert await session.pause_for_safety("Laia") is False
+            assert await session.pause_for_safety("Reviewer") is False
 
     async def test_pause_not_running_is_noop(self):
         with _patch_externals(), patch("platforms.chatroom.safety_repo") as sr:
             sr.set_safety_paused = AsyncMock()
             session, _ = _create_session()
-            assert await session.pause_for_safety("Laia") is False
+            assert await session.pause_for_safety("Reviewer") is False
             assert session.safety_held is False
 
     async def test_rejoin_does_not_lift_hold(self):
@@ -296,7 +296,7 @@ class TestSafetyHold:
             sr.set_safety_paused = AsyncMock()
             session, _ = _create_session()
             session.running = True
-            await session.pause_for_safety("Laia")
+            await session.pause_for_safety("Reviewer")
             session.pause_for_disconnect()
             ws = AsyncMock()
             await session.attach_websocket(ws)
@@ -310,11 +310,11 @@ class TestSafetyHold:
             mocks["session_repo"].add_paused_seconds = AsyncMock()
             session, _ = _create_session()
             session.running = True
-            await session.pause_for_safety("Laia")
+            await session.pause_for_safety("Reviewer")
             # Backdate the hold 30 s (the hold and the shared freeze clock).
             session._safety_hold_started_monotonic -= 30
             session._frozen_since -= 30
-            credited = await session.resume_from_safety("Laia")
+            credited = await session.resume_from_safety("Reviewer")
             assert credited >= 30
             assert session.safety_held is False
             assert session.state.paused_seconds >= 30
@@ -330,7 +330,7 @@ class TestSafetyHold:
             session.stop = AsyncMock()
             session._build_return_url = AsyncMock(return_value="https://panel?token=t&r=2")
             with patch("platforms.chatroom.asyncio.sleep", new=AsyncMock()):
-                await session.end_for_safety("Laia")
+                await session.end_for_safety("Reviewer")
             end_event = [
                 c[0][2] for c in mocks["redis"].publish_event.call_args_list
                 if c[0][2].get("event_type") == "session_end"
@@ -351,7 +351,7 @@ class TestSafetyHold:
             session, _ = _create_session()
             session.running = True
             session._first_user_message_received = True
-            await session.pause_for_safety("Laia")
+            await session.pause_for_safety("Reviewer")
             session._guarded_turn = AsyncMock()
             ticks = {"n": 0}
 

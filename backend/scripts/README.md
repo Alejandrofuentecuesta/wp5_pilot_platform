@@ -51,7 +51,7 @@ Son 21 hilos: 8 de canvi climàtic (`clim_1–8`) y 13 de immigració (`imm_1–
   `--auto-like-probability` (0.12 por defecto).
 - **Orquestador**: `evaluate_interval=5`, `action_window_size=5`,
   `performer_memory_size=3`, `boost_replies_mentions=True`, participante
-  simulado "Alex" con postura `pro_topic`.
+  simulado "Tomas" con postura `pro_topic`.
 
 ### Reproducibilidad
 
@@ -102,7 +102,7 @@ para regenerarlos.
 | `--force` | off | Regenera aunque ya exista la salida |
 | `--scrape-only` | off | Solo descarga los hilos originales |
 | `--names-source` | `fictic` | Nombres de los agentes: `fictic` o `real` |
-| `--participant-name` | `Alex` | Nombre del participante simulado |
+| `--participant-name` | `Tomas` | Nombre del participante simulado |
 | `--participant-stance` | `pro_topic` | Postura del participante |
 | `--director-model` | `claude-sonnet-4-6` | Modelo del director |
 | `--haiku-model` | `claude-haiku-4-5` | Modelo de moderator y classifier |

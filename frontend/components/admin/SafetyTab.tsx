@@ -103,7 +103,7 @@ function ReviewerBar({ reviewer, onChange }: { reviewer: string; onChange: (v: s
         onChange={(e) => setDraft(e.target.value)}
         maxLength={80}
         className="border border-admin-border rounded px-2 py-1 bg-admin-surface text-admin-text"
-        placeholder="e.g. Laia"
+        placeholder="Your name"
       />
       <button
         type="submit"

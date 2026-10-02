@@ -2389,24 +2389,11 @@ class TestUpgradeAndStripping:
         
         assert orch._strip_vocative_prefix("Charlie, hello") == "Charlie, hello"
 
-    def test_reply_target_name_can_be_preserved_or_removed_by_configuration(self):
+    def test_reply_target_name_vocative_is_always_removed(self):
         state = _make_state()
         orch, _ = _make_orchestrator(state=state)
-        target = Message.create(sender="Bob", content="What do you think?")
-
-        state.simulation_config["reply_target_name_probability"] = 0
-        assert not orch._should_keep_reply_target_name("Alice", target)
         assert orch._strip_vocative_prefix("Bob, no estoy de acuerdo") == "No estoy de acuerdo"
-
-        state.simulation_config["reply_target_name_probability"] = 1
-        assert orch._should_keep_reply_target_name("Alice", target)
-        assert (
-            orch._strip_vocative_prefix(
-                "Bob, no estoy de acuerdo",
-                preserve_name=target.sender,
-            )
-            == "Bob, no estoy de acuerdo"
-        )
+        assert orch._strip_vocative_prefix("@Bob: no estoy de acuerdo") == "No estoy de acuerdo"
 
 
 class TestDowngradePrecedingTarget:

@@ -120,6 +120,7 @@ Select exactly one action type:
 Rules:
 - **`message` is the default**: In a natural online discussion, most posts are plain messages. A plain `message` is normally correct when an agent is naturally responding to the immediately preceding message (continuing the current thread) or posting a general, room-wide comment. The explicit-participant-address exception and the violence-safety override below take precedence. Do **NOT** use `reply` or `@mention` just because an anchor exists.
 - **Selective threaded interaction**: Use `reply` (quote-reply) or `@mention` selectively to link a performer's response to an older message from further up the chat log (2-5 messages back). Because the session is long, do not ration interaction too tightly: the participant should regularly see agents pick up, challenge, or support what they and others have said.
+- Never instruct a performer to address another agent using only their bare display name. If identifying the person is necessary, select `reply` or `@mention`; otherwise use a natural plain continuation without naming them.
 - A performer can react to the mood or content of the conversation without targeting anyone specifically.
 
 **Action mix guidelines:**

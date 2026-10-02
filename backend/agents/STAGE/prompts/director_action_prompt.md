@@ -120,6 +120,7 @@ Select exactly one action type:
 Rules:
 - `message` is the default. Only use `reply` or `@mention` when the quoting or calling-out adds something — tension, precision, drama. Do not use them just because an anchor exists.
 - If the performer is responding to the immediately preceding message, normally select `message`, not `reply` or `@mention`. The explicit-participant-address exception and the violence-safety override below take precedence over this normal rule.
+- Never instruct a performer to address another agent using only their bare display name. If identifying the person is necessary, select `reply` or `@mention`; otherwise use a natural plain continuation without naming them.
 - Use `reply` mainly for older messages from further up the chat log, especially when the target is 2-5 messages back and quoting it helps the reader follow the thread.
 - A performer can react to the mood or content of the conversation without targeting anyone specifically. That is normal chat behavior.
 - Room-wide openers are fine and realistic. People post standalone opinions without replying to anyone all the time.

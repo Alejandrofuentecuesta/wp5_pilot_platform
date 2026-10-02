@@ -58,7 +58,6 @@ DEFAULT_UNCIVIL_LENGTH_RANGE = (2, 45)
 DEFAULT_CIVIL_LENGTH_RANGE = (18, 95)
 PARTICIPANT_TARGET_REPLY_PROBABILITY = 0.75
 MAX_INTERVENING_AGENT_MESSAGES_FOR_REPLY = 3
-REPLY_TARGET_NAME_PROBABILITY = 0.20
 MAX_REPLIES_PER_AGENT_MESSAGE = 2
 MAX_REPLIES_PER_PARTICIPANT_MESSAGE = 3
 MAX_CONSECUTIVE_REPLIES_TO_SAME_SENDER = 2
@@ -1462,32 +1461,9 @@ class Orchestrator:
             if not unicodedata.combining(char)
         )
 
-    def _should_keep_reply_target_name(
-        self,
-        agent_name: str,
-        target_message: Message,
-    ) -> bool:
-        """Keep a reply's target-name vocative only occasionally."""
-        probability = float(
-            self.state.simulation_config.get(
-                "reply_target_name_probability",
-                REPLY_TARGET_NAME_PROBABILITY,
-            )
-        )
-        probability = max(0.0, min(probability, 1.0))
-        digest = hashlib.sha256(
-            (
-                f"{self.state.session_id}:reply-target-name:"
-                f"{agent_name}:{target_message.message_id}"
-            ).encode("utf-8")
-        ).digest()
-        sample = int.from_bytes(digest[:8], "big") / float(2**64)
-        return sample < probability
-
     def _strip_vocative_prefix(
         self,
         text: str,
-        preserve_name: Optional[str] = None,
     ) -> str:
         if not text:
             return text
@@ -1499,12 +1475,6 @@ class Orchestrator:
 
         normalized_text = self._strip_accents(text)
         for name in names:
-            if (
-                preserve_name
-                and self._strip_accents(name).casefold()
-                == self._strip_accents(preserve_name).casefold()
-            ):
-                continue
             normalized_name = re.escape(self._strip_accents(name))
             pattern = (
                 r"^([\u00bf\u00a1]*)\s*@?"
@@ -2704,17 +2674,7 @@ class Orchestrator:
                 content = performer_raw.strip()
 
             candidate_content = content
-            preserved_reply_name = None
-            if (
-                action_type == "reply"
-                and target_message
-                and self._should_keep_reply_target_name(agent_name, target_message)
-            ):
-                preserved_reply_name = target_message.sender
-            candidate_content = self._strip_vocative_prefix(
-                candidate_content,
-                preserve_name=preserved_reply_name,
-            )
+            candidate_content = self._strip_vocative_prefix(candidate_content)
 
             # Post-process ellipsis: replace with a space at the end of the message (which gets stripped), and a dot in the middle.
             candidate_content = re.sub(r"(?:\.{3,}|…+)\s*$", " ", candidate_content)

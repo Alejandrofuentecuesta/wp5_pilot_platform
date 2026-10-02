@@ -99,6 +99,39 @@ CREATE INDEX IF NOT EXISTS idx_events_exp_type    ON events(experiment_id, event
 
 CREATE INDEX IF NOT EXISTS idx_sessions_experiment ON sessions(experiment_id, status);
 
+-- Repair legacy client-supplied quote snapshots. Older frontends sent the
+-- displayed quote text back to the server, which could contain a browser-only
+-- participant identifier. The referenced server message is the sole source of
+-- truth for every stored quote.
+UPDATE messages AS reply
+SET quoted_text = target.content
+FROM messages AS target
+WHERE reply.reply_to = target.message_id
+  AND reply.quoted_text IS DISTINCT FROM target.content;
+
+UPDATE messages
+SET quoted_text = NULL
+WHERE reply_to IS NULL AND quoted_text IS NOT NULL;
+
+-- The append-only event log used to receive the same client snapshot. Keep
+-- historical exports privacy-safe as well as the canonical messages table.
+UPDATE events AS event
+SET data = jsonb_set(event.data, '{quoted_text}', to_jsonb(target.content), true)
+FROM messages AS reply
+JOIN messages AS target ON target.message_id = reply.reply_to
+WHERE event.event_type = 'message'
+  AND event.data ->> 'message_id' = reply.message_id::text
+  AND event.data ->> 'quoted_text' IS DISTINCT FROM target.content;
+
+UPDATE events AS event
+SET data = event.data - 'quoted_text'
+FROM messages AS message
+WHERE event.event_type = 'message'
+  AND event.data ->> 'message_id' = message.message_id::text
+  AND message.reply_to IS NULL
+  AND event.data ? 'quoted_text'
+  AND event.data -> 'quoted_text' IS DISTINCT FROM 'null'::jsonb;
+
 -- Migrations: add schedule/pause columns if missing (idempotent).
 DO $$ BEGIN
     ALTER TABLE experiments ADD COLUMN starts_at TIMESTAMPTZ;

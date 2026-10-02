@@ -1165,14 +1165,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 # same limit client-side): one paste must not bloat prompts
                 # and the DB without bound. Truncate silently by design.
                 content = data.get("content", "").strip()[:MAX_MESSAGE_CHARS]
-                quoted_text = data.get("quoted_text")
-                if isinstance(quoted_text, str):
-                    quoted_text = quoted_text[:MAX_MESSAGE_CHARS]
                 if content:
                     await session.handle_user_message(
                         content,
                         reply_to=data.get("reply_to"),
-                        quoted_text=quoted_text,
                         mentions=data.get("mentions"),
                     )
             elif data.get("type") == "idle_pause":
@@ -3123,65 +3119,8 @@ async def admin_export_session_bundle(
     if not session_row or session_row["experiment_id"] != eid:
         raise HTTPException(status_code=404, detail="Session not found for this experiment")
 
-    messages = await message_repo.get_session_messages(pool, session_id)
-    saved_evaluations = await message_repo.get_manual_evaluations(pool, session_id)
-    agent_blocks = await session_repo.get_agent_blocks(pool, session_id)
-
-    async with pool.acquire() as conn:
-        event_rows = await conn.fetch(
-            """
-            SELECT id, session_id, event_type, occurred_at, data
-            FROM events
-            WHERE experiment_id = $1 AND session_id = $2
-            ORDER BY id ASC
-            """,
-            eid,
-            session_id,
-        )
-
-    sim_cfg = session_row.get("simulation_config")
-    exp_cfg = session_row.get("experimental_config")
-    if isinstance(sim_cfg, str):
-        sim_cfg = json.loads(sim_cfg)
-    if isinstance(exp_cfg, str):
-        exp_cfg = json.loads(exp_cfg)
-
-    payload = {
-        "exported_at": datetime.now(timezone.utc).isoformat(),
-        "session": {
-            "session_id": str(session_row["session_id"]),
-            "experiment_id": session_row["experiment_id"],
-            "token": session_row["token"],
-            "treatment_group": session_row["treatment_group"],
-            "status": session_row["status"],
-            "user_name": session_row["user_name"],
-            "participant_stance": session_row.get("participant_stance"),
-            "started_at": session_row["started_at"].isoformat() if session_row.get("started_at") else None,
-            "ended_at": session_row["ended_at"].isoformat() if session_row.get("ended_at") else None,
-            "end_reason": session_row.get("end_reason"),
-            "random_seed": session_row.get("random_seed"),
-            "simulation_config": sim_cfg,
-            "experimental_config": exp_cfg,
-            "agent_blocks": agent_blocks,
-        },
-        "messages": [
-            {
-                **msg,
-                "manual_evaluation": saved_evaluations.get(msg["message_id"]),
-            }
-            for msg in messages
-        ],
-        "events": [
-            {
-                "id": row["id"],
-                "session_id": str(row["session_id"]),
-                "event_type": row["event_type"],
-                "occurred_at": row["occurred_at"].isoformat(),
-                "data": row["data"] if isinstance(row["data"], dict) else json.loads(row["data"]),
-            }
-            for row in event_rows
-        ],
-    }
+    from utils.exporters import build_session_payload
+    payload = await build_session_payload(pool, session_row)
 
     body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
     headers = {
@@ -3743,11 +3682,11 @@ async def admin_events_csv(experiment_id: str, x_admin_key: str = Header(None)):
 
 @app.get("/admin/experiment/{experiment_id}/export-all")
 async def admin_export_all(experiment_id: str, x_admin_key: str = Header(None)):
-    """Download one ZIP with every per-experiment CSV plus a codebook.
+    """Download one ZIP with per-session JSON, analysis CSVs, and a codebook.
 
-    One-click "download everything" for researchers: sessions + messages,
-    the full event log (including behavioural telemetry), tokens, and a
-    codebook documenting every column and event type.
+    One-click research archive: one complete JSON bundle per session plus the
+    flattened sessions/messages table, full event log (including behavioural
+    telemetry), tokens, and documentation.
     """
     _require_admin(x_admin_key)
     pool = _get_pool()

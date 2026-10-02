@@ -477,16 +477,29 @@ class TestHandleUserMessage:
         with _patch_externals() as mocks:
             session, _ = _create_session()
             session.running = True
+            target = Message.create(sender="Alice", content="Original text")
+            session.state.add_message(target)
             await session.handle_user_message(
                 "I agree",
-                reply_to="msg-1",
-                quoted_text="Original text",
+                reply_to=target.message_id,
                 mentions=["Alice"],
             )
-            msg = session.state.messages[0]
-            assert msg.reply_to == "msg-1"
+            msg = session.state.messages[-1]
+            assert msg.reply_to == target.message_id
             assert msg.quoted_text == "Original text"
             assert msg.mentions == ["Alice"]
+
+    @pytest.mark.asyncio
+    async def test_unknown_reply_target_drops_untrusted_quote_metadata(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+
+            await session.handle_user_message("I agree", reply_to="missing-message")
+
+            msg = session.state.messages[-1]
+            assert msg.reply_to is None
+            assert msg.quoted_text is None
 
     @pytest.mark.asyncio
     async def test_db_error_falls_through(self):

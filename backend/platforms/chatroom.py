@@ -1428,21 +1428,32 @@ class SimulationSession:
         self,
         content: str,
         reply_to: Optional[str] = None,
-        quoted_text: Optional[str] = None,
         mentions: Optional[list] = None,
     ) -> None:
-        """Handle an incoming user message — persist to DB and broadcast."""
+        """Handle an incoming user message — persist to DB and broadcast.
+
+        Reply text is always reconstructed from server-side state. The client
+        deliberately sends only ``reply_to`` because its display transcript may
+        contain the participant's browser-only name.
+        """
         if not self.running or self._safety_intervention_triggered:
             return  # session has ended; silently drop
         # Posting is activity, so it lifts an idle pause. The reminder does
         # not take keyboard focus from the input, so a participant can send
         # a message without pressing the reminder's button.
         await self.resume_from_idle()
+        reply_target = next(
+            (item for item in self.state.messages if item.message_id == reply_to),
+            None,
+        ) if reply_to else None
+        canonical_reply_to = reply_target.message_id if reply_target else None
+        canonical_quoted_text = reply_target.content if reply_target else None
+
         message = Message.create(
             sender=self.state.user_name,
             content=content,
-            reply_to=reply_to,
-            quoted_text=quoted_text,
+            reply_to=canonical_reply_to,
+            quoted_text=canonical_quoted_text,
             mentions=mentions,
         )
         self.state.add_message(message)

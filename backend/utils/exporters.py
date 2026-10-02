@@ -10,11 +10,13 @@ from __future__ import annotations
 import csv
 import io
 import json
+from collections import defaultdict
+from datetime import datetime, timezone
 from typing import Any
 
 import asyncpg
 
-from db.repositories import message_repo
+from db.repositories import message_repo, session_repo
 
 
 def _as_dict(value: Any) -> dict:
@@ -27,6 +29,206 @@ def _as_dict(value: Any) -> dict:
         except json.JSONDecodeError:
             return {}
     return {}
+
+
+def _message_from_row(row: Any) -> dict:
+    """Normalise a raw message DB row to the public session-export shape."""
+    item = dict(row)
+    liked_by = list(item.get("liked_by") or [])
+    message = {
+        "message_id": str(item["message_id"]),
+        "sender": item["sender"],
+        "content": item["content"],
+        "timestamp": item["sent_at"].isoformat(),
+        "reply_to": str(item["reply_to"]) if item.get("reply_to") else None,
+        "quoted_text": item.get("quoted_text"),
+        "mentions": list(item["mentions"]) if item.get("mentions") else None,
+        "likes_count": len(liked_by),
+        "liked_by": liked_by,
+        "reported": item.get("reported", False),
+        "is_incivil": item.get("is_incivil"),
+        "is_like_minded": item.get("is_like_minded"),
+        "inferred_participant_stance": item.get("inferred_participant_stance"),
+        "classification_rationale": item.get("classification_rationale"),
+    }
+    metadata = _as_dict(item.get("metadata"))
+    if metadata:
+        message.update(metadata)
+    return message
+
+
+def _manual_evaluation_from_row(row: Any) -> dict:
+    item = dict(row)
+    return {
+        "incivility": bool(item["incivility"]),
+        "hate_speech": bool(item["hate_speech"]),
+        "threats_to_dem_freedom": bool(item["threats_to_dem_freedom"]),
+        "impoliteness": bool(item["impoliteness"]),
+        "alignment": item.get("alignment") or "",
+        "human_like": item.get("human_like") or "",
+        "other": item.get("other") or "",
+        "updated_at": item["updated_at"].isoformat() if item.get("updated_at") else None,
+    }
+
+
+def _session_payload(
+    session_row: Any,
+    messages: list[dict],
+    saved_evaluations: dict[str, dict],
+    agent_blocks: dict[str, str],
+    event_rows: list[Any],
+    *,
+    exported_at: str,
+) -> dict:
+    row = dict(session_row)
+    return {
+        "exported_at": exported_at,
+        "session": {
+            "session_id": str(row["session_id"]),
+            "experiment_id": row["experiment_id"],
+            "token": row.get("token"),
+            "treatment_group": row["treatment_group"],
+            "status": row["status"],
+            "user_name": row["user_name"],
+            "participant_stance": row.get("participant_stance"),
+            "started_at": row["started_at"].isoformat() if row.get("started_at") else None,
+            "ended_at": row["ended_at"].isoformat() if row.get("ended_at") else None,
+            "end_reason": row.get("end_reason"),
+            "random_seed": row.get("random_seed"),
+            "simulation_config": _as_dict(row.get("simulation_config")),
+            "experimental_config": _as_dict(row.get("experimental_config")),
+            "agent_blocks": agent_blocks,
+        },
+        "messages": [
+            {
+                **message,
+                "manual_evaluation": saved_evaluations.get(message["message_id"]),
+            }
+            for message in messages
+        ],
+        "events": [
+            {
+                "id": event["id"],
+                "session_id": str(event["session_id"]),
+                "event_type": event["event_type"],
+                "occurred_at": event["occurred_at"].isoformat(),
+                "data": _as_dict(event["data"]),
+            }
+            for event in event_rows
+        ],
+    }
+
+
+async def build_session_payload(pool: asyncpg.Pool, session_row: dict) -> dict:
+    """Build the canonical JSON bundle used by individual and bulk exports."""
+    session_id = str(session_row["session_id"])
+    messages = await message_repo.get_session_messages(pool, session_id)
+    evaluations = await message_repo.get_manual_evaluations(pool, session_id)
+    blocks = await session_repo.get_agent_blocks(pool, session_id)
+    async with pool.acquire() as conn:
+        events = await conn.fetch(
+            """
+            SELECT id, session_id, event_type, occurred_at, data
+            FROM events
+            WHERE experiment_id = $1 AND session_id = $2
+            ORDER BY id ASC
+            """,
+            session_row["experiment_id"],
+            session_id,
+        )
+    return _session_payload(
+        session_row,
+        messages,
+        evaluations,
+        blocks,
+        list(events),
+        exported_at=datetime.now(timezone.utc).isoformat(),
+    )
+
+
+async def build_experiment_session_payloads(
+    pool: asyncpg.Pool,
+    experiment_id: str,
+) -> list[dict]:
+    """Build every session JSON with five bulk queries, avoiding N+1 exports."""
+    async with pool.acquire() as conn:
+        sessions = await conn.fetch(
+            """
+            SELECT * FROM sessions
+            WHERE experiment_id = $1
+            ORDER BY started_at DESC NULLS LAST, session_id
+            """,
+            experiment_id,
+        )
+        messages = await conn.fetch(
+            """
+            SELECT message_id, session_id, sender, content, sent_at, reply_to,
+                   quoted_text, mentions, liked_by, reported, is_incivil,
+                   is_like_minded, inferred_participant_stance,
+                   classification_rationale, metadata, seq
+            FROM messages
+            WHERE experiment_id = $1
+            ORDER BY session_id, seq
+            """,
+            experiment_id,
+        )
+        evaluations = await conn.fetch(
+            """
+            SELECT session_id, message_id, incivility, hate_speech,
+                   threats_to_dem_freedom, impoliteness, alignment, human_like,
+                   other, updated_at
+            FROM manual_message_evaluations
+            WHERE experiment_id = $1
+            """,
+            experiment_id,
+        )
+        blocks = await conn.fetch(
+            """
+            SELECT b.session_id, b.agent_name, b.blocked_at
+            FROM agent_blocks b
+            JOIN sessions s ON s.session_id = b.session_id
+            WHERE s.experiment_id = $1
+            """,
+            experiment_id,
+        )
+        events = await conn.fetch(
+            """
+            SELECT id, session_id, event_type, occurred_at, data
+            FROM events
+            WHERE experiment_id = $1
+            ORDER BY session_id, id
+            """,
+            experiment_id,
+        )
+
+    messages_by_session: dict[str, list[dict]] = defaultdict(list)
+    evaluations_by_session: dict[str, dict[str, dict]] = defaultdict(dict)
+    blocks_by_session: dict[str, dict[str, str]] = defaultdict(dict)
+    events_by_session: dict[str, list[Any]] = defaultdict(list)
+
+    for row in messages:
+        messages_by_session[str(row["session_id"])].append(_message_from_row(row))
+    for row in evaluations:
+        evaluations_by_session[str(row["session_id"])][str(row["message_id"])] = (
+            _manual_evaluation_from_row(row)
+        )
+    for row in blocks:
+        blocks_by_session[str(row["session_id"])][row["agent_name"]] = row["blocked_at"].isoformat()
+    for row in events:
+        events_by_session[str(row["session_id"])].append(row)
+
+    exported_at = datetime.now(timezone.utc).isoformat()
+    return [
+        _session_payload(
+            row,
+            messages_by_session[str(row["session_id"])],
+            evaluations_by_session[str(row["session_id"])],
+            blocks_by_session[str(row["session_id"])],
+            events_by_session[str(row["session_id"])],
+            exported_at=exported_at,
+        )
+        for row in sessions
+    ]
 
 
 async def build_sessions_csv(
@@ -193,6 +395,9 @@ CODEBOOK = """# WP5 Pilot Platform — Data Export Codebook
 This bundle contains every record collected for one experiment. All timestamps
 are UTC ISO-8601 unless noted. Files:
 
+- `sessions/` — one complete JSON file per session, using the same structure
+  as the download button on an individual session: session metadata and config,
+  messages, manual evaluations, blocks, and events.
 - `sessions_and_messages.csv` — one row per chat message, prefixed with the
   owning session's configuration and treatment context. Sessions with no
   messages appear as a single row with blank message columns.
@@ -274,15 +479,22 @@ async def build_experiment_zip(
     experiment_id: str,
     experiment: dict,
 ) -> bytes:
-    """Bundle every per-experiment CSV plus a codebook into a single ZIP."""
+    """Bundle per-session JSONs, analysis CSVs, and a codebook in one ZIP."""
     import zipfile
 
     sessions_csv = await build_sessions_csv(pool, experiment_id, experiment)
     events_csv = await build_events_csv(pool, experiment_id)
     tokens_csv = await build_tokens_csv(pool, experiment_id)
+    session_payloads = await build_experiment_session_payloads(pool, experiment_id)
 
     mem = io.BytesIO()
     with zipfile.ZipFile(mem, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for payload in session_payloads:
+            session_id = payload["session"]["session_id"]
+            zf.writestr(
+                f"{experiment_id}/sessions/{session_id}_stage_session.json",
+                json.dumps(payload, ensure_ascii=False, indent=2),
+            )
         zf.writestr(f"{experiment_id}/sessions_and_messages.csv", sessions_csv)
         zf.writestr(f"{experiment_id}/events.csv", events_csv)
         zf.writestr(f"{experiment_id}/tokens.csv", tokens_csv)

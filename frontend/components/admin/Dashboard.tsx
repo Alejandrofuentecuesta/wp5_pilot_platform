@@ -652,10 +652,10 @@ function SessionsTab({
         <button
           onClick={handleExportBundle}
           disabled={!experimentId || exporting}
-          title="Download sessions, messages, full event log (incl. behavioural telemetry), tokens, and a codebook as a ZIP"
+          title="Download one JSON per session plus analysis CSVs, the full event log, tokens, and a codebook"
           className="px-3 py-1.5 text-xs font-medium border border-admin-accent bg-admin-accent text-white rounded-lg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {exporting ? "Exporting..." : "Download everything (ZIP)"}
+          {exporting ? "Exporting..." : "Download experiment (ZIP)"}
         </button>
       </div>
 

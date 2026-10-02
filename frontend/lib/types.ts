@@ -68,7 +68,6 @@ export type UserMessagePayload =
       type: "user_message"
       content: string
       reply_to?: string
-      quoted_text?: string
       mentions?: string[]
     }
   | EmotionsCheckupResponsePayload

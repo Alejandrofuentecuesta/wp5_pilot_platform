@@ -543,13 +543,13 @@ export function useChat() {
     // paused experiment), whichever input it comes from.
     if (safetyHoldNotice) return false
     // Self-typed occurrences of the participant's own name travel as the
-    // alias; the quoted text was inbound-mapped on arrival, so it is mapped
-    // back before leaving.
+    // alias. Replies send only the target id: the backend reconstructs the
+    // quote from the stored message so browser-only names can never leak in
+    // quoted_text and the quote cannot diverge from its target.
     const content = mapperRef.current.outbound(text)
     const payload: UserMessagePayload = { type: "user_message", content }
     if (replyTo) {
       payload.reply_to = replyTo.message_id
-      payload.quoted_text = mapperRef.current.outbound(replyTo.content)
     }
     if (detectedMentions.length > 0) payload.mentions = detectedMentions
 

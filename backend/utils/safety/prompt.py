@@ -100,18 +100,40 @@ def render_excerpt(target: ChatMessage, history: Sequence[ChatMessage], user_nam
     rows: List[Tuple[int, ChatMessage]] = [(i, history[i]) for i in sorted(picked)]
     rows.append((len(history), target))
 
+    msg_sender_by_id = {
+        m.message_id: m.sender
+        for m in [*history, target]
+        if getattr(m, "message_id", None)
+    }
+
     labels = {user_name: "User"}
     agents = 0
+    for _, m in rows:
+        if m.sender not in labels:
+            agents += 1
+            labels[m.sender] = f"Agent {agents}"
+
     lines: List[str] = []
     previous = None
     for i, m in rows:
         if previous is not None and i > previous + 1:
             lines.append(GAP_MARKER)
         previous = i
-        if m.sender not in labels:
-            agents += 1
-            labels[m.sender] = f"Agent {agents}"
-        lines.append(f"{labels[m.sender]}: {m.content.strip()}")
+
+        sender_label = labels[m.sender]
+        reply_to_id = getattr(m, "reply_to", None)
+        if reply_to_id and reply_to_id in msg_sender_by_id:
+            replied_sender = msg_sender_by_id[reply_to_id]
+            replied_label = labels.get(replied_sender, "User" if replied_sender == user_name else replied_sender)
+            header = f"{sender_label} (in response to {replied_label})"
+        else:
+            header = sender_label
+
+        content = m.content.strip()
+        for name in sorted(labels.keys(), key=len, reverse=True):
+            content = re.sub(rf"@{re.escape(name)}\b", f"@{labels[name]}", content, flags=re.IGNORECASE)
+
+        lines.append(f"{header}: {content}")
 
     lines.append(
         f"[Assess the last message above, written by {labels[target.sender]}. "

@@ -78,10 +78,24 @@ class TestExcerpt:
             "User: a",
             "Agent 2: b",
             "Agent 3: c",
-            "Agent 4: exacto",
+            "Agent 4 (in response to Agent 1): exacto",
             out[6],
         ]
         assert "otra cosa" not in "".join(out)
+
+    def test_reply_to_user_rendered_explicitly(self):
+        history = [m(USER, "tenemos que disparar", mid="u1"), m("Cristina", "la violencia no")]
+        out = _lines(render_excerpt(m("Carlos", "tienes razon", reply_to="u1"), history, USER))
+        assert out[:3] == [
+            "User: tenemos que disparar",
+            "Agent 1: la violencia no",
+            "Agent 2 (in response to User): tienes razon",
+        ]
+
+    def test_mention_user_rendered_as_at_user(self):
+        history = [m(USER, "hola", mid="u1")]
+        out = _lines(render_excerpt(m("Carlos", f"@{USER} tienes razon"), history, USER))
+        assert out[1] == "Agent 1: @User tienes razon"
 
     def test_participant_target_gets_no_extra_user_message(self):
         history = [m(USER, "antes"), m("Carlos", "x"), m("Ana", "y"), m("Luis", "z")]

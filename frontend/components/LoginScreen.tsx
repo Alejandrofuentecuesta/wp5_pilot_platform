@@ -359,18 +359,26 @@ export default function LoginScreen({
 
               <div className="rounded-xl border-2 border-[#e0a800] bg-[#fff7b8] p-5 text-[#4d3f00]">
                 <h3 className="text-2xl font-semibold">Importante</h3>
-                <div className="mt-3 space-y-2 text-sm leading-6">
+                <div className="mt-3 space-y-3 text-sm leading-6">
                   <p className="rounded-lg bg-[#4d3f00]/10 px-3 py-2 text-base font-bold">
                     El experimento dura aproximadamente 20 minutos y{" "}
                     <span className="underline decoration-2 underline-offset-2">debe completarse en una única sesión sin pausas ni interrupciones</span>.
                     Una vez que empieces, <span className="underline decoration-2 underline-offset-2">no podrás pararlo ni continuar más tarde</span>.
                   </p>
                   <p className="font-semibold">Si no tienes tiempo para completarlo ahora, por favor entra en otro momento.</p>
-                  <p>
-                    No escribas nombres reales, datos de contacto ni información personal tuya o de otras personas particulares en tus
-                    comentarios. Para proteger la privacidad de todos, participa sin incluir datos que puedan identificar
-                    a alguien.
-                  </p>
+
+                  <div className="rounded-lg border border-[#e0a800]/40 bg-white/70 p-3.5 text-[#4d3f00]">
+                    <p className="text-base font-bold">
+                      Anonimización y privacidad de los participantes
+                    </p>
+                    <p className="mt-1">
+                      Para garantizar la privacidad de los participantes en la investigación, <strong>los nombres visibles del resto de usuarios en la sala de discusión son seudónimos estándar asignados por el sistema</strong>. Ningún usuario muestra su identidad real completa y los nombres que ves en el chat son alias genéricos asignados automáticamente para proteger el anonimato de todos.
+                    </p>
+                    <p className="mt-2 text-xs leading-5">
+                      Para proteger la privacidad de todos, no escribas nombres reales, datos de contacto ni información personal tuya o de otras personas particulares en tus comentarios.
+                    </p>
+                  </div>
+
                   <p>
                     Si pierdes la conexión o cierras la pestaña por accidente, puedes volver a entrar con el mismo enlace
                     hasta una hora después de haber empezado y continuar donde lo dejaste. Si usas el botón «Salir», tu participación termina de

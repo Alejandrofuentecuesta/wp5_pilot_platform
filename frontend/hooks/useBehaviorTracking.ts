@@ -15,6 +15,7 @@ export type TelemetryKind =
   | "idle_prompt_shown"
   | "page_unload"
   | "exit_attempt"
+  | "paste_blocked"
 
 interface QueuedEvent {
   kind: TelemetryKind
@@ -77,7 +78,7 @@ export function useBehaviorTracking({
   const trackImmediately = useCallback(
     (kind: TelemetryKind, data?: Record<string, unknown>) => {
       if (!sessionId) return
-      if (kind !== "exit_attempt" && !trackingEnabled) return
+      if (kind !== "exit_attempt" && kind !== "paste_blocked" && !trackingEnabled) return
       sendTelemetry(sessionId, [
         { kind, at: new Date().toISOString(), data },
       ])

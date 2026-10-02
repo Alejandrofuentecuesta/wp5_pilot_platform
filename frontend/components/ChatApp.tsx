@@ -137,6 +137,7 @@ export default function ChatApp() {
       openExitModal={chat.openExitModal}
       setExitModalOpen={chat.setExitModalOpen}
       exitSession={chat.exitSession}
+      onPasteBlocked={chat.logPasteBlocked}
       />
     </>
   )

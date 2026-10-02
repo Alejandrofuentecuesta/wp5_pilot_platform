@@ -496,6 +496,21 @@ class Orchestrator:
         ))
 
     @staticmethod
+    def _looks_like_direct_personal_label_on_participant(content: Optional[str]) -> bool:
+        """Heuristic guard detecting 2nd-person personal attacks/labels (ad hominem) on the participant."""
+        if not content:
+            return False
+        normalized = " ".join(str(content).lower().split())
+        return bool(re.search(
+            r"\b(eres|pareces|quedas como|act[uú]as como)\s+(un\s+|una\s+|tan\s+|bastante\s+)?("
+            r"racista|facha|fascista|xen[oó]fob[oa]|machista|clasista|ignorante|ingenu[oa]|"
+            r"idiota|imb[eé]cil|analfabet[oa]|est[uú]pid[oa]|tont[oa]|payas[oa]|pat[eé]tic[oa]|"
+            r"in[uú]til|sinverg[uü]enza|miserable"
+            r")\b",
+            normalized,
+        ))
+
+    @staticmethod
     def _performer_output_needs_moderator(content: Optional[str]) -> bool:
         """Return True only when performer output looks too messy to publish directly."""
         if not content:
@@ -2776,8 +2791,17 @@ class Orchestrator:
                 participant_target_for_validation = self.state.user_name
             elif target_message and target_message.sender == self.state.user_name:
                 participant_target_for_validation = self.state.user_name
+            elif (
+                self.state.user_name
+                and candidate_mentions
+                and self.state.user_name in candidate_mentions
+            ):
+                participant_target_for_validation = self.state.user_name
 
-
+            recent_msgs = self.state.get_recent_messages(1)
+            participant_is_latest_speaker = bool(
+                recent_msgs and self.state.user_name and recent_msgs[-1].sender == self.state.user_name
+            )
 
             if (
                 participant_target_for_validation
@@ -2794,6 +2818,24 @@ class Orchestrator:
                     "Your last draft turned against the participant even though your exact alignment cell matches theirs.\n"
                     "Rewrite it so you support, defend, or sharpen the participant's case. Do not scold them, call them names, "
                     "or frame them as the problem."
+                )
+                content = None
+                continue
+
+            if (
+                (participant_target_for_validation or participant_is_latest_speaker or bool(re.search(r"\b(eres|pareces)\s+(un\s+|una\s+)?(racista|facha)\b", candidate_content.lower())))
+                and self._looks_like_direct_personal_label_on_participant(candidate_content)
+            ):
+                self.logger.log_error(
+                    "performer_direct_personal_attack_retry",
+                    f"Generated message for '{agent_name}' used direct personal label against participant '{self.state.user_name}'; retrying",
+                    context={"action_type": action_type},
+                )
+                performer_user_prompt = prompt_with_retry_correction(
+                    "Important correction:\n"
+                    "Your last draft attacked or labeled the participant directly as a person (e.g. 'eres ...').\n"
+                    "You must NEVER attack the participant personally (never call them 'racista', 'facha', 'ignorante', etc.).\n"
+                    "Criticize ONLY their message, argument, or reasoning (e.g. 'ese comentario es racista', 'eso que dices es absurdo', 'menudo disparate'), NEVER the person."
                 )
                 content = None
                 continue

@@ -404,8 +404,7 @@ export function useChat() {
         composeRef.current = { startedAt: Date.now(), keystrokes: 0, backspaces: 0, pasted: false }
       }
       const delta = nextLen - prevLen
-      if (delta > 1) composeRef.current.pasted = true
-      else if (delta === 1) composeRef.current.keystrokes += 1
+      if (delta > 0) composeRef.current.keystrokes += delta
       else if (delta < 0) composeRef.current.backspaces += 1
       // Typing does NOT reset the idle reminder — only posting a message does.
       setInputValue(next)
@@ -622,6 +621,13 @@ export function useChat() {
     trackImmediately("exit_attempt", { source: "chat_header" })
     setExitModalOpen(true)
   }, [trackImmediately])
+
+  const logPasteBlocked = useCallback(
+    (location: "chat_input" | "initial_reaction") => {
+      trackImmediately("paste_blocked", { location })
+    },
+    [trackImmediately],
+  )
 
   const exitSession = useCallback((reason: string) => {
     send({
@@ -947,6 +953,8 @@ export function useChat() {
     openExitModal,
     setExitModalOpen,
     exitSession,
+    // Paste blocked telemetry
+    logPasteBlocked,
     // Queue
     queueToken,
     queuePosition,

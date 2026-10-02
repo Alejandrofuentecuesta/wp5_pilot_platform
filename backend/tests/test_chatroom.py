@@ -1010,3 +1010,62 @@ class TestHandleEmotionsCheckupResponse:
                         "emotion_explanation": "Me ha molestado el tono de la conversación.",
                     }
                 )
+
+
+# ── Active Expiration & Pause Compensation ────────────────────────────────────
+
+class TestSessionActiveExpiration:
+
+    def test_not_expired_before_first_user_message(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session._first_user_message_received = False
+            session.state.duration_minutes = 20.0
+            session.state.start_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+            assert session.is_session_expired() is False
+
+    def test_not_expired_while_frozen(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session._first_user_message_received = True
+            session.state.duration_minutes = 20.0
+            session.state.start_time = datetime.now(timezone.utc) - timedelta(minutes=30)
+            session._experiment_paused = True
+            assert session.is_session_expired() is False
+
+    def test_paused_time_compensates_and_preserves_full_active_duration(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session._first_user_message_received = True
+            session.state.duration_minutes = 20.0
+            # 25 min total wall clock, but 10 min were paused -> 15 min active (< 20 min)
+            session.state.start_time = datetime.now(timezone.utc) - timedelta(minutes=25)
+            session.state.paused_seconds = 10.0 * 60.0
+            assert session.is_session_expired() is False
+
+            # 31 min total wall clock, 10 min paused -> 21 min active (> 20 min)
+            session.state.start_time = datetime.now(timezone.utc) - timedelta(minutes=31)
+            assert session.is_session_expired() is True
+
+    @pytest.mark.asyncio
+    async def test_watchdog_triggers_stop_on_active_expiration(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            session._first_user_message_received = True
+            session.state.duration_minutes = 20.0
+            # 21 min active > 20 min duration
+            session.state.start_time = datetime.now(timezone.utc) - timedelta(minutes=21)
+            session._publish_session_end = AsyncMock()
+            session.stop = AsyncMock()
+
+            watchdog_task = asyncio.create_task(session._expiration_watchdog())
+            await asyncio.sleep(1.2)
+            watchdog_task.cancel()
+            try:
+                await watchdog_task
+            except asyncio.CancelledError:
+                pass
+
+            session._publish_session_end.assert_awaited_once_with("duration_expired")
+            session.stop.assert_awaited_once_with(reason="duration_expired")

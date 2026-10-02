@@ -54,6 +54,7 @@ interface ChatRoomProps {
   openExitModal: () => void
   setExitModalOpen: (open: boolean) => void
   exitSession: (reason: string) => void
+  onPasteBlocked?: (location: "chat_input" | "initial_reaction") => void
 }
 
 export default function ChatRoom({
@@ -90,6 +91,7 @@ export default function ChatRoom({
   openExitModal,
   setExitModalOpen,
   exitSession,
+  onPasteBlocked,
 }: ChatRoomProps) {
   const [blockTarget, setBlockTarget] = useState<Message | null>(null)
 
@@ -125,6 +127,7 @@ export default function ChatRoom({
         onCancelReply={() => setReplyTo(null)}
         onSend={sendMessage}
         disabled={inputDisabled}
+        onPasteBlocked={() => onPasteBlocked?.("chat_input")}
       />
 
       {/* Report modal */}
@@ -161,6 +164,7 @@ export default function ChatRoom({
           isInitialRead={isInitialNewsRead}
           onSubmitInitialMessage={submitInitialNewsMessage}
           isConnected={isConnected}
+          onPasteBlocked={() => onPasteBlocked?.("initial_reaction")}
         />
       )}
 

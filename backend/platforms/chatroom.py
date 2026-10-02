@@ -507,6 +507,7 @@ class SimulationSession:
         self.websocket_send = self._wrap_send(self._raw_ws_send)
 
         self.clock_task: Optional[asyncio.Task] = None
+        self._watchdog_task: Optional[asyncio.Task] = None
         self.running = False
         self._seeded = False
         self._turn_lock = asyncio.Lock()   # serialises the persist+broadcast phase
@@ -903,6 +904,7 @@ class SimulationSession:
         await self.features.seed(self.state, self.websocket_send, experiment_id=self.experiment_id)
         self._seeded = True
         self.clock_task = asyncio.create_task(self._clock_loop())
+        self._watchdog_task = asyncio.create_task(self._expiration_watchdog())
         print(f"Session {self.session_id} started")
 
     async def resume(self) -> None:
@@ -926,6 +928,7 @@ class SimulationSession:
                 self.logger.log_error("restore_checkup_state", str(exc))
 
         self.clock_task = asyncio.create_task(self._clock_loop())
+        self._watchdog_task = asyncio.create_task(self._expiration_watchdog())
         print(f"Session {self.session_id} resumed (crash recovery)")
 
     async def stop(self, reason: str = "completed") -> None:
@@ -940,7 +943,14 @@ class SimulationSession:
         if not self.running:
             return
         self.running = False
-        if self.clock_task:
+        current_task = asyncio.current_task()
+        if self._watchdog_task and self._watchdog_task is not current_task:
+            self._watchdog_task.cancel()
+            try:
+                await self._watchdog_task
+            except asyncio.CancelledError:
+                pass
+        if self.clock_task and self.clock_task is not current_task:
             self.clock_task.cancel()
             try:
                 await self.clock_task
@@ -1043,6 +1053,32 @@ class SimulationSession:
         self.logger.log_error("panel_return_ping", str(last_exc))
         print(f"[PANEL_RETURN] session={self.session_id} reason={reason} FAILED: {last_exc}")
 
+    def is_session_expired(self) -> bool:
+        """Check if active duration has expired (excluding pauses and pre-first-message time)."""
+        if not getattr(self, "_first_user_message_received", False) or self.frozen:
+            return False
+        return self.state.is_expired()
+
+    async def _expiration_watchdog(self) -> None:
+        """Sub-second watchdog that cuts off the session at exactly active duration.
+
+        Prevents in-flight agent turns or typing delays from causing overshoot.
+        """
+        while self.running:
+            try:
+                await asyncio.sleep(0.5)
+                if not self.running:
+                    break
+                if self.is_session_expired():
+                    await self._publish_session_end("duration_expired")
+                    await asyncio.sleep(0.5)
+                    await self.stop(reason="duration_expired")
+                    break
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                self.logger.log_error("expiration_watchdog", str(exc))
+
     # ── Clock loop ────────────────────────────────────────────────────────────
 
     async def _clock_loop(self) -> None:
@@ -1102,7 +1138,7 @@ class SimulationSession:
                     await asyncio.sleep(tick_interval)
                     continue
 
-                if self.state.is_expired():
+                if self.is_session_expired():
                     await self._publish_session_end("duration_expired")
                     await asyncio.sleep(0.5)  # let pub/sub deliver before teardown
                     await self.stop(reason="duration_expired")
@@ -1123,6 +1159,16 @@ class SimulationSession:
                     if elapsed_minutes >= self.emotions_checkup_time_minutes:
                         self._emotions_checkup_triggered = True
                         await self._publish_emotions_checkup_trigger()
+
+                active_seconds_left = (self.state.duration_minutes * 60.0) - (self.state.elapsed_active_minutes() * 60.0)
+                if active_seconds_left <= 0:
+                    await self._publish_session_end("duration_expired")
+                    await asyncio.sleep(0.5)
+                    await self.stop(reason="duration_expired")
+                    break
+                if active_seconds_left < 3.0:
+                    await asyncio.sleep(min(active_seconds_left, 0.5))
+                    continue
 
                 if self._rng.random() < post_probability:
                     if self._parallel_turns > 1:
@@ -1186,7 +1232,7 @@ class SimulationSession:
         later approval then makes two of their messages appear one after
         the other with no explanation.
         """
-        if not self.running or self._safety_intervention_triggered:
+        if not self.running or self._safety_intervention_triggered or self.is_session_expired():
             return
         try:
             await self._publish_typing(started=True)
@@ -1205,12 +1251,12 @@ class SimulationSession:
             if result is None or result.action_type == "wait":
                 return
 
-            if not self.running or self._safety_intervention_triggered:
+            if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                 return
 
             if result.action_type == "like":
                 async with self._turn_lock:
-                    if not self.running or self._safety_intervention_triggered:
+                    if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                         return
                     await self.agent_manager._handle_like(result)
                 return
@@ -1219,17 +1265,20 @@ class SimulationSession:
             if result.message and result.message.content:
                 delay = len(result.message.content) / self.TYPING_CHARS_PER_SECOND
                 delay = max(self.TYPING_DELAY_MIN, min(delay, self.TYPING_DELAY_MAX))
+                active_seconds_left = (self.state.duration_minutes * 60.0) - (self.state.elapsed_active_minutes() * 60.0)
+                if delay >= active_seconds_left:
+                    return
                 await asyncio.sleep(delay)
 
-            # A safety classification can finish while the LLM or typing
+            # A safety classification or session expiry can finish while the LLM or typing
             # delay is in flight. Never persist or expose that late action.
-            if not self.running or self._safety_intervention_triggered:
+            if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                 return
 
             # Delegate persistence + broadcast to AgentManager (serialised
             # for ordering, same as _parallel_turn).
             async with self._turn_lock:
-                if not self.running or self._safety_intervention_triggered:
+                if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                     return
                 await self.agent_manager._handle_message(result)
         except Exception as e:
@@ -1259,7 +1308,7 @@ class SimulationSession:
         pipeline_id_var.set(pid)
         orchestrator = self._pipeline_orchestrators[pid - 1]
         try:
-            if not self.running or self._safety_intervention_triggered:
+            if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                 return
             participant_target, _ = orchestrator._pending_participant_target(
                 self.state.get_recent_messages(orchestrator.action_window_size),
@@ -1290,13 +1339,13 @@ class SimulationSession:
             if result is None or result.action_type == "wait":
                 return
 
-            if not self.running or self._safety_intervention_triggered:
+            if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                 return
 
             # ── Phase 2: Likes need no typing delay — persist immediately ─────
             if result.action_type == "like":
                 async with self._turn_lock:
-                    if not self.running or self._safety_intervention_triggered:
+                    if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                         return
                     await self.agent_manager._handle_like(result)
                 return
@@ -1305,11 +1354,14 @@ class SimulationSession:
             if result.message and result.message.content:
                 delay = len(result.message.content) / self.TYPING_CHARS_PER_SECOND
                 delay = max(self.TYPING_DELAY_MIN, min(delay, self.TYPING_DELAY_MAX))
+                active_seconds_left = (self.state.duration_minutes * 60.0) - (self.state.elapsed_active_minutes() * 60.0)
+                if delay >= active_seconds_left:
+                    return
                 await asyncio.sleep(delay)
 
             # ── Phase 4: Persist + broadcast (serialised for ordering) ────────
             async with self._turn_lock:
-                if not self.running or self._safety_intervention_triggered:
+                if not self.running or self._safety_intervention_triggered or self.is_session_expired():
                     return
                 await self.agent_manager._handle_message(result)
 
@@ -1626,6 +1678,8 @@ class SimulationSession:
             # turns. The guards above also discard a result at the final
             # persistence boundary if cancellation races with completion.
             current_task = asyncio.current_task()
+            if self._watchdog_task and self._watchdog_task is not current_task:
+                self._watchdog_task.cancel()
             if self.clock_task and self.clock_task is not current_task:
                 self.clock_task.cancel()
             for task in list(self._active_turn_tasks):

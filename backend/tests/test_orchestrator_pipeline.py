@@ -975,6 +975,65 @@ class TestExecuteTurnMessage:
             context={"action_type": "reply"},
         )
 
+    @pytest.mark.asyncio
+    async def test_retries_when_performer_uses_direct_personal_label_on_participant(self):
+        state = _make_state(
+            participant_stance_hint="pro_policy_pro_topic",
+            agents=[Agent(name="Alice"), Agent(name="Bob")],
+        )
+        participant_msg = Message.create(
+            sender="participant",
+            content="@Bob No podemos acoger a todo el mundo sin control.",
+            mentions=["Bob"],
+        )
+        state.add_message(participant_msg)
+        orch, logger = _make_orchestrator(
+            state=state,
+            agent_traits={
+                "Alice": {"alignment_cell": "pro_policy_pro_topic"},
+                "Bob": {
+                    "alignment_cell": "anti_policy_anti_topic",
+                    "incivility": "uncivil",
+                },
+            },
+        )
+        anon_bob = "Bob"
+
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(
+                next_performer=anon_bob,
+                action_type="reply",
+                target_message_id=participant_msg.message_id,
+            )
+        )
+        orch.performer_llm.generate_response = AsyncMock(
+            side_effect=[
+                "Eres un racista y no te enteras de nada.",
+                "Ese comentario es racista y no tiene ningun sentido.",
+            ]
+        )
+        orch.moderator_llm.generate_response = AsyncMock(
+            side_effect=[
+                "Eres un racista y no te enteras de nada.",
+                "Ese comentario es racista y no tiene ningun sentido.",
+            ]
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None
+        assert result.message is not None
+        assert result.message.reply_to == participant_msg.message_id
+        assert "Ese comentario es racista" in result.message.content
+        assert orch.performer_llm.generate_response.call_count == 2
+        retry_prompt = orch.performer_llm.generate_response.call_args_list[1].args[0]
+        assert "Your last draft attacked or labeled the participant directly as a person" in retry_prompt
+        logger.log_error.assert_any_call(
+            "performer_direct_personal_attack_retry",
+            "Generated message for 'Bob' used direct personal label against participant 'participant'; retrying",
+            context={"action_type": "reply"},
+        )
+
 
 # â”€â”€ execute_turn: like action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1821,6 +1880,22 @@ class TestFixedStanceGuard:
         assert Orchestrator._looks_like_attack_on_participant(
             "Lo de fondo que dices es verdad y habría que ir más lejos."
         ) is False
+
+    def test_detects_direct_personal_label_on_participant(self):
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("eres un racista") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("eres una racista") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("eres facha") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("eres un facha") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("eres ignorante") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("eres bastante ignorante") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("pareces un fascista") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("actúas como un xenófobo") is True
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("esto es un mensaje racista") is False
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("ese comentario es racista") is False
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("ese comentario es de facha") is False
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("vaya sarta de tonterías") is False
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("menudo disparate") is False
+        assert Orchestrator._looks_like_direct_personal_label_on_participant("los fachas de siempre") is False
 
     @pytest.mark.asyncio
     async def legacy_mismatched_fixed_stance_retries_once_and_keeps_second_draft(self):

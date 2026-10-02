@@ -13,6 +13,7 @@ interface NewsArticleModalProps {
   isInitialRead?: boolean
   onSubmitInitialMessage?: (initialMessage: string) => void
   isConnected?: boolean
+  onPasteBlocked?: () => void
 }
 
 export default function NewsArticleModal({
@@ -23,6 +24,7 @@ export default function NewsArticleModal({
   isInitialRead = false,
   onSubmitInitialMessage,
   isConnected = true,
+  onPasteBlocked,
 }: NewsArticleModalProps) {
   const [initialInput, setInitialInput] = useState("")
 
@@ -122,6 +124,13 @@ export default function NewsArticleModal({
                   rows={2}
                   value={initialInput}
                   onChange={(e) => setInitialInput(e.target.value)}
+                  onPaste={(e) => {
+                    e.preventDefault()
+                    onPasteBlocked?.()
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault()
+                  }}
                   placeholder="¿Qué opinas sobre esta noticia? Escribe tu mensaje inicial aquí..."
                   className="w-full rounded-xl border border-border bg-bg-surface p-3 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30 resize-none"
                   autoFocus

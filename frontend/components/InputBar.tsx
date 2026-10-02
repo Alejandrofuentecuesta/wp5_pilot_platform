@@ -16,6 +16,7 @@ interface InputBarProps {
   // While the room is frozen by a researcher nothing can be typed or sent;
   // disabling the textarea also drops keyboard focus from behind the notice.
   disabled?: boolean
+  onPasteBlocked?: () => void
 }
 
 export default function InputBar({
@@ -25,6 +26,7 @@ export default function InputBar({
   onCancelReply,
   onSend,
   disabled = false,
+  onPasteBlocked,
 }: InputBarProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
 
@@ -97,6 +99,13 @@ export default function InputBar({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
+            onPaste={(e) => {
+              e.preventDefault()
+              onPasteBlocked?.()
+            }}
+            onDrop={(e) => {
+              e.preventDefault()
+            }}
             disabled={disabled}
             maxLength={2000}
             placeholder="Escribe un mensaje..."

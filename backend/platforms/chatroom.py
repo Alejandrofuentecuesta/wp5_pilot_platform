@@ -45,8 +45,6 @@ _REPLACEMENT_AGENT_NAMES = [
 _AGENT_NAME_GENDERS = {
     "lucia": "f", "cristina": "f", "irene": "f", "nuria": "f",
     "diego": "m", "carlos": "m", "oscar": "m", "sergio": "m",
-    "elena": "f", "paula": "f", "teresa": "f", "rocio": "f",
-    "andres": "m", "victor": "m", "fernando": "m", "gonzalo": "m",
 }
 
 

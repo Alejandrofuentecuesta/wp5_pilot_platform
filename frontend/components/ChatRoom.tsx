@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import type { Message, EmotionRating, MessageReaction } from "@/lib/types"
 import ChatHeader from "./ChatHeader"
 import MessageFeed from "./MessageFeed"
@@ -96,6 +96,27 @@ export default function ChatRoom({
   onPasteBlocked,
 }: ChatRoomProps) {
   const [blockTarget, setBlockTarget] = useState<Message | null>(null)
+  const [reportToastVisible, setReportToastVisible] = useState(false)
+  const reportToastTimerRef = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (reportToastTimerRef.current) {
+        clearTimeout(reportToastTimerRef.current)
+      }
+    }
+  }, [])
+
+  const handleReportAccept = (reasons: string[], otherReason: string | null) => {
+    performReport(reasons, otherReason)
+    if (reportToastTimerRef.current) {
+      clearTimeout(reportToastTimerRef.current)
+    }
+    setReportToastVisible(true)
+    reportToastTimerRef.current = setTimeout(() => {
+      setReportToastVisible(false)
+    }, 4000)
+  }
 
   return (
     <div className="fixed inset-0 mx-auto flex h-dvh w-full max-w-3xl flex-col overflow-hidden overscroll-none bg-bg-surface shadow-lg">
@@ -104,6 +125,37 @@ export default function ChatRoom({
         isConnected={isConnected}
         onExitClick={openExitModal}
       />
+
+      {/* Toast de confirmación de reporte */}
+      {reportToastVisible && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="absolute top-16 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2.5 px-4 py-2.5 rounded-full bg-gray-900/90 text-white shadow-xl backdrop-blur-sm border border-white/10 animate-in fade-in slide-in-from-top-3 duration-200 pointer-events-auto"
+        >
+          <div className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/20 text-emerald-400">
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <span className="text-xs sm:text-sm font-medium tracking-wide">
+            Gracias, revisaremos este mensaje
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (reportToastTimerRef.current) clearTimeout(reportToastTimerRef.current)
+              setReportToastVisible(false)
+            }}
+            className="ml-1 text-gray-400 hover:text-white p-0.5 rounded-full transition-colors"
+            aria-label="Cerrar notificación"
+          >
+            <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
 
       <MessageFeed
         messages={visibleMessages}
@@ -137,7 +189,7 @@ export default function ChatRoom({
         <ReportModal
           senderName={reportTarget.sender}
           reporting={reporting}
-          onAccept={performReport}
+          onAccept={handleReportAccept}
           onClose={() => {
             setReportModalOpen(false)
             setReportTarget(null)

@@ -385,9 +385,9 @@ class TestOrchestratorInit:
             "LIKEMINDED_TARGET = 80\nNOT_LIKEMINDED_TARGET = 20\nINCIVILITY_TARGET = 80",
             {"Alice", "Bob", "Carol", "Dora", "Eve"},
         )
-        assert len(filtered) == TARGET_ELIGIBLE_SPEAKER_COUNT
-        assert "Alice" in filtered
-        assert "Dora" in filtered
+        # Below the incivility target only uncivil agents are offered, whatever
+        # their side: a civil agent here would write a civil message.
+        assert filtered == {"Alice", "Eve"}
 
     def test_sanitize_summary_for_eligible_agents_rewrites_noneligible_names(self):
         state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob"), Agent(name="Carol")])

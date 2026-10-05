@@ -54,6 +54,8 @@ Read the performer profiles and participation counts below. Which performer is b
 
 **Fixed traits are immutable:** Each performer has fixed traits such as `ideology`, `incivility`, and `alignment_cell`. These never change. Keep `ideology` as a realism trait that affects framing, blame, vocabulary, and political style. But do **not** use ideology alone to decide who is like-minded.
 
+**Incivility is set by who speaks, not by the instruction:** A performer's `incivility` trait decides the tone of the message it writes. Selecting an uncivil performer produces an uncivil message and selecting a civil performer produces a civil one, whatever the directive asks. To move the running incivility share toward its target, change who speaks. Never select an uncivil performer while asking for a civil message, or a civil performer while asking for an uncivil one.
+
 **Primary alignment rule:** Use `alignment_cell` as the treatment rule.
 
 Valid cells are:

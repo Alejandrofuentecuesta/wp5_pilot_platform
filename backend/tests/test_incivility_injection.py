@@ -41,6 +41,91 @@ def test_select_incivility_dimensions_probabilities():
     assert 0.39 <= democratic_threats_rate <= 0.44
 
 
+def _civility_orchestrator(traits):
+    from unittest.mock import AsyncMock, MagicMock
+    from models.agent import Agent
+    from models.session import SessionState
+    from agents.STAGE.orchestrator import Orchestrator
+
+    state = SessionState(
+        session_id="test-session",
+        agents=[Agent(name=name) for name in traits],
+        duration_minutes=30,
+        experimental_config={},
+        treatment_group="control",
+        simulation_config={},
+        user_name="participant",
+    )
+    orch = Orchestrator(
+        director_llm=AsyncMock(),
+        performer_llm=AsyncMock(),
+        moderator_llm=AsyncMock(),
+        classifier_llm=AsyncMock(),
+        state=state,
+        logger=MagicMock(),
+        agent_traits=traits,
+        rng=random.Random(42),
+    )
+    return orch, state
+
+
+_MIXED_ROOM = {
+    "Civil1": {"incivility": "civil", "ideology": "left"},
+    "Civil2": {"incivility": "civil", "ideology": "right"},
+    "Civil3": {"incivility": "civil", "ideology": "left"},
+    "Uncivil1": {"incivility": "uncivil", "ideology": "left"},
+    "Uncivil2": {"incivility": "uncivil", "ideology": "right"},
+    "Uncivil3": {"incivility": "uncivil", "ideology": "right"},
+}
+
+
+def _post(state, sender, incivil):
+    from models.message import Message
+    state.add_message(Message.create(sender=sender, content=f"{sender} msg", is_incivil=incivil))
+
+
+def test_over_incivility_target_only_civil_agents_are_eligible():
+    """Pretest: uncivil agents asked for a civil message still wrote uncivil
+    ones, so above target the filter must not offer them at all."""
+    orch, state = _civility_orchestrator(_MIXED_ROOM)
+    _post(state, "Uncivil1", True)
+    _post(state, "Civil1", False)  # 50% uncivil vs 20% target
+
+    filtered = orch._filter_candidate_agents_for_targets("INCIVILITY_TARGET = 20", set(_MIXED_ROOM))
+
+    assert filtered == {"Civil1", "Civil2", "Civil3"}
+
+
+def test_under_incivility_target_only_uncivil_agents_are_eligible():
+    orch, state = _civility_orchestrator(_MIXED_ROOM)
+    for sender in ("Civil1", "Civil2", "Civil3"):
+        _post(state, sender, False)  # 0% uncivil vs 80% target
+
+    filtered = orch._filter_candidate_agents_for_targets("INCIVILITY_TARGET = 80", set(_MIXED_ROOM))
+
+    assert filtered == {"Uncivil1", "Uncivil2", "Uncivil3"}
+
+
+def test_on_target_keeps_both_tones():
+    orch, state = _civility_orchestrator(_MIXED_ROOM)
+    _post(state, "Uncivil1", True)
+    _post(state, "Civil1", False)  # exactly 50%
+    filtered = orch._filter_candidate_agents_for_targets("INCIVILITY_TARGET = 50", set(_MIXED_ROOM))
+    tones = {_MIXED_ROOM[name]["incivility"] for name in filtered}
+    assert tones == {"civil", "uncivil"}
+
+
+def test_sole_addressed_agent_is_kept_even_with_the_wrong_tone():
+    """A participant who addresses an uncivil agent still gets that agent's
+    reply: with no civil candidate to swap in, the set is left untouched."""
+    orch, state = _civility_orchestrator(_MIXED_ROOM)
+    _post(state, "Uncivil1", True)
+
+    filtered = orch._filter_candidate_agents_for_targets("INCIVILITY_TARGET = 20", {"Uncivil2"})
+
+    assert filtered == {"Uncivil2"}
+
+
 def test_uncivil_agent_ideology_balancing():
     """Verify that _filter_candidate_agents_for_targets balances ideology for uncivil turns."""
     from unittest.mock import AsyncMock, MagicMock
@@ -49,18 +134,25 @@ def test_uncivil_agent_ideology_balancing():
     from models.session import SessionState
     from agents.STAGE.orchestrator import Orchestrator
 
+    # Six uncivil agents so the top-4 ranking (not the civility filter) is
+    # what decides between them; the civil agent supplies the civil history
+    # that keeps the room below its 50% target, i.e. on an uncivil turn.
     agents = [
         Agent(name="LeftUncivil1"),
         Agent(name="LeftUncivil2"),
+        Agent(name="LeftUncivil3"),
         Agent(name="RightUncivil1"),
         Agent(name="RightUncivil2"),
+        Agent(name="RightUncivil3"),
         Agent(name="CenterCivil"),
     ]
     agent_traits = {
         "LeftUncivil1": {"incivility": "uncivil", "ideology": "left"},
         "LeftUncivil2": {"incivility": "uncivil", "ideology": "left"},
+        "LeftUncivil3": {"incivility": "uncivil", "ideology": "left"},
         "RightUncivil1": {"incivility": "uncivil", "ideology": "right"},
         "RightUncivil2": {"incivility": "uncivil", "ideology": "right"},
+        "RightUncivil3": {"incivility": "uncivil", "ideology": "right"},
         "CenterCivil": {"incivility": "civil", "ideology": "center"},
     }
 
@@ -86,42 +178,28 @@ def test_uncivil_agent_ideology_balancing():
         rng=random.Random(42),
     )
 
-    # Initially, no messages. If we evaluate, counts are 0/0.
-    # Simulate a history of messages:
-    # Let's say LeftUncivil1 has sent an uncivil message.
-    # So left=1, right=0. Preferred ideology should be 'right'.
+    everyone = set(agent_traits)
+
+    # 1 uncivil (left) of 3 = 33% < 50%: an uncivil turn, and right is behind.
+    state.add_message(Message.create(sender="CenterCivil", content="Civil Msg 1", is_incivil=False))
+    state.add_message(Message.create(sender="CenterCivil", content="Civil Msg 2", is_incivil=False))
     state.add_message(Message.create(sender="LeftUncivil1", content="Left Uncivil Msg", is_incivil=True))
 
-    filtered = orch._filter_candidate_agents_for_targets(
-        "INCIVILITY_TARGET = 50",
-        {"LeftUncivil1", "LeftUncivil2", "RightUncivil1", "RightUncivil2", "CenterCivil"}
-    )
-    # RightUncivil1 and RightUncivil2 should be prioritized over LeftUncivil1 (who has spoken and is wrong ideology)
-    # and CenterCivil (who is civil).
-    # Since we select top 4 out of 5:
-    assert "RightUncivil1" in filtered
-    assert "RightUncivil2" in filtered
-    assert "LeftUncivil2" in filtered
-    # "LeftUncivil1" (the wrong ideology who already spoke) is the one filtered out.
+    filtered = orch._filter_candidate_agents_for_targets("INCIVILITY_TARGET = 50", everyone)
+    assert "CenterCivil" not in filtered
+    assert {"RightUncivil1", "RightUncivil2", "RightUncivil3"} <= filtered
+    # The left agent who already spoke is the one ranked out.
     assert "LeftUncivil1" not in filtered
 
-    # Now let's simulate RightUncivil1 sending an uncivil message.
-    # Now left=1, right=1. Balance is equal.
-    # Let's add another uncivil message from RightUncivil2.
-    # Now left=1, right=2. Preferred ideology should be 'left'.
+    # Two right uncivil messages plus civil history: 3 of 7 = 43% < 50%,
+    # still an uncivil turn, and now left (1) is behind right (2).
     state.add_message(Message.create(sender="RightUncivil1", content="Right Uncivil Msg 1", is_incivil=True))
     state.add_message(Message.create(sender="RightUncivil2", content="Right Uncivil Msg 2", is_incivil=True))
+    state.add_message(Message.create(sender="CenterCivil", content="Civil Msg 3", is_incivil=False))
+    state.add_message(Message.create(sender="CenterCivil", content="Civil Msg 4", is_incivil=False))
 
-    filtered = orch._filter_candidate_agents_for_targets(
-        "INCIVILITY_TARGET = 50",
-        {"LeftUncivil1", "LeftUncivil2", "RightUncivil1", "RightUncivil2", "CenterCivil"}
-    )
-    # LeftUncivil2 (left, hasn't spoken yet) and LeftUncivil1 (left, spoke) should be prioritized
-    # because preferred ideology is left.
-    # RightUncivil1 and RightUncivil2 are the wrong ideology and have spoken.
-    # Let's make sure LeftUncivil2 and LeftUncivil1 are in filtered.
-    assert "LeftUncivil2" in filtered
-    assert "LeftUncivil1" in filtered
+    filtered = orch._filter_candidate_agents_for_targets("INCIVILITY_TARGET = 50", everyone)
+    assert {"LeftUncivil1", "LeftUncivil2", "LeftUncivil3"} <= filtered
 
 
 def test_ten_messages_mode_hard_targets():

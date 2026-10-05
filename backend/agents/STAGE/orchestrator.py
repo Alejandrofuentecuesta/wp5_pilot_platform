@@ -774,6 +774,22 @@ class Orchestrator:
         except (TypeError, ValueError):
             return None
 
+    @staticmethod
+    def _needed_civility(incivil_target: Optional[int], agent_messages: List[Message]) -> Optional[str]:
+        """Tone the next agent message needs to move the running classified
+        incivility share toward its target; None when on target or unknown."""
+        if incivil_target is None:
+            return None
+        classified = [message for message in agent_messages if message.is_incivil is not None]
+        if not classified:
+            return None
+        incivil_pct = 100.0 * sum(1 for message in classified if message.is_incivil) / len(classified)
+        if incivil_pct > incivil_target:
+            return "civil"
+        if incivil_pct < incivil_target:
+            return "uncivil"
+        return None
+
     def _agent_civility_bucket(self, agent_name: str) -> Optional[str]:
         """Return the fixed civility bucket of an agent, if known."""
         traits = self._agent_traits.get(agent_name) or {}
@@ -949,6 +965,21 @@ class Orchestrator:
             if message.sender != self.state.user_name
         ]
         total_messages = len(agent_messages)
+
+        # An agent's civility trait decides the tone of what it writes: in the
+        # pretest, uncivil agents asked by the Director for a civil message
+        # still wrote uncivil ones. So the only lever on the incivility share
+        # is who speaks — keep only agents of the needed tone whenever one is
+        # available. A sole addressed agent is left as is (no match to swap in).
+        if not self.ten_messages_mode:
+            needed_civility = self._needed_civility(incivil_target, agent_messages)
+            if needed_civility is not None:
+                matching = {
+                    name for name in candidates
+                    if self._agent_civility_bucket(name) == needed_civility
+                }
+                if matching:
+                    candidates = matching
 
         if len(candidates) <= TARGET_ELIGIBLE_SPEAKER_COUNT:
             return candidates

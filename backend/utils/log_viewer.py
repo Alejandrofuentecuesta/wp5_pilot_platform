@@ -889,6 +889,21 @@ def render_agent_impressions(ev: dict) -> str:
         if tempted_report:
             rows.append(("Motivos (reportar)", report_why))
 
+    why_not = survey.get("why_not_reported") or []
+    if why_not:
+        rows.append(("Motivos para no reportar", reasons(why_not, survey.get("why_not_reported_other"))))
+
+    if survey.get("early_exit_agreement") is not None:
+        rows.append(("Salida anticipada - Coincidencia opiniones", f"{survey['early_exit_agreement']}/7"))
+    if survey.get("early_exit_incivility") is not None:
+        rows.append(("Salida anticipada - Nivel incivilidad", f"{survey['early_exit_incivility']}/7"))
+    if survey.get("early_exit_human_ai"):
+        rows.append(("Salida anticipada - Percepción humanos/IA", _esc(str(survey["early_exit_human_ai"]))))
+    if survey.get("early_exit_composition"):
+        rows.append(("Salida anticipada - Composición grupo", _esc(str(survey["early_exit_composition"]))))
+    if survey.get("early_exit_fear_social_sanctions") is not None:
+        rows.append(("Salida anticipada - Miedo sanciones sociales", f"{survey['early_exit_fear_social_sanctions']}/7"))
+
     for rating in data.get("ratings") or []:
         comment = f" — {_esc(str(rating.get('comment')))}" if rating.get("comment") else ""
         rows.append((f"Valoración de {_esc(str(rating.get('agent_name', '?')))}", f"{_esc(str(rating.get('rating', '?')))}/5{comment}"))

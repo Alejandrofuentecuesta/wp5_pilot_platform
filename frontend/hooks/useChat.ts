@@ -176,6 +176,17 @@ export function useChat() {
     () => mergeUniqueNames(surveyBlockedAgentNames, Object.keys(blockedSenders)),
     [surveyBlockedAgentNames, blockedSenders],
   )
+  const reportedMessageIds = useMemo(
+    () =>
+      messagesWithSelf
+        .filter((m) => Boolean(m.reported) && !m.is_self)
+        .map((m) => m.message_id),
+    [messagesWithSelf],
+  )
+  const hasReportedDuringChat = useMemo(
+    () => reportedMessageIds.length > 0,
+    [reportedMessageIds],
+  )
   // Derived: detected mentions from current input
   const detectedMentions = useMemo(
     () => detectMentions(inputValue, participants),
@@ -651,6 +662,9 @@ export function useChat() {
           block_other: finalReportBlockSurvey.block_other
             ? mapperRef.current.outbound(finalReportBlockSurvey.block_other)
             : null,
+          why_not_reported_other: finalReportBlockSurvey.why_not_reported_other
+            ? mapperRef.current.outbound(finalReportBlockSurvey.why_not_reported_other)
+            : null,
         }
         await apiSubmitAgentImpressions(
           sessionId,
@@ -945,6 +959,8 @@ export function useChat() {
     agentImpressionsSubmitting,
     agentImpressionsError,
     submitAgentImpressions,
+    hasReportedDuringChat,
+    reportedMessageIds,
     // Emotions Checkup
     emotionsCheckupOpen,
     submitEmotionsCheckup,

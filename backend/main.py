@@ -470,6 +470,13 @@ class FinalReportBlockSurveyRequest(BaseModel):
     block_other: Optional[str] = None
     tempted_to_block: Optional[bool] = None
     tempted_block_agent_names: List[str] = Field(default_factory=list)
+    why_not_reported: List[str] = Field(default_factory=list)
+    why_not_reported_other: Optional[str] = None
+    early_exit_agreement: Optional[int] = None
+    early_exit_incivility: Optional[int] = None
+    early_exit_human_ai: Optional[str] = None
+    early_exit_composition: Optional[str] = None
+    early_exit_fear_social_sanctions: Optional[int] = None
 
 
 class AgentImpressionsRequest(BaseModel):
@@ -958,6 +965,13 @@ async def submit_agent_impressions(session_id: str, payload: AgentImpressionsReq
             "tempted_block_agent_names": [
                 name.strip()[:100] for name in survey.tempted_block_agent_names if name.strip()
             ],
+            "why_not_reported": [reason.strip()[:200] for reason in survey.why_not_reported if reason.strip()],
+            "why_not_reported_other": (survey.why_not_reported_other or "").strip()[:1000] or None,
+            "early_exit_agreement": survey.early_exit_agreement,
+            "early_exit_incivility": survey.early_exit_incivility,
+            "early_exit_human_ai": (survey.early_exit_human_ai or "").strip()[:200] or None,
+            "early_exit_composition": (survey.early_exit_composition or "").strip()[:200] or None,
+            "early_exit_fear_social_sanctions": survey.early_exit_fear_social_sanctions,
         }
 
     existing = await event_repo.get_session_events(

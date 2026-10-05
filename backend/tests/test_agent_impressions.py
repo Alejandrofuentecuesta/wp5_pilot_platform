@@ -154,6 +154,41 @@ async def test_submit_agent_impressions_persists_tempted_names(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_submit_agent_impressions_persists_early_exit_and_why_not_reported(monkeypatch):
+    insert_event = AsyncMock()
+    monkeypatch.setattr(main, "_get_pool", lambda: object())
+    monkeypatch.setattr(main.session_repo, "get_session", AsyncMock(return_value=_ended_session()))
+    monkeypatch.setattr(main.message_repo, "get_session_messages", AsyncMock(return_value=_messages()))
+    monkeypatch.setattr(main.event_repo, "get_session_events", AsyncMock(return_value=[]))
+    monkeypatch.setattr(main.event_repo, "insert_event_strict", insert_event)
+
+    response = await main.submit_agent_impressions(
+        SESSION_ID,
+        main.AgentImpressionsRequest(
+            ratings=[],
+            report_block_survey=main.FinalReportBlockSurveyRequest(
+                why_not_reported=["No merecía la pena / No era lo bastante grave"],
+                why_not_reported_other=None,
+                early_exit_agreement=4,
+                early_exit_incivility=6,
+                early_exit_human_ai="Probablemente una IA",
+                early_exit_composition="Había una mezcla de humanos e IA",
+                early_exit_fear_social_sanctions=2,
+            ),
+        ),
+    )
+
+    assert response.status_code == 204
+    survey = insert_event.await_args.kwargs["data"]["report_block_survey"]
+    assert survey["why_not_reported"] == ["No merecía la pena / No era lo bastante grave"]
+    assert survey["early_exit_agreement"] == 4
+    assert survey["early_exit_incivility"] == 6
+    assert survey["early_exit_human_ai"] == "Probablemente una IA"
+    assert survey["early_exit_composition"] == "Había una mezcla de humanos e IA"
+    assert survey["early_exit_fear_social_sanctions"] == 2
+
+
+@pytest.mark.asyncio
 async def test_submit_agent_impressions_rejects_unseen_tempted_name(monkeypatch):
     monkeypatch.setattr(main, "_get_pool", lambda: object())
     monkeypatch.setattr(main.session_repo, "get_session", AsyncMock(return_value=_ended_session()))

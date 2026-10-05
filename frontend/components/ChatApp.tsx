@@ -52,6 +52,9 @@ export default function ChatApp() {
       <AgentImpressionSurvey
         agentNames={chat.sessionAgentNames}
         blockedAgentNames={chat.finalBlockedAgentNames}
+        hasReportedDuringChat={chat.hasReportedDuringChat}
+        reportedMessageIds={chat.reportedMessageIds}
+        isEarlyExit={chat.sessionEndReason === "user_exit"}
         submitting={chat.agentImpressionsSubmitting}
         error={chat.agentImpressionsError}
         onSubmit={chat.submitAgentImpressions}

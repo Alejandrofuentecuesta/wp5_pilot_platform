@@ -116,6 +116,13 @@ export interface FinalReportBlockSurvey {
   block_other: string | null
   tempted_to_block: boolean | null
   tempted_block_agent_names: string[]
+  why_not_reported?: string[]
+  why_not_reported_other?: string | null
+  early_exit_agreement?: number | null
+  early_exit_incivility?: number | null
+  early_exit_human_ai?: string | null
+  early_exit_composition?: string | null
+  early_exit_fear_social_sanctions?: number | null
 }
 
 export interface QueueJoinResponse {

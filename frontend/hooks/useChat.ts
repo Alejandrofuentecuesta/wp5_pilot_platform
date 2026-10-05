@@ -11,6 +11,7 @@ import {
   reactToMessage as apiReactToMessage,
   reportMessage as apiReportMessage,
   submitAgentImpressions as apiSubmitAgentImpressions,
+  submitEmotionsCheckup as apiSubmitEmotionsCheckup,
   AtCapacityError,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
@@ -118,6 +119,9 @@ export function useChat() {
   const [reporting, setReporting] = useState(false)
   const [newsArticleModalOpen, setNewsArticleModalOpen] = useState(false)
   const [emotionsCheckupOpen, setEmotionsCheckupOpen] = useState(false)
+  const [emotionsCheckupIsShort, setEmotionsCheckupIsShort] = useState(true)
+  const [finalEmotionsCheckupOpen, setFinalEmotionsCheckupOpen] = useState(false)
+  const [emotionsCheckupEnabled, setEmotionsCheckupEnabled] = useState<boolean | null>(null)
   // Researcher hold (Safety tab): the room is frozen and the participant is
   // shown a neutral notice; only a server resume event clears it.
   const [safetyHoldNotice, setSafetyHoldNotice] = useState<string | null>(null)
@@ -262,6 +266,10 @@ export function useChat() {
               typeof name === "string" && name.trim().length > 0,
           )
         : []
+      if (typeof obj.emotions_checkup_enabled === "boolean") {
+        setEmotionsCheckupEnabled(obj.emotions_checkup_enabled)
+      }
+      setEmotionsCheckupOpen(false)
       const feedbackAlreadySubmitted = Boolean(obj.agent_feedback_submitted)
       setSessionEndReason(reason)
       if (reason === "participant_safety") {
@@ -270,6 +278,7 @@ export function useChat() {
         setSafetyIntervention(true)
         setSessionEnded(false)
         setAgentImpressionSurveyOpen(false)
+        setFinalEmotionsCheckupOpen(false)
         // This is a terminal screen. Clear stored identity/session data while
         // retaining the in-memory return URL for its explicit exit button.
         concludeSession()
@@ -284,7 +293,12 @@ export function useChat() {
         !feedbackAlreadySubmitted
       ) {
         setSessionAgentNames(eventAgentNames)
-        setAgentImpressionSurveyOpen(true)
+        const checkupActive = obj.emotions_checkup_enabled !== false && emotionsCheckupEnabled !== false
+        if (checkupActive) {
+          setFinalEmotionsCheckupOpen(true)
+        } else {
+          setAgentImpressionSurveyOpen(true)
+        }
       } else {
         // Clear session so user can't refresh back into the chatroom.
         concludeSession()
@@ -296,6 +310,7 @@ export function useChat() {
         setSurveyBlockedAgentNames((prev) => mergeUniqueNames(prev, Object.keys(evt.blocked)))
       }
     } else if (obj && obj.event_type === "emotions_checkup_trigger") {
+      setEmotionsCheckupIsShort(Boolean(obj.is_short ?? true))
       setEmotionsCheckupOpen(true)
     } else if (obj && obj.event_type === "session_paused") {
       if (obj.trigger === "hold") {
@@ -304,6 +319,9 @@ export function useChat() {
     } else if (obj && obj.event_type === "session_resumed") {
       if (obj.trigger === "hold") setSafetyHoldNotice(null)
     } else if (obj && obj.event_type === "session_config") {
+      if (typeof obj.emotions_checkup_enabled === "boolean") {
+        setEmotionsCheckupEnabled(obj.emotions_checkup_enabled)
+      }
       if (obj.held) {
         setSafetyHoldNotice(typeof obj.hold_notice === "string" && obj.hold_notice ? obj.hold_notice : "La sala está en pausa por un momento técnico. Volverá en breve.")
       } else {
@@ -615,18 +633,59 @@ export function useChat() {
   }, [])
 
   const submitEmotionsCheckup = useCallback((emotions: EmotionRating[], explanation: string) => {
+    const mappedEmotions = emotions.map((e) => ({
+      ...e,
+      emotion: mapperRef.current.outbound(e.emotion),
+    }))
+    const mappedExplanation = mapperRef.current.outbound(explanation)
     send({
       type: "emotions_checkup_response",
       // The free-text "other" emotion and explanation can contain the participant's own
       // name; predefined labels pass through the mapper unchanged.
-      emotions: emotions.map((e) => ({
-        ...e,
-        emotion: mapperRef.current.outbound(e.emotion),
-      })),
-      emotion_explanation: mapperRef.current.outbound(explanation),
+      emotions: mappedEmotions,
+      emotion_explanation: mappedExplanation,
+      is_short: emotionsCheckupIsShort,
+      is_final: false,
     } as any)
+    if (sessionId) {
+      apiSubmitEmotionsCheckup(sessionId, {
+        emotions: mappedEmotions,
+        emotion_explanation: mappedExplanation,
+        is_short: emotionsCheckupIsShort,
+        is_final: false,
+      }).catch((err) => console.error("Failed to post mid-session emotions checkup:", err))
+    }
     setEmotionsCheckupOpen(false)
-  }, [send])
+  }, [send, sessionId, emotionsCheckupIsShort])
+
+  const submitFinalEmotionsCheckup = useCallback(async (emotions: EmotionRating[], explanation: string) => {
+    const mappedEmotions = emotions.map((e) => ({
+      ...e,
+      emotion: mapperRef.current.outbound(e.emotion),
+    }))
+    const mappedExplanation = mapperRef.current.outbound(explanation)
+    send({
+      type: "emotions_checkup_response",
+      emotions: mappedEmotions,
+      emotion_explanation: mappedExplanation,
+      is_short: false,
+      is_final: true,
+    } as any)
+    if (sessionId) {
+      try {
+        await apiSubmitEmotionsCheckup(sessionId, {
+          emotions: mappedEmotions,
+          emotion_explanation: mappedExplanation,
+          is_short: false,
+          is_final: true,
+        })
+      } catch (err) {
+        console.error("Failed to post final emotions checkup:", err)
+      }
+    }
+    setFinalEmotionsCheckupOpen(false)
+    setAgentImpressionSurveyOpen(true)
+  }, [send, sessionId])
 
   const openExitModal = useCallback(() => {
     trackImmediately("exit_attempt", { source: "chat_header" })
@@ -963,7 +1022,10 @@ export function useChat() {
     reportedMessageIds,
     // Emotions Checkup
     emotionsCheckupOpen,
+    emotionsCheckupIsShort,
     submitEmotionsCheckup,
+    finalEmotionsCheckupOpen,
+    submitFinalEmotionsCheckup,
     // Exit
     exitModalOpen,
     openExitModal,

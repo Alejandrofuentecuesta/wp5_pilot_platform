@@ -49,6 +49,7 @@ interface ChatRoomProps {
   submitInitialNewsMessage?: (initialMessage: string) => void
   participantStance: ParticipantStance | null
   emotionsCheckupOpen: boolean
+  emotionsCheckupIsShort?: boolean
   onSubmitEmotionsCheckup: (emotions: EmotionRating[], explanation: string) => void
   exitModalOpen: boolean
   openExitModal: () => void
@@ -86,6 +87,7 @@ export default function ChatRoom({
   submitInitialNewsMessage,
   participantStance,
   emotionsCheckupOpen,
+  emotionsCheckupIsShort = true,
   onSubmitEmotionsCheckup,
   exitModalOpen,
   openExitModal,
@@ -172,6 +174,7 @@ export default function ChatRoom({
       {emotionsCheckupOpen && (
         <EmotionsCheckupModal
           onSubmit={onSubmitEmotionsCheckup}
+          isShort={emotionsCheckupIsShort}
         />
       )}
 

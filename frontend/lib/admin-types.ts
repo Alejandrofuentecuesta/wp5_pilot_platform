@@ -89,6 +89,7 @@ export interface SimulationConfig {
   boost_replies_mentions?: boolean
   emotions_checkup_enabled?: boolean
   emotions_checkup_time_minutes?: number
+  emotions_checkup_times?: number[]
   behavior_tracking_enabled?: boolean
   idle_prompt_enabled?: boolean
   idle_prompt_seconds?: number

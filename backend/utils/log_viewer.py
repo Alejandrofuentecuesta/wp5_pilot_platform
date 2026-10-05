@@ -837,17 +837,22 @@ def render_emotions_checkup_response(ev: dict) -> str:
         # Legacy single-emotion format from before multi-select + intensity was added.
         emotion = _esc(data.get("emotion", "?"))
     explanation = _esc(data.get("emotion_explanation") or "")
+    is_final = data.get("is_final")
+    is_short = data.get("is_short")
+
+    badge_label = "Emotions Checkup (Final)" if is_final else ("Emotions Checkup (Short)" if is_short else "Emotions Checkup")
+    explanation_html = f'<div style="margin-top: 0.25rem;"><strong>¿Por qué te sientes así?</strong> {explanation}</div>' if explanation else ""
 
     return f"""\
 <div class="event ev-emotions_checkup_response">
   <div class="event-card" style="border-left: 4px solid var(--orange);">
     <div class="event-header">
-      <span class="event-badge badge-emotions_checkup_response">Emotions Checkup</span>
+      <span class="event-badge badge-emotions_checkup_response">{badge_label}</span>
       <span class="event-time">{ts}</span>
     </div>
     <div style="font-size: 0.9rem; line-height: 1.5; margin-top: 0.5rem; color: var(--text);">
       <div><strong>¿Cómo te sientes en este momento?</strong> {emotion}</div>
-      <div style="margin-top: 0.25rem;"><strong>¿Por qué te sientes así?</strong> {explanation}</div>
+      {explanation_html}
     </div>
   </div>
 </div>"""

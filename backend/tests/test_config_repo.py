@@ -211,6 +211,23 @@ class TestValidateSimulationConfig:
         result = config_repo.validate_simulation_config(cfg)
         assert result["emotions_checkup_enabled"] is True
         assert result["emotions_checkup_time_minutes"] == 5
+        assert result["emotions_checkup_times"] == [5]
+
+    def test_emotions_checkup_multiple_times(self):
+        cfg = _minimal_sim()
+        cfg["session_duration_minutes"] = 15
+        cfg["emotions_checkup_enabled"] = True
+        cfg["emotions_checkup_times"] = [8, 2, 5]
+        result = config_repo.validate_simulation_config(cfg)
+        assert result["emotions_checkup_times"] == [2, 5, 8]
+        assert result["emotions_checkup_time_minutes"] == 2
+
+    def test_emotions_checkup_exceeds_max_count(self):
+        cfg = _minimal_sim()
+        cfg["emotions_checkup_enabled"] = True
+        cfg["emotions_checkup_times"] = [1, 2, 3, 4]
+        with pytest.raises(ValueError, match="at most 3"):
+            config_repo.validate_simulation_config(cfg)
 
     def test_emotions_checkup_invalid_negative_time(self):
         cfg = _minimal_sim()

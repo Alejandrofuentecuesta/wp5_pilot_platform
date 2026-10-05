@@ -446,6 +446,18 @@ class ReactionRequest(BaseModel):
     reaction: Literal["laugh", "angry", "sad", "bored", "afraid", "dislike"]
 
 
+class EmotionRatingRequest(BaseModel):
+    emotion: str
+    intensity: Literal[1, 2, 3, 4, 5]
+
+
+class EmotionsCheckupRequest(BaseModel):
+    emotions: List[EmotionRatingRequest] = Field(default_factory=list)
+    emotion_explanation: Optional[str] = None
+    is_short: bool = False
+    is_final: bool = False
+
+
 class AgentImpressionRequest(BaseModel):
     agent_name: str
     rating: Literal[1, 2, 3, 4, 5]
@@ -846,6 +858,34 @@ async def ingest_telemetry(session_id: str, request: Request):
     )
 
     return Response(status_code=204)
+
+
+@app.post("/session/{session_id}/emotions-checkup", status_code=204)
+async def submit_emotions_checkup_api(session_id: str, payload: EmotionsCheckupRequest):
+    """Persist an emotions checkup response (mid-session short or end-of-session final)."""
+    pool = _get_pool()
+    session_row = await session_repo.get_session(pool, session_id)
+    if not session_row:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    data = {
+        "emotions": [e.model_dump() for e in payload.emotions],
+        "emotion_explanation": (payload.emotion_explanation or "").strip()[:1000],
+        "is_short": payload.is_short,
+        "is_final": payload.is_final,
+    }
+
+    active_session = session_manager.get_session(session_id)
+    if active_session:
+        await active_session.handle_emotions_checkup_response(data)
+    else:
+        await event_repo.insert_event(
+            pool,
+            session_id=session_id,
+            experiment_id=session_row.get("experiment_id"),
+            event_type="emotions_checkup_response",
+            data=data,
+        )
 
 
 @app.post("/session/{session_id}/agent-impressions", status_code=204)

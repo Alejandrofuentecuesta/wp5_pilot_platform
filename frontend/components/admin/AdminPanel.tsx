@@ -63,6 +63,7 @@ const DEFAULT_SIMULATION: SimulationConfig = {
   boost_replies_mentions: false,
   emotions_checkup_enabled: false,
   emotions_checkup_time_minutes: 1,
+  emotions_checkup_times: [1],
   behavior_tracking_enabled: false,
   idle_prompt_enabled: false,
   idle_prompt_seconds: 300,
@@ -331,10 +332,18 @@ export default function AdminPanel() {
         if (simulation.action_window_size < 1) return "Action window size must be at least 1."
         if (simulation.performer_memory_size < 0) return "Performer memory size must be at least 0."
         if (simulation.emotions_checkup_enabled) {
-          if (!simulation.emotions_checkup_time_minutes || simulation.emotions_checkup_time_minutes < 1)
-            return "Emotions checkup trigger time must be at least 1 minute."
-          if (simulation.emotions_checkup_time_minutes > simulation.session_duration_minutes)
-            return "Emotions checkup trigger time cannot exceed session duration."
+          const times = simulation.emotions_checkup_times && simulation.emotions_checkup_times.length > 0
+            ? simulation.emotions_checkup_times
+            : (simulation.emotions_checkup_time_minutes ? [simulation.emotions_checkup_time_minutes] : [])
+          if (times.length === 0)
+            return "At least one emotions checkup time must be set when enabled."
+          if (times.length > 3)
+            return "At most 3 emotions checkup times can be set."
+          for (const t of times) {
+            if (!t || t < 1) return "Emotions checkup trigger time must be at least 1 minute."
+            if (t > simulation.session_duration_minutes)
+              return "Emotions checkup trigger time cannot exceed session duration."
+          }
         }
         if (simulation.idle_prompt_enabled) {
           if (!simulation.idle_prompt_seconds || simulation.idle_prompt_seconds < 10)

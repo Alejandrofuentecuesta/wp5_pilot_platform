@@ -270,26 +270,83 @@ export default function StepSession({ config, onChange, touched }: StepSessionPr
           </button>
         </div>
 
-        {config.emotions_checkup_enabled && (
-          <div className="grid grid-cols-2 gap-4 pt-4 border-t border-admin-border">
-            <div>
-              <label className="block text-sm font-medium text-admin-text mb-1">
-                Trigger time (minutes)
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={config.session_duration_minutes}
-                value={config.emotions_checkup_time_minutes ?? 1}
-                onChange={(e) => onChange({ emotions_checkup_time_minutes: Math.max(1, Math.min(config.session_duration_minutes, parseInt(e.target.value) || 1)) })}
-                className={inputClass}
-              />
-              <p className="text-xs text-admin-muted mt-1">
-                The popup will appear after this many minutes. Must be less than or equal to the session duration.
-              </p>
+        {config.emotions_checkup_enabled && (() => {
+          const rawTimes = config.emotions_checkup_times && config.emotions_checkup_times.length > 0
+            ? config.emotions_checkup_times
+            : [config.emotions_checkup_time_minutes ?? 1]
+          const checkupTimes = rawTimes.slice(0, 3)
+
+          const updateTimes = (newTimes: number[]) => {
+            const sortedTimes = [...newTimes].sort((a, b) => a - b)
+            onChange({
+              emotions_checkup_times: newTimes,
+              emotions_checkup_time_minutes: sortedTimes[0] ?? 1,
+            })
+          }
+
+          return (
+            <div className="space-y-3 pt-4 border-t border-admin-border">
+              <div>
+                <label className="block text-sm font-medium text-admin-text mb-1">
+                  Mid-session checkup times (minutes)
+                </label>
+                <p className="text-xs text-admin-muted mb-3">
+                  Set up to 3 mid-session short checkups (emotion + intensity scale). A full checkup with open explanation will always appear at session end before the final survey.
+                </p>
+                <div className="space-y-2">
+                  {checkupTimes.map((time, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <span className="text-xs font-semibold text-admin-muted w-20">
+                        Checkup {idx + 1}:
+                      </span>
+                      <input
+                        type="number"
+                        min={1}
+                        max={config.session_duration_minutes}
+                        value={time}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 1
+                          const next = [...checkupTimes]
+                          next[idx] = Math.max(1, Math.min(config.session_duration_minutes, val))
+                          updateTimes(next)
+                        }}
+                        className={`${inputClass} w-28`}
+                      />
+                      <span className="text-xs text-admin-faint">min</span>
+                      {checkupTimes.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const next = checkupTimes.filter((_, i) => i !== idx)
+                            updateTimes(next)
+                          }}
+                          className="px-2 py-1 text-xs text-admin-muted hover:text-red-500 rounded transition-colors"
+                          title="Remove checkup time"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {checkupTimes.length < 3 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const lastTime = checkupTimes[checkupTimes.length - 1] ?? 1
+                      const nextTime = Math.min(config.session_duration_minutes, lastTime + 2)
+                      updateTimes([...checkupTimes, nextTime])
+                    }}
+                    className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-admin-accent bg-admin-accent/10 hover:bg-admin-accent/20 rounded-md border border-admin-accent/30 transition-colors"
+                  >
+                    + Add checkup time ({checkupTimes.length}/3)
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          )
+        })()}
       </div>
 
       <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">

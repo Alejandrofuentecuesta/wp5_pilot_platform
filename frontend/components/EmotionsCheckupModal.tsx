@@ -12,11 +12,17 @@ interface EmotionRating {
 
 interface EmotionsCheckupModalProps {
   onSubmit: (emotions: EmotionRating[], explanation: string) => void
+  isShort?: boolean
+  isFinal?: boolean
 }
 
 const INTENSITY_SCALE = [1, 2, 3, 4, 5]
 
-export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalProps) {
+export default function EmotionsCheckupModal({
+  onSubmit,
+  isShort = false,
+  isFinal = false,
+}: EmotionsCheckupModalProps) {
   const [selectedEmotions, setSelectedEmotions] = useState<string[]>([])
   const [intensities, setIntensities] = useState<Record<string, number>>({})
   const [customEmotion, setCustomEmotion] = useState<string>("")
@@ -51,7 +57,7 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
         emotion: value === "Otra" ? `Otra: ${customEmotion.trim()}` : value,
         intensity: intensities[value],
       }))
-      onSubmit(finalEmotions, explanation.trim())
+      onSubmit(finalEmotions, isShort ? "" : explanation.trim())
     }
   }
 
@@ -59,7 +65,7 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
     selectedEmotions.length > 0 &&
     selectedEmotions.every((value) => intensities[value] !== undefined) &&
     (!selectedEmotions.includes("Otra") || customEmotion.trim().length > 0) &&
-    explanation.trim().length > 0
+    (isShort || explanation.trim().length > 0)
 
   return (
     <div
@@ -78,17 +84,22 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
         <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:space-y-6 sm:p-6">
           <div className="space-y-1 text-center">
             <h3 id="emotions-checkup-title" className="text-xl font-bold text-primary">
-              Chequeo de estado de ánimo
+              {isFinal ? "Chequeo final de estado de ánimo" : "Chequeo de estado de ánimo"}
             </h3>
             <p className="text-xs text-secondary">
-              Por favor, responde a estas breves preguntas sobre tu experiencia actual.
+              {isFinal
+                ? "Por favor, responde a estas preguntas sobre cómo te has sentido durante la conversación."
+                : isShort
+                ? "Por favor, indica cómo te sientes en este momento."
+                : "Por favor, responde a estas breves preguntas sobre tu experiencia actual."}
             </p>
           </div>
 
           {/* Question 1: How do you feel? */}
           <div className="space-y-3">
             <label className="block text-sm font-semibold text-primary">
-              1. ¿Cómo te sientes en este momento? <span className="font-normal text-secondary">(puedes elegir varias)</span>
+              {isShort ? "¿Cómo te sientes en este momento?" : "1. ¿Cómo te sientes en este momento?"}{" "}
+              <span className="font-normal text-secondary">(puedes elegir varias)</span>
             </label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-2.5">
               {emotions.map((emotion) => {
@@ -173,8 +184,8 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
             )}
           </div>
 
-          {/* Question 2: Open explanation */}
-          {selectedEmotions.length > 0 && (
+          {/* Question 2: Open explanation (only for full checkup) */}
+          {!isShort && selectedEmotions.length > 0 && (
             <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-150">
               <label className="block text-sm font-semibold text-primary">
                 2. ¿Por qué te sientes así?
@@ -194,26 +205,28 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
           )}
 
           {/* Reminder box */}
-          <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-bg-feed p-3 sm:p-4">
-            <svg
-              className="w-5 h-5 text-accent shrink-0 mt-0.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-              />
-            </svg>
-            <p className="text-xs leading-relaxed text-secondary">
-              <strong>Recordatorio:</strong> Si consideras inapropiado o molesto algún comentario, puedes reportarlo o bloquear al usuario directamente usando los botones que aparecen debajo de cada mensaje.
-            </p>
-          </div>
+          {!isFinal && (
+            <div className="flex items-start gap-3 rounded-xl border border-border/60 bg-bg-feed p-3 sm:p-4">
+              <svg
+                className="w-5 h-5 text-accent shrink-0 mt-0.5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <p className="text-xs leading-relaxed text-secondary">
+                <strong>Recordatorio:</strong> Si consideras inapropiado o molesto algún comentario, puedes reportarlo o bloquear al usuario directamente usando los botones que aparecen debajo de cada mensaje.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Submit button */}
@@ -223,7 +236,7 @@ export default function EmotionsCheckupModal({ onSubmit }: EmotionsCheckupModalP
             disabled={!isFormValid}
             className="w-full sm:w-auto px-6 py-2.5 text-sm font-semibold rounded-xl text-white bg-accent hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Enviar y continuar
+            {isFinal ? "Continuar al cuestionario" : "Enviar y continuar"}
           </button>
         </div>
       </div>

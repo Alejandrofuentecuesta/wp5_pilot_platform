@@ -11,6 +11,7 @@ import ThankYouScreen from "./ThankYouScreen"
 import SafetyInterventionScreen from "./SafetyInterventionScreen"
 import QueueScreen from "./QueueScreen"
 import AgentImpressionSurvey from "./AgentImpressionSurvey"
+import EmotionsCheckupModal from "./EmotionsCheckupModal"
 import type { ParticipantStance } from "@/lib/types"
 
 function parseHandoffParams(): HandoffParams | null {
@@ -46,6 +47,16 @@ export default function ChatApp() {
     setBootChecked(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  if (chat.finalEmotionsCheckupOpen) {
+    return (
+      <EmotionsCheckupModal
+        onSubmit={chat.submitFinalEmotionsCheckup}
+        isShort={false}
+        isFinal={true}
+      />
+    )
+  }
 
   if (chat.agentImpressionSurveyOpen) {
     return (
@@ -135,6 +146,7 @@ export default function ChatApp() {
       submitInitialNewsMessage={chat.submitInitialNewsMessage}
       participantStance={chat.participantStance}
       emotionsCheckupOpen={chat.emotionsCheckupOpen}
+      emotionsCheckupIsShort={chat.emotionsCheckupIsShort}
       onSubmitEmotionsCheckup={chat.submitEmotionsCheckup}
       exitModalOpen={chat.exitModalOpen}
       openExitModal={chat.openExitModal}

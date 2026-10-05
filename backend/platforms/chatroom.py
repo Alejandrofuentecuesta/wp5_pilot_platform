@@ -569,8 +569,16 @@ class SimulationSession:
             self._safety_hold_started_monotonic = time.monotonic()
             self._sync_freeze()
         self.emotions_checkup_enabled = bool(self.simulation_config.get("emotions_checkup_enabled", False))
-        self.emotions_checkup_time_minutes = float(self.simulation_config.get("emotions_checkup_time_minutes", 1))
+        raw_times = self.simulation_config.get("emotions_checkup_times")
+        if isinstance(raw_times, list) and raw_times:
+            self.emotions_checkup_times = sorted([float(t) for t in raw_times if float(t) > 0])
+        elif "emotions_checkup_time_minutes" in self.simulation_config:
+            self.emotions_checkup_times = [float(self.simulation_config["emotions_checkup_time_minutes"])]
+        else:
+            self.emotions_checkup_times = [1.0]
+        self.emotions_checkup_time_minutes = self.emotions_checkup_times[0] if self.emotions_checkup_times else 1.0
         self._emotions_checkup_triggered = False
+        self._triggered_checkup_times: set = set()
 
         # Idle prompt (reminder to write) + behavioural telemetry are driven
         # client-side; these values are pushed to the browser on WS attach.
@@ -922,7 +930,14 @@ class SimulationSession:
                     self.session_id,
                     ["emotions_checkup_trigger"],
                 )
-                if events:
+                for ev in events:
+                    ev_data = ev.get("data") or {}
+                    tm = ev_data.get("target_minute")
+                    if tm is not None:
+                        self._triggered_checkup_times.add(float(tm))
+                    else:
+                        self._triggered_checkup_times.add(self.emotions_checkup_time_minutes)
+                if self._triggered_checkup_times:
                     self._emotions_checkup_triggered = True
             except Exception as exc:
                 self.logger.log_error("restore_checkup_state", str(exc))
@@ -1154,11 +1169,14 @@ class SimulationSession:
                     await asyncio.sleep(tick_interval)
                     continue
 
-                if self.emotions_checkup_enabled and not self._emotions_checkup_triggered:
+                if self.emotions_checkup_enabled:
                     elapsed_minutes = self.state.elapsed_active_minutes()
-                    if elapsed_minutes >= self.emotions_checkup_time_minutes:
-                        self._emotions_checkup_triggered = True
-                        await self._publish_emotions_checkup_trigger()
+                    for target_min in self.emotions_checkup_times:
+                        if target_min not in self._triggered_checkup_times and elapsed_minutes >= target_min:
+                            self._triggered_checkup_times.add(target_min)
+                            self._emotions_checkup_triggered = True
+                            await self._publish_emotions_checkup_trigger(target_minute=target_min, is_short=True)
+                            break
 
                 active_seconds_left = (self.state.duration_minutes * 60.0) - (self.state.elapsed_active_minutes() * 60.0)
                 if active_seconds_left <= 0:
@@ -1405,6 +1423,7 @@ class SimulationSession:
             "reason": client_reason or reason,
             "redirect_url": await self._build_return_url(reason),
             "agent_names": appeared_agent_names,
+            "emotions_checkup_enabled": self.emotions_checkup_enabled,
         }
         try:
             r = redis_client.get_redis()
@@ -1448,30 +1467,42 @@ class SimulationSession:
             token = ""
         return build_return_url(self.redirect_url, token, reason)
 
-    async def _publish_emotions_checkup_trigger(self) -> None:
+    async def _publish_emotions_checkup_trigger(
+        self,
+        target_minute: Optional[float] = None,
+        is_short: bool = True,
+    ) -> None:
         """Publish an emotions_checkup event via Redis pub/sub so the client opens the modal."""
         event = {
             "event_type": "emotions_checkup_trigger",
             "session_id": self.session_id,
             "timestamp": datetime.now(timezone.utc).isoformat(),
+            "target_minute": target_minute,
+            "is_short": is_short,
         }
         try:
             r = redis_client.get_redis()
             await redis_client.publish_event(r, self.session_id, event)
-            self.logger.log_event("emotions_checkup_trigger", {"triggered": True})
+            self.logger.log_event("emotions_checkup_trigger", {
+                "triggered": True,
+                "target_minute": target_minute,
+                "is_short": is_short,
+            })
         except Exception as exc:
             self.logger.log_error("publish_emotions_checkup_trigger", str(exc))
 
     async def handle_emotions_checkup_response(self, data: dict) -> None:
         """Handle an incoming emotions checkup response — log as an event."""
-        if not self.running:
-            return
         emotions = data.get("emotions")
         explanation = str(data.get("emotion_explanation") or "").strip()[:1000]
+        is_short = bool(data.get("is_short", False))
+        is_final = bool(data.get("is_final", False))
 
         self.logger.log_event("emotions_checkup_response", {
             "emotions": emotions,
             "emotion_explanation": explanation,
+            "is_short": is_short,
+            "is_final": is_final,
         })
 
     # ── User message handling ─────────────────────────────────────────────────
@@ -2038,6 +2069,7 @@ class SimulationSession:
                 "idle_prompt_enabled": self.idle_prompt_enabled,
                 "idle_prompt_seconds": self.idle_prompt_seconds,
                 "behavior_tracking_enabled": self.behavior_tracking_enabled,
+                "emotions_checkup_enabled": self.emotions_checkup_enabled,
                 # Server-authoritative: lets a rejoin from a fresh tab/device
                 # skip the initial-message news form.
                 "initial_message_done": self._first_user_message_received,
@@ -2065,13 +2097,17 @@ class SimulationSession:
                     self.session_id,
                     ["emotions_checkup_trigger", "emotions_checkup_response"],
                 )
-                triggered = any(e["event_type"] == "emotions_checkup_trigger" for e in events)
-                answered = any(e["event_type"] == "emotions_checkup_response" for e in events)
-                if triggered and not answered:
+                triggered_events = [e for e in events if e["event_type"] == "emotions_checkup_trigger"]
+                answered_count = sum(1 for e in events if e["event_type"] == "emotions_checkup_response")
+                if len(triggered_events) > answered_count:
+                    last_trigger = triggered_events[-1]
+                    trig_data = (last_trigger.get("data") or {}) if isinstance(last_trigger, dict) else {}
                     await self.websocket_send({
                         "event_type": "emotions_checkup_trigger",
                         "session_id": self.session_id,
                         "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "is_short": trig_data.get("is_short", True),
+                        "target_minute": trig_data.get("target_minute"),
                     })
             except Exception as exc:
                 self.logger.log_error("check_emotions_checkup_on_attach", str(exc))

@@ -154,12 +154,27 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     out["ten_messages_mode"] = bool(out.get("ten_messages_mode", False))
 
     out["emotions_checkup_enabled"] = bool(out.get("emotions_checkup_enabled", False))
-    out["emotions_checkup_time_minutes"] = int(out.get("emotions_checkup_time_minutes", 1))
+    raw_times = out.get("emotions_checkup_times")
+    if isinstance(raw_times, list):
+        times = [int(t) for t in raw_times if t is not None]
+    elif "emotions_checkup_time_minutes" in out:
+        times = [int(out["emotions_checkup_time_minutes"])]
+    else:
+        times = [1]
+
+    if len(times) > 3:
+        raise ValueError("'emotions_checkup_times' can contain at most 3 checkup times")
+
+    out["emotions_checkup_times"] = sorted(times)
+    out["emotions_checkup_time_minutes"] = out["emotions_checkup_times"][0] if out["emotions_checkup_times"] else 1
     if out["emotions_checkup_enabled"]:
-        if out["emotions_checkup_time_minutes"] <= 0:
-            raise ValueError("'emotions_checkup_time_minutes' must be > 0")
-        if out["emotions_checkup_time_minutes"] > out["session_duration_minutes"]:
-            raise ValueError("'emotions_checkup_time_minutes' cannot exceed 'session_duration_minutes'")
+        if not out["emotions_checkup_times"]:
+            raise ValueError("'emotions_checkup_time_minutes' must contain at least one time when enabled")
+        for t in out["emotions_checkup_times"]:
+            if t <= 0:
+                raise ValueError("'emotions_checkup_time_minutes' must be > 0")
+            if t > out["session_duration_minutes"]:
+                raise ValueError("'emotions_checkup_time_minutes' cannot exceed 'session_duration_minutes'")
 
     # Behavioural telemetry: coarse client-side signals (tab visibility, window
     # focus, typing effort, periodic mouse/keyboard activity). Opt-in so it can

@@ -153,3 +153,27 @@ export async function submitAgentImpressions(
   })
   if (!res.ok) throw new Error("Failed to save agent impressions")
 }
+
+export interface EmotionRatingItem {
+  emotion: string
+  intensity: number
+}
+
+export interface EmotionsCheckupPayload {
+  emotions: EmotionRatingItem[]
+  emotion_explanation?: string
+  is_short?: boolean
+  is_final?: boolean
+}
+
+export async function submitEmotionsCheckup(
+  sessionId: string,
+  payload: EmotionsCheckupPayload,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/session/${sessionId}/emotions-checkup`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new Error("Failed to save emotions checkup")
+}

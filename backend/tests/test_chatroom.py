@@ -999,6 +999,8 @@ class TestHandleEmotionsCheckupResponse:
                         {"emotion": "Enfado", "intensity": 2},
                     ],
                     "emotion_explanation": "Me ha molestado el tono de la conversación.",
+                    "is_short": False,
+                    "is_final": True,
                 })
                 mock_log.assert_called_once_with(
                     "emotions_checkup_response",
@@ -1008,8 +1010,43 @@ class TestHandleEmotionsCheckupResponse:
                             {"emotion": "Enfado", "intensity": 2},
                         ],
                         "emotion_explanation": "Me ha molestado el tono de la conversación.",
+                        "is_short": False,
+                        "is_final": True,
                     }
                 )
+
+    @pytest.mark.asyncio
+    async def test_short_emotions_checkup_logs_event(self):
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = False  # Should still log even if stopped
+            with patch.object(session.logger, "log_event") as mock_log:
+                await session.handle_emotions_checkup_response({
+                    "emotions": [
+                        {"emotion": "Contento/a", "intensity": 5},
+                    ],
+                    "is_short": True,
+                    "is_final": False,
+                })
+                mock_log.assert_called_once_with(
+                    "emotions_checkup_response",
+                    {
+                        "emotions": [
+                            {"emotion": "Contento/a", "intensity": 5},
+                        ],
+                        "emotion_explanation": "",
+                        "is_short": True,
+                        "is_final": False,
+                    }
+                )
+
+    def test_emotions_checkup_times_initialization(self):
+        with _patch_externals():
+            custom_sim = dict(MINIMAL_SIM_CONFIG, emotions_checkup_times=[2, 5, 8])
+            custom_cfg = {"simulation": custom_sim, "experimental": MINIMAL_EXP_CONFIG}
+            session, _ = _create_session(config=custom_cfg)
+            assert session.emotions_checkup_times == [2.0, 5.0, 8.0]
+            assert session.emotions_checkup_time_minutes == 2.0
 
 
 # ── Active Expiration & Pause Compensation ────────────────────────────────────

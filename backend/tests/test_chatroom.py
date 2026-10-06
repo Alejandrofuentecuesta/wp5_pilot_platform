@@ -1106,3 +1106,32 @@ class TestSessionActiveExpiration:
 
             session._publish_session_end.assert_awaited_once_with("duration_expired")
             session.stop.assert_awaited_once_with(reason="duration_expired")
+
+    @pytest.mark.asyncio
+    async def test_watchdog_and_clock_loop_end_the_session_once(self):
+        """Both loops detect expiry; the ending must be published only once."""
+        with _patch_externals():
+            session, _ = _create_session()
+            session.running = True
+            session._first_user_message_received = True
+            session.participant_stance_hint = "pro_topic"
+            session.state.duration_minutes = 20.0
+            # One second of active time left, so both loops reach expiry live.
+            session.state.start_time = datetime.now(timezone.utc) - timedelta(minutes=19, seconds=59)
+            session._publish_session_end = AsyncMock()
+
+            async def fake_stop(reason="completed"):
+                session.running = False
+
+            session.stop = AsyncMock(side_effect=fake_stop)
+            session._rng.random = lambda: 1.0  # never start an agent turn
+
+            clock_task = asyncio.create_task(session._clock_loop())
+            watchdog_task = asyncio.create_task(session._expiration_watchdog())
+            await asyncio.sleep(3)
+            for task in (clock_task, watchdog_task):
+                task.cancel()
+            await asyncio.gather(clock_task, watchdog_task, return_exceptions=True)
+
+            session._publish_session_end.assert_awaited_once_with("duration_expired")
+            session.stop.assert_awaited_once_with(reason="duration_expired")

@@ -268,16 +268,18 @@ class TestBuildActionSystemPrompt:
         assert "Room-wide openers are fine and realistic" in prompt
 
 
-    def test_protects_participant_from_severe_direct_abuse(self):
+    def test_protects_participant_from_direct_personal_attacks(self):
         prompt = build_action_system_prompt(
             chatroom_context="Debate migratorio",
             participant_stance_hint="participant self-report: against the article",
             participant_alignment_cell="participant alignment cell: anti_policy_anti_topic",
             participant_name="Tomas",
         )
-        assert "Protect the participant from severe direct abuse" in prompt
-        assert 'Mild direct labels such as "ingenuo" or "ignorante" are acceptable' in prompt
-        assert "must not use severe direct insults" in prompt
+        assert "Protect the participant from direct personal attacks (ad hominem)" in prompt
+        assert "NEVER the individual person" in prompt
+        assert "criticism MUST target the participant's message, comment, or argument" in prompt
+        # The old allowance for mild direct labels is gone.
+        assert 'Mild direct labels such as "ingenuo" or "ignorante" are acceptable' not in prompt
 
     def test_uses_same_cell_not_same_ideology_for_infighting_rule(self):
         prompt = build_action_system_prompt(

@@ -508,6 +508,7 @@ class SimulationSession:
 
         self.clock_task: Optional[asyncio.Task] = None
         self._watchdog_task: Optional[asyncio.Task] = None
+        self._duration_end_started = False  # see _end_for_duration
         self.running = False
         self._seeded = False
         self._turn_lock = asyncio.Lock()   # serialises the persist+broadcast phase
@@ -1085,14 +1086,26 @@ class SimulationSession:
                 if not self.running:
                     break
                 if self.is_session_expired():
-                    await self._publish_session_end("duration_expired")
-                    await asyncio.sleep(0.5)
-                    await self.stop(reason="duration_expired")
+                    await self._end_for_duration()
                     break
             except asyncio.CancelledError:
                 break
             except Exception as exc:
                 self.logger.log_error("expiration_watchdog", str(exc))
+
+    async def _end_for_duration(self) -> None:
+        """End the session for running out of active time, exactly once.
+
+        The expiry watchdog and the clock loop both detect expiry. Whichever
+        sees it first ends the session; the other returns at once, so the
+        session_end event and agent_impressions_open are recorded only once.
+        """
+        if self._duration_end_started:
+            return
+        self._duration_end_started = True
+        await self._publish_session_end("duration_expired")
+        await asyncio.sleep(0.5)  # let pub/sub deliver before teardown
+        await self.stop(reason="duration_expired")
 
     # ── Clock loop ────────────────────────────────────────────────────────────
 
@@ -1154,9 +1167,7 @@ class SimulationSession:
                     continue
 
                 if self.is_session_expired():
-                    await self._publish_session_end("duration_expired")
-                    await asyncio.sleep(0.5)  # let pub/sub deliver before teardown
-                    await self.stop(reason="duration_expired")
+                    await self._end_for_duration()
                     break
 
                 # Do not let the chat begin until the participant has read
@@ -1180,9 +1191,7 @@ class SimulationSession:
 
                 active_seconds_left = (self.state.duration_minutes * 60.0) - (self.state.elapsed_active_minutes() * 60.0)
                 if active_seconds_left <= 0:
-                    await self._publish_session_end("duration_expired")
-                    await asyncio.sleep(0.5)
-                    await self.stop(reason="duration_expired")
+                    await self._end_for_duration()
                     break
                 if active_seconds_left < 3.0:
                     await asyncio.sleep(min(active_seconds_left, 0.5))

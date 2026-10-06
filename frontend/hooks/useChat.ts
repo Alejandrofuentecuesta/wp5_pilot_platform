@@ -634,21 +634,18 @@ export function useChat() {
     setNewsArticleModalOpen(true)
   }, [])
 
+  // Check-up answers are sent once, by HTTP POST only: the server logs every
+  // copy it receives, so also sending over the WebSocket stored each answer
+  // twice. The POST is validated server-side and also works after the chat
+  // connection has closed (the final check-up).
   const submitEmotionsCheckup = useCallback((emotions: EmotionRating[], explanation: string) => {
+    // The free-text "other" emotion and explanation can contain the participant's own
+    // name; predefined labels pass through the mapper unchanged.
     const mappedEmotions = emotions.map((e) => ({
       ...e,
       emotion: mapperRef.current.outbound(e.emotion),
     }))
     const mappedExplanation = mapperRef.current.outbound(explanation)
-    send({
-      type: "emotions_checkup_response",
-      // The free-text "other" emotion and explanation can contain the participant's own
-      // name; predefined labels pass through the mapper unchanged.
-      emotions: mappedEmotions,
-      emotion_explanation: mappedExplanation,
-      is_short: emotionsCheckupIsShort,
-      is_final: false,
-    } as any)
     if (sessionId) {
       apiSubmitEmotionsCheckup(sessionId, {
         emotions: mappedEmotions,
@@ -658,7 +655,7 @@ export function useChat() {
       }).catch((err) => console.error("Failed to post mid-session emotions checkup:", err))
     }
     setEmotionsCheckupOpen(false)
-  }, [send, sessionId, emotionsCheckupIsShort])
+  }, [sessionId, emotionsCheckupIsShort])
 
   const submitFinalEmotionsCheckup = useCallback(async (emotions: EmotionRating[], explanation: string) => {
     const mappedEmotions = emotions.map((e) => ({
@@ -666,13 +663,6 @@ export function useChat() {
       emotion: mapperRef.current.outbound(e.emotion),
     }))
     const mappedExplanation = mapperRef.current.outbound(explanation)
-    send({
-      type: "emotions_checkup_response",
-      emotions: mappedEmotions,
-      emotion_explanation: mappedExplanation,
-      is_short: false,
-      is_final: true,
-    } as any)
     if (sessionId) {
       try {
         await apiSubmitEmotionsCheckup(sessionId, {
@@ -687,7 +677,7 @@ export function useChat() {
     }
     setFinalEmotionsCheckupOpen(false)
     setAgentImpressionSurveyOpen(true)
-  }, [send, sessionId])
+  }, [sessionId])
 
   const openExitModal = useCallback(() => {
     trackImmediately("exit_attempt", { source: "chat_header" })

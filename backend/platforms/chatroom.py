@@ -1407,7 +1407,7 @@ class SimulationSession:
         derives from ``reason``.
         """
         appeared_agent_names = self._appeared_agent_names()
-        if reason in {"duration_expired", "user_exit"}:
+        if reason in {"duration_expired", "user_exit"} and appeared_agent_names:
             try:
                 await event_repo.insert_event_strict(
                     db_conn.get_pool(),

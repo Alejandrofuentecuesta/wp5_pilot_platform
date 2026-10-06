@@ -300,6 +300,8 @@ export function useChat() {
           setAgentImpressionSurveyOpen(true)
         }
       } else {
+        setFinalEmotionsCheckupOpen(false)
+        setAgentImpressionSurveyOpen(false)
         // Clear session so user can't refresh back into the chatroom.
         concludeSession()
       }

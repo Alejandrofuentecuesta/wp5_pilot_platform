@@ -176,6 +176,22 @@ class TestSimulationSessionInit:
             assert published["reason"] == "user_exit"
             assert published["agent_names"] == ["Alice"]
 
+    @pytest.mark.asyncio
+    async def test_user_exit_without_agents_does_not_open_survey(self):
+        with _patch_externals() as mocks, \
+             patch("platforms.chatroom.event_repo") as mock_event_repo:
+            mock_event_repo.insert_event_strict = AsyncMock()
+            session, _ = _create_session()
+            # Only participant message, no agent messages
+            session.state.add_message(Message.create(sender="participant", content="Hola"))
+
+            await session._publish_session_end("user_exit")
+
+            mock_event_repo.insert_event_strict.assert_not_called()
+            published = mocks["redis"].publish_event.await_args.args[2]
+            assert published["reason"] == "user_exit"
+            assert published["agent_names"] == []
+
     def test_no_config_raises(self):
         from platforms.chatroom import SimulationSession
 

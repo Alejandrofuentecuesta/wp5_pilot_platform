@@ -171,6 +171,7 @@ async def test_submit_agent_impressions_persists_early_exit_and_why_not_reported
                 why_not_reported_other=None,
                 early_exit_agreement=4,
                 early_exit_incivility=6,
+                early_exit_incivility_category="(2) Moderadamente incivil, aproximadamente la mitad de los mensajes eran inciviles",
                 early_exit_human_ai="Probablemente una IA",
                 early_exit_composition="Había una mezcla de humanos e IA",
                 early_exit_fear_social_sanctions=2,
@@ -183,6 +184,10 @@ async def test_submit_agent_impressions_persists_early_exit_and_why_not_reported
     assert survey["why_not_reported"] == ["No merecía la pena / No era lo bastante grave"]
     assert survey["early_exit_agreement"] == 4
     assert survey["early_exit_incivility"] == 6
+    assert (
+        survey["early_exit_incivility_category"]
+        == "(2) Moderadamente incivil, aproximadamente la mitad de los mensajes eran inciviles"
+    )
     assert survey["early_exit_human_ai"] == "Probablemente una IA"
     assert survey["early_exit_composition"] == "Había una mezcla de humanos e IA"
     assert survey["early_exit_fear_social_sanctions"] == 2

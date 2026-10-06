@@ -120,6 +120,7 @@ export interface FinalReportBlockSurvey {
   why_not_reported_other?: string | null
   early_exit_agreement?: number | null
   early_exit_incivility?: number | null
+  early_exit_incivility_category?: string | null
   early_exit_human_ai?: string | null
   early_exit_composition?: string | null
   early_exit_fear_social_sanctions?: number | null

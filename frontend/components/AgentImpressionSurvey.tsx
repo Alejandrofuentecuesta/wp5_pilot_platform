@@ -239,6 +239,7 @@ export default function AgentImpressionSurvey({
   // Early exit questions
   const [earlyExitAgreement, setEarlyExitAgreement] = useState<number | null>(null)
   const [earlyExitIncivility, setEarlyExitIncivility] = useState<number | null>(null)
+  const [earlyExitIncivilityCategory, setEarlyExitIncivilityCategory] = useState<string | null>(null)
   const [earlyExitHumanAi, setEarlyExitHumanAi] = useState<string | null>(null)
   const [earlyExitComposition, setEarlyExitComposition] = useState<string | null>(null)
   const [earlyExitFearSocialSanctions, setEarlyExitFearSocialSanctions] = useState<number | null>(null)
@@ -263,6 +264,7 @@ export default function AgentImpressionSurvey({
     !isEarlyExit ||
     (earlyExitAgreement !== null &&
       earlyExitIncivility !== null &&
+      earlyExitIncivilityCategory !== null &&
       earlyExitHumanAi !== null &&
       earlyExitComposition !== null &&
       earlyExitFearSocialSanctions !== null)
@@ -311,6 +313,7 @@ export default function AgentImpressionSurvey({
           : null,
       early_exit_agreement: isEarlyExit ? earlyExitAgreement : null,
       early_exit_incivility: isEarlyExit ? earlyExitIncivility : null,
+      early_exit_incivility_category: isEarlyExit ? earlyExitIncivilityCategory : null,
       early_exit_human_ai: isEarlyExit ? earlyExitHumanAi : null,
       early_exit_composition: isEarlyExit ? earlyExitComposition : null,
       early_exit_fear_social_sanctions: isEarlyExit ? earlyExitFearSocialSanctions : null,
@@ -337,22 +340,9 @@ export default function AgentImpressionSurvey({
           {/* Early Exit Questions (only shown when leaving early via exit modal) */}
           {isEarlyExit && (
             <section className="rounded-2xl border border-amber-200 bg-amber-50/30 p-4 space-y-6 sm:p-5">
-              <div className="border-b border-amber-200/60 pb-3">
-                <span className="inline-block rounded-md bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
-                  Salida anticipada
-                </span>
-                <h2 className="mt-1 text-base font-semibold text-primary">
-                  Preguntas sobre tu experiencia en la conversación
-                </h2>
-                <p className="mt-0.5 text-xs text-secondary">
-                  Como has decidido finalizar la conversación antes de tiempo, por favor responde a estas preguntas clave antes de salir.
-                </p>
-              </div>
-
               {/* Slider 1: Opinion match / like-mindedness */}
               <RatingSlider
-                label="1. Coincidencia de opiniones"
-                description="Pensando en la conversación que acabas de tener en la sala de discusión, ¿en general, hasta qué punto sentiste que las opiniones expresadas por las otras personas coincidían con las tuyas sobre el tema debatido?"
+                label="1. Pensando en la conversación que acabas de tener en la sala de discusión, ¿en general, hasta qué punto sentiste que las opiniones expresadas por las otras personas coincidían con las tuyas sobre el tema debatido?"
                 min={1}
                 max={7}
                 value={earlyExitAgreement}
@@ -362,18 +352,56 @@ export default function AgentImpressionSurvey({
                 rightLabel="Coincidían completamente"
               />
 
-              {/* Slider 2: Incivility level */}
+              {/* Incivility definition block */}
+              <div className="rounded-xl border border-amber-200/60 bg-amber-50/50 p-3 text-xs leading-relaxed text-secondary">
+                <strong className="text-primary font-semibold">Definición de incivilidad: </strong>
+                La incivilidad online se entiende como todo intercambio verbal grosero, descortés u ofensivo que denigra opiniones discrepantes. También se incluyen los discursos discriminatorios o de odio contra individuos o grupos a los que se les atribuyen estereotipos negativos por razón de su identidad social, así como los mensajes que amenazan los valores y libertades democráticas.
+              </div>
+
+              {/* Question 2 Part 1: Incivility level */}
               <RatingSlider
-                label="2. Grado de incivilidad observado"
-                description="La incivilidad online se entiende como todo intercambio verbal grosero, descortés u ofensivo que denigra opiniones discrepantes. También se incluyen los discursos discriminatorios o de odio contra individuos o grupos a los que se les atribuyen estereotipos negativos por razón de su identidad social, así como los mensajes que amenazan los valores y libertades democráticas. ¿Qué grado de incivilidad crees que representa, aproximadamente, el nivel de incivilidad que observaste durante tu conversación en la sala de discusión?"
+                label="2. Teniendo en cuenta la definición de incivilidad de más arriba, pensando en la conversación que acabas de tener en la sala de discusión, ¿en general, hasta qué punto sentiste que las opiniones expresadas por las otras personas eran inciviles?"
                 min={1}
                 max={7}
                 value={earlyExitIncivility}
                 onChange={setEarlyExitIncivility}
-                leftLabel="Muy bajo"
-                midLabel="Medio"
-                rightLabel="Muy alto"
+                leftLabel="Poco o nada incivil"
+                midLabel="Moderadamente incivil"
+                rightLabel="Muy incivil"
               />
+
+              {/* Question 2 Part 2: Incivility category */}
+              <fieldset className="space-y-2">
+                <legend className="text-sm font-semibold text-primary">
+                  ¿Con cuál de estas opciones describirías tu conversación en la sala de discusión?
+                </legend>
+                <div className="space-y-2 pt-1">
+                  {[
+                    "(1) Poco incivil, es decir, algún mensaje incivil esporádico",
+                    "(2) Moderadamente incivil, aproximadamente la mitad de los mensajes eran inciviles",
+                    "(3) Muy incivil, el tono general y la mayoría de los mensajes eran claramente inciviles",
+                  ].map((option) => (
+                    <label
+                      key={option}
+                      className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition-colors ${
+                        earlyExitIncivilityCategory === option
+                          ? "border-accent bg-accent-soft/50 text-primary font-medium"
+                          : "border-border bg-bg-surface text-secondary hover:border-accent"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="early-exit-incivility-category"
+                        value={option}
+                        checked={earlyExitIncivilityCategory === option}
+                        onChange={() => setEarlyExitIncivilityCategory(option)}
+                        className="h-4 w-4 text-accent focus:ring-accent"
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              </fieldset>
 
               {/* Question 3: Human vs AI */}
               <fieldset className="space-y-2">
@@ -446,8 +474,7 @@ export default function AgentImpressionSurvey({
 
               {/* Slider 5: Fear of social sanctions */}
               <RatingSlider
-                label="5. Preocupación por el juicio social"
-                description="¿En algún momento de la sesión sentiste miedo o preocupación a que los demás participantes te juzgasen negativamente o te atacaran por decir lo que pensabas?"
+                label="5. ¿En algún momento de la sesión sentiste miedo o preocupación a que los demás participantes te juzgasen negativamente o te atacaran por decir lo que pensabas?"
                 min={1}
                 max={7}
                 value={earlyExitFearSocialSanctions}

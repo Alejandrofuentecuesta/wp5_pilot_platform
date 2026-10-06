@@ -486,6 +486,7 @@ class FinalReportBlockSurveyRequest(BaseModel):
     why_not_reported_other: Optional[str] = None
     early_exit_agreement: Optional[int] = None
     early_exit_incivility: Optional[int] = None
+    early_exit_incivility_category: Optional[str] = None
     early_exit_human_ai: Optional[str] = None
     early_exit_composition: Optional[str] = None
     early_exit_fear_social_sanctions: Optional[int] = None
@@ -1009,6 +1010,7 @@ async def submit_agent_impressions(session_id: str, payload: AgentImpressionsReq
             "why_not_reported_other": (survey.why_not_reported_other or "").strip()[:1000] or None,
             "early_exit_agreement": survey.early_exit_agreement,
             "early_exit_incivility": survey.early_exit_incivility,
+            "early_exit_incivility_category": (survey.early_exit_incivility_category or "").strip()[:500] or None,
             "early_exit_human_ai": (survey.early_exit_human_ai or "").strip()[:200] or None,
             "early_exit_composition": (survey.early_exit_composition or "").strip()[:200] or None,
             "early_exit_fear_social_sanctions": survey.early_exit_fear_social_sanctions,

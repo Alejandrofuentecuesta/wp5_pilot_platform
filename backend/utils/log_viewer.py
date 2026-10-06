@@ -902,6 +902,8 @@ def render_agent_impressions(ev: dict) -> str:
         rows.append(("Salida anticipada - Coincidencia opiniones", f"{survey['early_exit_agreement']}/7"))
     if survey.get("early_exit_incivility") is not None:
         rows.append(("Salida anticipada - Nivel incivilidad", f"{survey['early_exit_incivility']}/7"))
+    if survey.get("early_exit_incivility_category"):
+        rows.append(("Salida anticipada - Categoría incivilidad", _esc(str(survey["early_exit_incivility_category"]))))
     if survey.get("early_exit_human_ai"):
         rows.append(("Salida anticipada - Percepción humanos/IA", _esc(str(survey["early_exit_human_ai"]))))
     if survey.get("early_exit_composition"):

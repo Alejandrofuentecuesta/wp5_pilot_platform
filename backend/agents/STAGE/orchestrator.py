@@ -795,6 +795,26 @@ class Orchestrator:
             return "uncivil"
         return None
 
+    def _needed_like_minded(
+        self,
+        like_target: Optional[int],
+        agent_messages: List[Message],
+    ) -> Optional[bool]:
+        """Side (True = like-minded) the next agent message needs to move the
+        running like-minded share toward its target; None when on target or unknown."""
+        if like_target is None:
+            return None
+        sides = [
+            side for side in (self._expected_like_minded_for_agent(m.sender) for m in agent_messages)
+            if side is not None
+        ]
+        like_pct = 100.0 * sum(sides) / len(sides) if sides else 50.0
+        if like_pct > like_target:
+            return False
+        if like_pct < like_target:
+            return True
+        return None
+
     def _agent_civility_bucket(self, agent_name: str) -> Optional[str]:
         """Return the fixed civility bucket of an agent, if known."""
         traits = self._agent_traits.get(agent_name) or {}
@@ -975,16 +995,26 @@ class Orchestrator:
         # pretest, uncivil agents asked by the Director for a civil message
         # still wrote uncivil ones. So the only lever on the incivility share
         # is who speaks — keep only agents of the needed tone whenever one is
-        # available. A sole addressed agent is left as is (no match to swap in).
+        # available. The same holds for alignment: the Director misread which
+        # cell was like-minded and kept picking the wrong side, so keep only
+        # agents of the needed side too. Prefer agents matching both; when
+        # none do, tone wins over side. A sole addressed agent is left as is
+        # (no match to swap in).
         if not self.ten_messages_mode:
             needed_civility = self._needed_civility(incivil_target, agent_messages)
-            if needed_civility is not None:
-                matching = {
-                    name for name in candidates
-                    if self._agent_civility_bucket(name) == needed_civility
-                }
+            needed_like = self._needed_like_minded(like_target, agent_messages)
+            tone_matching = {
+                name for name in candidates
+                if needed_civility is None or self._agent_civility_bucket(name) == needed_civility
+            }
+            side_matching = {
+                name for name in candidates
+                if needed_like is None or self._expected_like_minded_for_agent(name) is needed_like
+            }
+            for matching in (tone_matching & side_matching, tone_matching, side_matching):
                 if matching:
                     candidates = matching
+                    break
 
         if len(candidates) <= TARGET_ELIGIBLE_SPEAKER_COUNT:
             return candidates
@@ -3197,11 +3227,16 @@ class Orchestrator:
         )
         anon_traits = None
         if self._agent_traits:
-            anon_traits = {
-                name: traits
-                for name, traits in self._agent_traits.items()
-                if name in profiles
-            }
+            # Spell out each agent's side relative to the participant: left to
+            # infer it from the cells, the Director got it backwards.
+            anon_traits = {}
+            for name, traits in self._agent_traits.items():
+                if name not in profiles:
+                    continue
+                like = self._expected_like_minded_for_agent(name)
+                if like is not None:
+                    traits = {**traits, "role": "like-minded" if like else "not-like-minded"}
+                anon_traits[name] = traits
 
         action_template = self.director_action_prompt_template
         if self._should_boost_replies_mentions() and not action_template:

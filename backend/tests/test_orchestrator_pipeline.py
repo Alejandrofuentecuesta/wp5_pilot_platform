@@ -389,6 +389,64 @@ class TestOrchestratorInit:
         # their side: a civil agent here would write a civil message.
         assert filtered == {"Alice", "Eve"}
 
+    @staticmethod
+    def _two_by_two_pool_orchestrator(sent):
+        """Anti-topic participant facing the 8-agent pool (2 per side x tone)."""
+        names = ["ProCiv1", "ProCiv2", "ProUnc1", "ProUnc2", "AntiCiv1", "AntiCiv2", "AntiUnc1", "AntiUnc2"]
+        state = _make_state(
+            participant_stance_hint="anti_topic",
+            agents=[Agent(name=n) for n in names],
+        )
+        for sender, incivil in sent:
+            state.add_message(Message.create(sender=sender, content="x", is_incivil=incivil))
+        traits = {
+            n: {
+                "alignment_cell": "pro_topic" if n.startswith("Pro") else "anti_topic",
+                "incivility": "uncivil" if "Unc" in n else "civil",
+            }
+            for n in names
+        }
+        orch, _ = _make_orchestrator(state=state, agent_traits=traits)
+        return orch, set(names)
+
+    def test_candidate_filter_enforces_side_together_with_tone(self):
+        """Regression: with 2 agents per side x tone, the tone filter alone left
+        4 agents (both sides), so the like-minded target was never applied and
+        the Director kept picking like-minded agents in a not-like-minded group."""
+        orch, names = self._two_by_two_pool_orchestrator([
+            ("ProCiv1", False), ("ProUnc1", True), ("AntiCiv1", False), ("AntiCiv2", False),
+        ])
+        filtered = orch._filter_candidate_agents_for_targets(
+            "INCIVILITY_TARGET = 20\nLIKEMINDED_TARGET = 20\nNOT_LIKEMINDED_TARGET = 80",
+            names,
+        )
+        # 25% incivil (> 20) -> civil; 50% like-minded (> 20) -> not-like-minded (pro_topic).
+        assert filtered == {"ProCiv1", "ProCiv2"}
+
+    def test_candidate_filter_prefers_tone_when_no_agent_matches_both(self):
+        orch, _ = self._two_by_two_pool_orchestrator([
+            ("ProCiv1", False), ("ProUnc1", True), ("AntiCiv1", False), ("AntiCiv2", False),
+        ])
+        filtered = orch._filter_candidate_agents_for_targets(
+            "INCIVILITY_TARGET = 20\nLIKEMINDED_TARGET = 20\nNOT_LIKEMINDED_TARGET = 80",
+            {"ProUnc1", "AntiCiv1"},
+        )
+        assert filtered == {"AntiCiv1"}
+
+    def test_director_profiles_state_each_agents_side(self):
+        orch, _ = self._two_by_two_pool_orchestrator([])
+        assert orch._expected_like_minded_for_agent("AntiCiv1") is True
+        from agents.STAGE.director import format_agent_profiles
+        text = format_agent_profiles(
+            {"ProCiv1": "", "AntiCiv1": ""},
+            {
+                "ProCiv1": {"alignment_cell": "pro_topic", "role": "not-like-minded"},
+                "AntiCiv1": {"alignment_cell": "anti_topic", "role": "like-minded"},
+            },
+        )
+        assert "**ProCiv1**: role=not-like-minded (to participant), cell=pro_topic" in text
+        assert "**AntiCiv1**: role=like-minded (to participant), cell=anti_topic" in text
+
     def test_sanitize_summary_for_eligible_agents_rewrites_noneligible_names(self):
         state = _make_state(agents=[Agent(name="Alice"), Agent(name="Bob"), Agent(name="Carol")])
         orch, _ = _make_orchestrator(state=state)

@@ -84,6 +84,9 @@ def format_agent_profiles(
                 ideology = trait.get("ideology")
                 incivility = trait.get("incivility")
                 alignment_cell = trait.get("alignment_cell")
+                role = trait.get("role")
+                if role:
+                    trait_bits.append(f"role={role} (to participant)")
                 if alignment_cell:
                     trait_bits.append(f"cell={alignment_cell}")
                 if ideology:

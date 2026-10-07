@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>¿Cómo termina la sesión?</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { background: #ffffff; }
+  body {
+    margin: 0;
+    color: #14161a;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    font-size: 19px;
+    line-height: 1.5;
+    padding: 64px 32px 96px;
+    -webkit-font-smoothing: antialiased;
+  }
+  code {
+    font-family: "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.82em;
+    background: #f3f3f4;
+    border-radius: 4px;
+    padding: 1px 6px;
+  }
+
+  .diagram { width: max-content; margin: 0 auto; }
+
+  /* ── start node + stem ─────────────────────────────────────────── */
+  .start-row { display: flex; justify-content: center; }
+  .start {
+    background: #14161a;
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 1.15rem;
+    letter-spacing: -0.01em;
+    border-radius: 999px;
+    padding: 16px 34px;
+  }
+  .stem {
+    width: 2px;
+    height: 34px;
+    background: #c7c9cf;
+    margin: 0 auto;
+  }
+
+  /* ── the row of six columns, fed by one horizontal bar ────────────── */
+  .columns {
+    display: flex;
+    gap: 44px;
+    border-top: 2px solid #c7c9cf;
+    padding-top: 30px;
+  }
+  .path {
+    position: relative;
+    flex: 1 0 250px;
+    min-width: 250px;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .path::before {
+    content: "";
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    width: 2px;
+    height: 30px;
+    background: #c7c9cf;
+    transform: translateX(-50%);
+  }
+
+  .path-title {
+    font-weight: 700;
+    font-size: 1.12rem;
+    text-align: center;
+    margin-bottom: 3px;
+    text-wrap: balance;
+  }
+  .path-reason {
+    text-align: center;
+    font-size: 0.88rem;
+    color: #7a7d85;
+    margin-bottom: 20px;
+  }
+
+  /* ── boxes ─────────────────────────────────────────────────────── */
+  .box {
+    background: #ffffff;
+    border: 1.5px solid #d8dae0;
+    border-radius: 12px;
+    padding: 18px 18px;
+    font-size: 1rem;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(20, 22, 26, 0.04);
+  }
+  .box .sub {
+    display: block;
+    font-size: 0.82rem;
+    font-weight: 400;
+    color: #7a7d85;
+    margin-top: 3px;
+  }
+  .box.debrief {
+    border: 2px solid #14161a;
+    font-weight: 650;
+    box-shadow: 0 2px 6px rgba(20, 22, 26, 0.08);
+  }
+  .box.decision {
+    background: #f6f6f7;
+    border: 1.5px dashed #9a9da5;
+    color: #34363c;
+    font-weight: 600;
+  }
+  .box.end {
+    background: #14161a;
+    color: #ffffff;
+    border-color: #14161a;
+    font-weight: 700;
+  }
+  .box.end .sub { color: #b8bac0; }
+
+  /* ── connectors between stacked boxes ─────────────────────────── */
+  .connector {
+    position: relative;
+    width: 2px;
+    height: 34px;
+    background: #c7c9cf;
+    margin: 0 auto;
+  }
+  .connector::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: -1px;
+    transform: translateX(-50%);
+    width: 0;
+    height: 0;
+    border-left: 6px solid transparent;
+    border-right: 6px solid transparent;
+    border-top: 8px solid #c7c9cf;
+  }
+  .connector .edge-label {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: #ffffff;
+    padding: 2px 8px;
+    font-size: 0.74rem;
+    font-weight: 700;
+    color: #5c5f68;
+    white-space: nowrap;
+    border: 1px solid #e4e5e9;
+    border-radius: 999px;
+  }
+
+  /* ── decision branches (SÍ / NO) ─────────────────────────────── */
+  .branch {
+    display: flex;
+    gap: 14px;
+  }
+  .branch .col {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .branch .tag {
+    align-self: center;
+    font-size: 0.72rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    color: #ffffff;
+    background: #9a9da5;
+    border-radius: 999px;
+    padding: 2px 10px;
+    margin-bottom: 8px;
+  }
+  .branch .col.yes .tag { background: #14161a; }
+  .branch .col .box { font-size: 0.92rem; padding: 14px; }
+
+  /* ── legend ────────────────────────────────────────────────────── */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28px;
+    margin: 56px 0 0;
+    font-size: 0.92rem;
+    color: #5c5f68;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 8px; }
+  .sw { width: 20px; height: 14px; border-radius: 4px; background: #fff; }
+  .sw-debrief { border: 2px solid #14161a; }
+  .sw-plain { border: 1.5px solid #d8dae0; }
+  .sw-end { background: #14161a; }
+
+  .legend-r {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 28px;
+    margin: 18px 0 0;
+    font-size: 0.92rem;
+    color: #5c5f68;
+  }
+  .legend-r span { display: inline-flex; align-items: center; gap: 8px; }
+  .legend-r b {
+    color: #ffffff;
+    background: #14161a;
+    font-size: 0.78rem;
+    font-weight: 800;
+    border-radius: 999px;
+    padding: 2px 9px;
+  }
+
+  @media (max-width: 720px) {
+    body { padding: 40px 18px 72px; font-size: 17px; }
+    .columns { flex-direction: column; gap: 30px; padding-top: 24px; }
+    .path::before { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="diagram">
+
+  <div class="start-row"><div class="start">Participante en el chat</div></div>
+  <div class="stem"></div>
+
+  <div class="columns">
+
+    <div class="path">
+      <div class="path-title">Se acaba el tiempo</div>
+      <div class="path-reason"><code>duration_expired</code></div>
+      <div class="box">Thank You<span class="sub">sin debriefing</span></div>
+      <div class="connector"><span class="edge-label">auto 2s</span></div>
+      <div class="box end">Se redirige a NetQuest<span class="sub">r = 1</span></div>
+      <div class="connector"></div>
+      <div class="box">Debriefing lo da la encuesta</div>
+    </div>
+
+    <div class="path">
+      <div class="path-title">Salta el classifier</div>
+      <div class="path-reason"><code>participant_safety</code></div>
+      <div class="box">Pantalla de seguridad<span class="sub">024 / 112</span></div>
+      <div class="connector"></div>
+      <div class="box debrief">+ Debriefing<span class="sub">en la misma pantalla</span></div>
+      <div class="connector"><span class="edge-label">botón "Salir del experimento"</span></div>
+      <div class="box end">Se redirige a NetQuest<span class="sub">r = 2</span></div>
+    </div>
+
+    <div class="path">
+      <div class="path-title">Lo cierra el investigador</div>
+      <div class="path-reason"><code>safety_stop</code></div>
+      <div class="box debrief">Thank You<span class="sub">+ debriefing inline</span></div>
+      <div class="connector"><span class="edge-label">botón Continuar</span></div>
+      <div class="box end">Se redirige a NetQuest<span class="sub">r = 2</span></div>
+    </div>
+
+    <div class="path">
+      <div class="path-title">Botón "Salir del experimento"</div>
+      <div class="path-reason"><code>user_exit</code></div>
+      <div class="box debrief">Thank You<span class="sub">+ debriefing inline</span></div>
+      <div class="connector"><span class="edge-label">botón Continuar</span></div>
+      <div class="box end">Se redirige a NetQuest<span class="sub">r = 3</span></div>
+    </div>
+
+    <div class="path">
+      <div class="path-title">Cierra la pestaña</div>
+      <div class="path-reason">se desconecta sin botón salir</div>
+      <div class="box decision">¿Vuelve en 60 min?</div>
+      <div class="connector"></div>
+      <div class="branch">
+        <div class="col yes">
+          <div class="tag">SÍ</div>
+          <div class="box">La sesión sigue normal</div>
+        </div>
+        <div class="col">
+          <div class="tag">NO</div>
+          <div class="box"><code>abandoned</code></div>
+        </div>
+      </div>
+      <div class="connector"></div>
+      <div class="box end">Aviso directo al panel<span class="sub">se redirige a NetQuest · r = 2</span></div>
+    </div>
+
+    <div class="path">
+      <div class="path-title">Inactivo</div>
+      <div class="path-reason"><code>idle_timeout</code></div>
+      <div class="box">Banner "¿Sigues ahí?"<span class="sub">no es pantalla de expulsión</span></div>
+      <div class="connector"></div>
+      <div class="box decision">¿Responde en 60 min?</div>
+      <div class="connector"></div>
+      <div class="branch">
+        <div class="col yes">
+          <div class="tag">SÍ</div>
+          <div class="box">La sesión sigue</div>
+        </div>
+        <div class="col">
+          <div class="tag">NO</div>
+          <div class="box">Thank You<span class="sub">sin debriefing</span></div>
+        </div>
+      </div>
+      <div class="connector"><span class="edge-label">auto 2s</span></div>
+      <div class="box end">Se redirige a NetQuest<span class="sub">r = 2</span></div>
+    </div>
+
+  </div>
+
+  <div class="legend">
+    <span><span class="sw sw-debrief"></span>con debriefing en la app</span>
+    <span><span class="sw sw-plain"></span>sin debriefing en la app</span>
+    <span><span class="sw sw-end"></span>se redirige fuera de la app</span>
+  </div>
+
+  <div class="legend-r">
+    <span><b>r = 1</b>complete</span>
+    <span><b>r = 2</b>no complete</span>
+    <span><b>r = 3</b>early exit</span>
+  </div>
+
+</div>
+</body>
+</html>

@@ -1035,6 +1035,75 @@ class TestExecuteTurnMessage:
         )
 
 
+
+class TestVocabularyBlacklist:
+
+    @staticmethod
+    def _state_with_used_term():
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="Menudo buenismo el vuestro."))
+        state.add_message(Message.create(sender="participant", content="La vivienda es el problema real."))
+        return state
+
+    @pytest.mark.asyncio
+    async def test_retries_when_performer_reuses_session_vocabulary(self):
+        orch, logger = _make_orchestrator(state=self._state_with_used_term())
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message")
+        )
+        orch.performer_llm.generate_response = AsyncMock(side_effect=[
+            "Eso es puro buenismo, no hay vivienda para todos.",
+            "No hay vivienda para todos y lo sabe cualquiera que busque piso.",
+        ])
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.message.content.startswith("No hay vivienda")
+        assert orch.performer_llm.generate_response.call_count == 2
+        first_prompt = orch.performer_llm.generate_response.call_args_list[0].args[0]
+        assert "Session vocabulary blacklist" in first_prompt
+        assert '"buenismo / buenista"' in first_prompt
+        retry_prompt = orch.performer_llm.generate_response.call_args_list[1].args[0]
+        assert "already been used in this chat" in retry_prompt
+        logger.log_error.assert_any_call(
+            "performer_vocab_blacklist_retry",
+            "Generated message for 'Alice' reused blacklisted vocabulary; retrying",
+            context={"action_type": "message", "terms": ["buenismo / buenista"]},
+        )
+
+    @pytest.mark.asyncio
+    async def test_director_prompt_lists_session_vocabulary(self):
+        orch, _ = _make_orchestrator(state=self._state_with_used_term())
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message")
+        )
+        orch.performer_llm.generate_response = AsyncMock(return_value="No hay vivienda para todos.")
+
+        await orch.execute_turn("criteria_A")
+
+        prompts = [c.args[0] for c in orch.director_llm.generate_response.call_args_list]
+        assert any('"menudo/menuda ..."' in p and '"buenismo / buenista"' in p for p in prompts)
+
+    @pytest.mark.asyncio
+    async def test_term_allowed_when_answering_the_message_that_used_it(self):
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="Menudo buenismo el vuestro."))
+        orch, _ = _make_orchestrator(state=state)
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message")
+        )
+        orch.performer_llm.generate_response = AsyncMock(
+            return_value="Llamar buenismo a pedir derechos no es un argumento."
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert "buenismo" in result.message.content
+        assert orch.performer_llm.generate_response.call_count == 1
+
+
 # â”€â”€ execute_turn: like action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestExecuteTurnLike:

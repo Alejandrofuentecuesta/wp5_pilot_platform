@@ -222,14 +222,16 @@ Good grounding options:
 - blame a party, bloc, institution, media frame, policy, or ideological camp that naturally belongs to the performer's stance
 - use a recognisable Spanish political label or slang term, but only one unless the turn is a rant
 - make the emotion specific: annoyance, ridicule, fatigue, distrust, practical fear, resentment, contempt, or solidarity
-- for uncivil turns, prefer ordinary Spanish contempt and mockery over invented insults. "menuda tontería", "qué nivel", "no tienes ni idea", "es de cuñao", "qué cansinos", "vendehúmos", "fachas", "progres", "buenistas", "negacionistas" are more realistic than strange fabricated abuse.
+- for uncivil turns, prefer ordinary Spanish contempt and mockery over invented insults. "no tienes ni idea", "es de cuñao", "qué cansinos", "vendehúmos", "fachas", "progres", "negacionistas" are more realistic than strange fabricated abuse. Do not lean on the "menudo/menuda X" or "vaya X" opener: it quickly becomes a tic.
 
 Avoid asking for unnatural insults or pseudo-creative phrases that no Spanish user would likely write. Do not use the same political label or blame target in several consecutive agent turns.
 
-**Recent Vocabulary Cool-off:**
-- Inspect only the recent messages visible in `{CHAT_LOG}`. If a distinctive political label, slang term, or specific insult from the repertoires above appears there, do not make it the default wording for the next message. Prefer a fresh expression.
-- This is a recent-window cool-off, not a permanent session-wide blacklist. Do not claim or assume knowledge of messages outside the visible chat log.
-- A term may be repeated when directly responding to the person who just used it and the callback is genuinely useful, but do not repeat it merely because it is available in the repertoire.
+**Vocabulary Blacklist (permanent, session-wide):**
+- Once a political label, slang term, or specific insult (including the repertoire terms above, e.g. "buenismo", "fachas", "zurdos", "negacionistas", "chiringuito", "paguitas", and contempt openers like "menudo/menuda X" or "vaya X") has been used by anyone in the session, it is permanently blacklisted for the remainder of the session.
+- The user prompt lists the terms already used in this session under **Session vocabulary blacklist**; that list covers messages outside the visible chat log too. Also treat any such term you see in `{CHAT_LOG}` as blacklisted.
+- Do not instruct the performer to use any blacklisted word in the `directive`. Push for a fresh expression, or for making the point without a label.
+- *Exception:* the performer may echo a blacklisted word only when directly answering the exact message that used it (e.g. rebutting or mocking that very word).
+- The same applies to arguments: do not brief a performer to restate an argument, statistic, or proposal that has already been made in the chat. Ask for a new angle, example, or consequence instead.
 
 ### Step 4: Write the Performer Instruction
 

@@ -48,6 +48,11 @@ from utils.violence_guard import (
     explicitly_rejects_violence,
     signals_violence_endorsement,
 )
+from utils.vocab_blacklist import (
+    format_blacklist_block,
+    used_terms,
+    violations as vocab_violations,
+)
 
 
 MAX_PERFORMER_RETRIES = 3
@@ -182,7 +187,7 @@ _LEGACY_UNSAFE_INCIVILITY_REPLACEMENTS = (
     ),
     (
         "Las ONGs pro-inmigración son mafias negreras",
-        "Las ONGs pro-inmigración son unas mafias que viven del buenismo",
+        "Las ONGs pro-inmigración son unas mafias que viven de las subvenciones",
     ),
     (
         "Disolver el Parlamento y echar a los burócratas verdes por la fuerza",
@@ -2620,6 +2625,23 @@ class Orchestrator:
             if incivility_instructions:
                 performer_user_prompt = performer_user_prompt.rstrip() + "\n\n" + incivility_instructions
 
+        # Session-wide vocabulary blacklist: anything already said in the chat
+        # is off-limits, except when answering the very message that used it.
+        banned_vocab = self._session_blacklist()
+        if banned_vocab:
+            performer_user_prompt = performer_user_prompt.rstrip() + "\n\n" + format_blacklist_block(banned_vocab)
+        if target_message is not None:
+            vocab_responding_to = target_message.content
+        elif action_type == "@mention" and target_user:
+            vocab_responding_to = next(
+                (m.content for m in reversed(self.state.messages) if m.sender == target_user),
+                None,
+            )
+        elif self.state.messages:
+            vocab_responding_to = self.state.messages[-1].content
+        else:
+            vocab_responding_to = None
+
         required_performer_user_prompt = performer_user_prompt
         retry_corrections: List[str] = []
 
@@ -2866,10 +2888,35 @@ class Orchestrator:
                     "Important correction:\n"
                     "Your last draft attacked or labeled the participant directly as a person (e.g. 'eres ...').\n"
                     "You must NEVER attack the participant personally (never call them 'racista', 'facha', 'ignorante', etc.).\n"
-                    "Criticize ONLY their message, argument, or reasoning (e.g. 'ese comentario es racista', 'eso que dices es absurdo', 'menudo disparate'), NEVER the person."
+                    "Criticize ONLY their message, argument, or reasoning (e.g. 'ese comentario es racista', 'eso que dices es absurdo', 'eso no se sostiene'), NEVER the person."
                 )
                 content = None
                 continue
+
+            repeated_vocab = vocab_violations(candidate_content, banned_vocab, vocab_responding_to)
+            if repeated_vocab and attempt < MAX_PERFORMER_RETRIES:
+                self.logger.log_error(
+                    "performer_vocab_blacklist_retry",
+                    f"Generated message for '{agent_name}' reused blacklisted vocabulary; retrying",
+                    context={"action_type": action_type, "terms": repeated_vocab},
+                )
+                performer_user_prompt = prompt_with_retry_correction(
+                    "Important correction:\n"
+                    "Your last draft reused wording that has already been used in this chat: "
+                    + ", ".join(f'"{t}"' for t in repeated_vocab)
+                    + ". Rewrite the message without these terms or close variants. Make the same point "
+                    "with different, natural wording."
+                )
+                content = None
+                continue
+            if repeated_vocab:
+                # Repetition is a style problem, not a safety one: on the last
+                # attempt keep the message rather than turning it into a wait.
+                self.logger.log_error(
+                    "performer_vocab_blacklist_accepted",
+                    f"Accepted message for '{agent_name}' with blacklisted vocabulary after {attempt} attempts",
+                    context={"action_type": action_type, "terms": repeated_vocab},
+                )
 
             content = candidate_content
             mentions = candidate_mentions
@@ -3064,6 +3111,10 @@ class Orchestrator:
 
     # ── Director Action (Call 3) ─────────────────────────────────────────────────
 
+    def _session_blacklist(self) -> List[str]:
+        """Blacklisted vocabulary already used anywhere in this session's chat."""
+        return used_terms(m.content for m in self.state.messages)
+
     async def _director_action(
         self,
         recent: List[Message],
@@ -3141,10 +3192,13 @@ class Orchestrator:
             participation_summary=self._format_participation_memory(
                 eligible_anon_names=eligible_anon_names,
             ),
-            target_constraints_by_speaker=self._format_target_constraints_by_speaker(
-                eligible_anon_names=eligible_anon_names,
-                recent_messages=recent_messages,
-            ),
+            target_constraints_by_speaker="\n\n".join(filter(None, [
+                self._format_target_constraints_by_speaker(
+                    eligible_anon_names=eligible_anon_names,
+                    recent_messages=recent_messages,
+                ),
+                format_blacklist_block(self._session_blacklist()),
+            ])),
             action_counts=self._action_counts,
             exclude_performer=self.state.user_name,
             agent_traits=anon_traits,

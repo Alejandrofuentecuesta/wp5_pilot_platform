@@ -1492,6 +1492,46 @@ class TestExecuteTurnReply:
         )
 
 
+
+class TestInlineNameTags:
+
+    def test_bare_names_get_at_prefix_accent_insensitively(self):
+        state = _make_state(agents=[Agent(name="Alice"), Agent(name="Lucía"), Agent(name="Alba")])
+        orch, _ = _make_orchestrator(state=state)
+
+        text, tagged = orch._tag_inline_names(
+            "Tienes razon Lucia, y @Lucía lo dijo antes que participant. Al alba nadie Alice", "Alice",
+        )
+
+        assert text == "Tienes razon @Lucía, y @Lucía lo dijo antes que participant. Al alba nadie Alice"
+        assert tagged == ["Lucía"]
+
+    def test_capitalised_participant_name_is_tagged(self):
+        state = _make_state(user_name="Ruben")
+        orch, _ = _make_orchestrator(state=state)
+
+        text, tagged = orch._tag_inline_names("Lo que dice Rubén tiene sentido", "Alice")
+
+        assert text == "Lo que dice @Ruben tiene sentido"
+        assert tagged == ["Ruben"]
+
+    @pytest.mark.asyncio
+    async def test_plain_message_naming_an_agent_becomes_a_mention(self):
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="Hello"))
+        orch, _ = _make_orchestrator(state=state)
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message")
+        )
+        orch.performer_llm.generate_response = AsyncMock(return_value="Tienes razon Bob, es asi.")
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.message.content == "Tienes razon @Bob, es asi."
+        assert result.message.mentions == ["Bob"]
+
+
 # â”€â”€ execute_turn: mention action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 class TestExecuteTurnMention:
@@ -2420,7 +2460,7 @@ class TestOutputNamePassthrough:
 
     @pytest.mark.asyncio
     async def test_names_in_output_pass_through_unchanged(self):
-        """Names in performer output are used as-is (the alias system handles identity)."""
+        """Names in performer output keep their identity (the alias system handles it); only an @ is added."""
         state = _make_state()
         orch, _ = _make_orchestrator(state=state)
         anon_alice = "Alice"
@@ -2436,7 +2476,7 @@ class TestOutputNamePassthrough:
         result = await orch.execute_turn("criteria_A")
         assert result is not None
         assert "Bob" in result.message.content
-        assert result.message.content == "I agree with Bob!"
+        assert result.message.content == "I agree with @Bob!"
 
 
 # â”€â”€ TurnResult dataclass â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

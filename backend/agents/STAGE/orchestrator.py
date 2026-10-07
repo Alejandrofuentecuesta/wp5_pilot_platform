@@ -1541,6 +1541,34 @@ class Orchestrator:
                 return leading_punct + remaining_text
         return text
 
+    def _tag_inline_names(self, text: str, speaker: str) -> tuple:
+        """Prefix every bare chat-member name in ``text`` with ``@``.
+
+        Agents should always name people as ``@Jorge``, never just ``Jorge``.
+        Only capitalised tokens count, so names that are also ordinary words
+        ("alba", "pilar") are left alone. Returns the rewritten text and the
+        canonical names that were tagged, in order of appearance.
+        """
+        if not text:
+            return text, []
+        by_plain = {
+            self._strip_accents(name).lower(): name
+            for name in [a.name for a in self.state.agents] + [self.state.user_name]
+            if name and name != speaker and " " not in name
+        }
+        tagged: List[str] = []
+
+        def tag(match: re.Match) -> str:
+            token = match.group(0)
+            name = by_plain.get(self._strip_accents(token).lower())
+            if name is None or not token[0].isupper():
+                return token
+            if name not in tagged:
+                tagged.append(name)
+            return "@" + name
+
+        return re.sub(r"(?<![@\w])\w+", tag, text), tagged
+
     def _format_target_constraints_by_speaker(
         self,
         eligible_anon_names: Set[str],
@@ -2784,9 +2812,13 @@ class Orchestrator:
             candidate_reply_to = None
             candidate_quoted_text = None
 
+            candidate_content, inline_names = self._tag_inline_names(candidate_content, agent_name)
+            if inline_names:
+                candidate_mentions = inline_names
+
             if action_type == "@mention" and target_user:
                 candidate_content = f"@{target_user} {candidate_content}"
-                candidate_mentions = [target_user]
+                candidate_mentions = [target_user] + [n for n in inline_names if n != target_user]
             elif action_type == "reply" and target_message_id:
                 candidate_reply_to = target_message_id
                 if target_message:

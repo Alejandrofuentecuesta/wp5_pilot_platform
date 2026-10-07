@@ -876,7 +876,7 @@ async def submit_emotions_checkup_api(session_id: str, payload: EmotionsCheckupR
         "is_final": payload.is_final,
     }
 
-    active_session = session_manager.get_session(session_id)
+    active_session = await session_manager.get_session(session_id)
     if active_session:
         await active_session.handle_emotions_checkup_response(data)
     else:

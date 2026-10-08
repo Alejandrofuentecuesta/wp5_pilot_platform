@@ -27,6 +27,9 @@ class Message:
     is_like_minded: Optional[bool] = None
     inferred_participant_stance: Optional[str] = None
     classification_rationale: Optional[str] = None
+    # Set when the safety screen judged this message unsafe. In-memory only
+    # (persisted as messages.safety_verdict); keeps agents from liking it.
+    safety_unsafe: bool = False
     # Arbitrary extra fields (e.g. scenario seed metadata) included in to_dict()
     metadata: dict = field(default_factory=dict)
     

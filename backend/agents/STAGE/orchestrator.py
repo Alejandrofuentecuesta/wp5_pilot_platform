@@ -1531,6 +1531,14 @@ class Orchestrator:
         """Return True when a like would be coherent with cell-based validation rules."""
         if not message or message.sender in {actor_name, "[news]"}:
             return False
+        # Never endorse violence or anything the safety screen flagged: a like
+        # on a bomb threat reads as an agent backing it. The regex covers the
+        # window before the (asynchronous) participant screen returns.
+        if message.safety_unsafe or (
+            contains_explicit_violence_cue(message.content)
+            and not explicitly_rejects_violence(message.content)
+        ):
+            return False
         if message.sender == self.state.user_name:
             return self._expected_like_minded_for_agent(actor_name) is True
         return self._agents_share_alignment_cell(actor_name, message.sender)

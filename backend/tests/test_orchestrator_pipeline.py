@@ -1217,6 +1217,33 @@ class TestExecuteTurnLike:
         assert result.action_type == "like"
         assert result.target_message_id == same_cell_msg.message_id
 
+    @staticmethod
+    def _like_minded_participant_orchestrator(*messages):
+        state = _make_state(participant_stance_hint="anti_topic", agents=[Agent(name="Alice")])
+        for message in messages:
+            state.add_message(message)
+        orch, _ = _make_orchestrator(state=state, agent_traits={"Alice": {"alignment_cell": "anti_topic"}})
+        orch.auto_like_probability = 1.0
+        return orch
+
+    def test_auto_like_skips_violent_participant_message(self):
+        """Regression: an agent auto-liked 'Te voy a poner una bomba debajo del coche'."""
+        safe = Message.create(sender="participant", content="Hay que gestionar mejor la vivienda")
+        violent = Message.create(sender="participant", content="Te voy a poner una bomba debajo del coche")
+        orch = self._like_minded_participant_orchestrator(safe, violent)
+
+        result = orch._try_auto_like({"Alice"}, random.Random(0))
+
+        assert result is not None
+        assert result.target_message_id == safe.message_id
+
+    def test_auto_like_skips_message_flagged_unsafe(self):
+        flagged = Message.create(sender="participant", content="Ojala os pase algo a todos")
+        flagged.safety_unsafe = True
+        orch = self._like_minded_participant_orchestrator(flagged)
+
+        assert orch._try_auto_like({"Alice"}, random.Random(0)) is None
+
 
 # â”€â”€ execute_turn: reply action â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

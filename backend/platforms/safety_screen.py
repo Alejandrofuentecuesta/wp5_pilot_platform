@@ -168,6 +168,7 @@ class SafetyScreen:
         except Exception as exc:
             self._error("safety_verdict_persist", str(exc))
         if outcome.verdict.status == "unsafe":
+            message.safety_unsafe = True
             flag_id = await self._flag(
                 sender_type="agent",
                 sender=message.sender,
@@ -213,6 +214,8 @@ class SafetyScreen:
             )
         except Exception as exc:
             self._error("safety_verdict_persist", str(exc))
+        if verdict.status == "unsafe":
+            message.safety_unsafe = True
         if verdict.status in ("unsafe", "unavailable"):
             flag_id = await self._flag(
                 sender_type="participant",

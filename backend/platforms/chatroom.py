@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional
 from models import Message, Agent, SessionState
 from utils import Logger
 from utils import name_scrub
+from utils.participant_message import is_valid_participant_message
 from utils.llm.llm_manager import LLMManager
 from agents.agent_manager import AgentManager
 from agents.STAGE.classifier import DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
@@ -1530,6 +1531,8 @@ class SimulationSession:
         """
         if not self.running or self._safety_intervention_triggered:
             return  # session has ended; silently drop
+        if not is_valid_participant_message(content):
+            return
         # Posting is activity, so it lifts an idle pause. The reminder does
         # not take keyboard focus from the input, so a participant can send
         # a message without pressing the reminder's button.

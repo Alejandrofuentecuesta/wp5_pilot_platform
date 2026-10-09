@@ -80,6 +80,10 @@ export default function MessageFeed({
   }, [messages.length])
 
   const dateGroups = groupByDate(messages)
+  // The chosen name stays in this browser; never persist this notice.
+  const firstOwnMessageId = messages.find(
+    (msg) => msg.is_self || msg.sender === PARTICIPANT_SENDER,
+  )?.message_id
 
   return (
     <div
@@ -112,6 +116,12 @@ export default function MessageFeed({
               prevMsg.msg_type === "news_article"
 
             return (
+              <Fragment key={msg.message_id}>
+                {msg.message_id === firstOwnMessageId && (
+                  <div role="status" className="px-4 py-3 text-center text-xs text-secondary">
+                    {displayName}{" se uni\u00f3 al grupo"}
+                  </div>
+                )}
               <MessageBubble
                 key={msg.message_id}
                 message={msg}
@@ -126,6 +136,7 @@ export default function MessageFeed({
                 onReport={onReport}
                 onBlock={onBlock}
               />
+              </Fragment>
             )
           })}
         </Fragment>

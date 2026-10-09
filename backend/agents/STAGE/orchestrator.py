@@ -24,6 +24,7 @@ from typing import Optional, List, Dict, Set
 
 from models import Message, Agent
 from utils import Logger
+from utils.participant_message import PARTICIPANT_RESPONSE_GUIDANCE
 from agents.STAGE.director import (
     build_update_system_prompt, build_update_user_prompt, parse_update_response,
     build_evaluate_system_prompt, build_evaluate_user_prompt, parse_evaluate_response,
@@ -960,6 +961,23 @@ class Orchestrator:
             return None, pending_human_msg
 
         return addressed_agent, pending_human_msg
+
+    def _unanswered_participant_message(self) -> Optional[Message]:
+        """Offer one early answer without changing speaker/treatment selection."""
+        for index in range(len(self.state.messages) - 1, -1, -1):
+            message = self.state.messages[index]
+            if message.sender != self.state.user_name:
+                continue
+            following = [m for m in self.state.messages[index + 1:]
+                         if m.sender != self.state.user_name and m.metadata.get("msg_type") != "news_article"]
+            if len(following) >= 2:
+                return None
+            if any(m.metadata.get("participant_response_to") == message.message_id or
+                   m.reply_to == message.message_id or
+                   self.state.user_name in (m.mentions or []) for m in following):
+                return None
+            return message
+        return None
 
     def _filter_candidate_agents_for_targets(
         self,
@@ -1951,6 +1969,7 @@ class Orchestrator:
             recent_action,
             speaking_agent_names,
         )
+        interaction_message = self._unanswered_participant_message()
         if addressed_agent and allowed_performers is not None and addressed_agent not in allowed_performers:
             # The agent the participant addressed is currently excluded (e.g.
             # a pending safety review on their last message, or — in
@@ -1988,7 +2007,7 @@ class Orchestrator:
         action_perf_counts = {k: v for k, v in self._performer_counts.items() if k in allowed_anon}
 
         # Probabilistic like: resolve locally before calling the LLM.
-        auto_like = None if addressed_agent else self._try_auto_like(base_allowed_real, self._rng)
+        auto_like = None if addressed_agent or interaction_message else self._try_auto_like(base_allowed_real, self._rng)
         if auto_like is not None:
             return auto_like
 
@@ -2416,6 +2435,36 @@ class Orchestrator:
                 target_message_id = None
                 action_data["target_message_id"] = None
 
+        # Keep existing direct targets on the first turn; by the second,
+        # offer the participant an answer. Safety still runs afterwards.
+        interaction_response_to = None
+        if interaction_message and filtered_allowed_real and not addressed_agent:
+            following_count = sum(
+                m.sender != self.state.user_name and m.metadata.get("msg_type") != "news_article"
+                for m in self.state.messages[self.state.messages.index(interaction_message) + 1:]
+            )
+            violent_input = (
+                contains_explicit_violence_cue(interaction_message.content)
+                and not explicitly_rejects_violence(interaction_message.content)
+            ) or bool(action_data.get("violence_requires_rejection"))
+            if not violent_input and (following_count or not (target_message_id or target_user)):
+                if agent_name not in filtered_allowed_real:
+                    agent_name = sorted(filtered_allowed_real)[0]
+                    action_data["next_performer"] = agent_name
+                direct_mention = agent_name in (interaction_message.mentions or [])
+                action_type = "reply" if following_count or direct_mention else "message"
+                action_data["action_type"] = action_type
+                interaction_response_to = interaction_message.message_id
+                target_message_id = interaction_message.message_id
+                action_data["target_message_id"] = target_message_id
+                target_user = None
+                action_data["target_user"] = None
+                action_data["performer_instruction"] = {
+                    "objective": "Answer the participant and keep the ongoing discussion moving.",
+                    "motivation": "A new contribution should receive an early conversational response.",
+                    "directive": PARTICIPANT_RESPONSE_GUIDANCE,
+                }
+
         # Deterministic violence override: the Director may not turn a violent
         # proposal into a like, quote, mention, or supportive instruction.
         # Keep this outside the LLM prompt so euphemisms cannot bypass it.
@@ -2684,6 +2733,8 @@ class Orchestrator:
             narratives=narratives_str,
         )
         performer_user_prompt = base_performer_user_prompt
+        if target_message is not None and target_message.sender == self.state.user_name:
+            performer_user_prompt += "\n\n" + PARTICIPANT_RESPONSE_GUIDANCE
 
         if self._agent_civility_bucket(agent_name) == "uncivil":
             selected_dims = select_incivility_dimensions(self._rng)
@@ -3031,6 +3082,8 @@ class Orchestrator:
             classification_rationale=classification.get("classification_rationale"),
         )
         stance_confidence = classification.get("stance_confidence")
+        if interaction_response_to:
+            message.metadata["participant_response_to"] = interaction_response_to
         if stance_confidence:
             message.metadata["stance_confidence"] = stance_confidence
 
@@ -3281,6 +3334,7 @@ class Orchestrator:
         )
 
         valid_direct_targets_by_speaker: Dict[str, Set[str]] = {}
+        action_user += "\n\n" + PARTICIPANT_RESPONSE_GUIDANCE
         all_agent_target_labels = {
             anon_name
             for anon_name in self._performer_counts.keys()

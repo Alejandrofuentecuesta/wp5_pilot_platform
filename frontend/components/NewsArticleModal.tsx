@@ -4,6 +4,7 @@ import { useState } from "react"
 import { formatMessageTime } from "@/lib/dates"
 import type { ParticipantStance } from "@/lib/types"
 import type { Message } from "@/lib/types"
+import { isValidParticipantMessage, MESSAGE_VALIDATION_HINT } from "@/lib/message-validation"
 
 interface NewsArticleModalProps {
   message: Message
@@ -42,7 +43,7 @@ export default function NewsArticleModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!initialInput.trim()) return
+    if (!isValidParticipantMessage(initialInput)) return
     if (onSubmitInitialMessage) {
       onSubmitInitialMessage(initialInput.trim())
     } else {
@@ -137,12 +138,15 @@ export default function NewsArticleModal({
                 />
               </div>
               <div className="flex items-center justify-end gap-3">
+                {initialInput.trim() && !isValidParticipantMessage(initialInput) && (
+                  <p role="status" className="text-xs text-secondary">{MESSAGE_VALIDATION_HINT}</p>
+                )}
                 {!isConnected && (
                   <p className="text-xs text-secondary">Reconectando…</p>
                 )}
                 <button
                   type="submit"
-                  disabled={!initialInput.trim() || !isConnected}
+                  disabled={!isValidParticipantMessage(initialInput) || !isConnected}
                   className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   Publicar y entrar al chat

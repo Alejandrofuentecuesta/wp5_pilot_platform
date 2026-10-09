@@ -4,6 +4,7 @@ import { useRef, useCallback, useEffect } from "react"
 import type { Message } from "@/lib/types"
 import { getSenderColor } from "@/lib/constants"
 import SendIcon from "./SendIcon"
+import { isValidParticipantMessage, MESSAGE_VALIDATION_HINT } from "@/lib/message-validation"
 
 const MAX_INPUT_HEIGHT_PX = 128
 
@@ -45,10 +46,10 @@ export default function InputBar({
     (e: React.KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault()
-        if (!disabled) onSend()
+        if (!disabled && isValidParticipantMessage(inputValue)) onSend()
       }
     },
-    [onSend, disabled],
+    [onSend, disabled, inputValue],
   )
 
   return (
@@ -115,13 +116,16 @@ export default function InputBar({
         </div>
         <button
           onClick={onSend}
-          disabled={disabled}
+          disabled={disabled || !isValidParticipantMessage(inputValue)}
           className="px-4 h-[42px] rounded-lg bg-accent hover:bg-accent-hover flex items-center justify-center shrink-0 transition-colors text-white disabled:opacity-50 disabled:cursor-not-allowed"
           aria-label="Enviar mensaje"
         >
           <SendIcon />
         </button>
       </div>
+      {inputValue.trim() && !isValidParticipantMessage(inputValue) && (
+        <p role="status" className="px-4 pb-2 text-xs text-secondary">{MESSAGE_VALIDATION_HINT}</p>
+      )}
     </div>
   )
 }

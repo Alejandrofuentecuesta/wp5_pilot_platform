@@ -15,6 +15,7 @@ import {
   AtCapacityError,
 } from "@/lib/api"
 import { detectMentions } from "@/lib/mentions"
+import { isValidParticipantMessage } from "@/lib/message-validation"
 import { apparentGender, isOwnSender, makeNameMapper, sanitizeName, type NameMapper } from "@/lib/name"
 import type {
   Message,
@@ -568,7 +569,7 @@ export function useChat() {
   // Send message
   const sendMessage = useCallback((customContent?: string): boolean => {
     const text = typeof customContent === "string" ? customContent.trim() : inputValue.trim()
-    if (!text) return false
+    if (!isValidParticipantMessage(text)) return false
     // Nothing is sent into a room frozen by a researcher (safety hold or
     // paused experiment), whichever input it comes from.
     if (safetyHoldNotice) return false

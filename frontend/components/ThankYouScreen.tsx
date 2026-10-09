@@ -20,10 +20,11 @@ interface ThankYouScreenProps {
 // "safety_stop", but chatroom.py deliberately relabels it "closed_by_researcher"
 // for the browser (end_for_safety() passes client_reason=), so that's the
 // string that actually arrives here — see _publish_session_end.
-const EARLY_END_REASONS = new Set(["closed_by_researcher", "user_exit"])
+const EARLY_END_REASONS = new Set(["closed_by_researcher", "user_exit", "participant_privacy"])
 
 export default function ThankYouScreen({ redirectUrl, reason }: ThankYouScreenProps) {
   const isEarlyEnd = !!reason && EARLY_END_REASONS.has(reason)
+  const isPrivacyEnd = reason === "participant_privacy"
 
   useEffect(() => {
     if (redirectUrl && !isEarlyEnd) {
@@ -61,10 +62,12 @@ export default function ThankYouScreen({ redirectUrl, reason }: ThankYouScreenPr
             </svg>
           </div>
           <h1 className="text-xl font-semibold text-primary m-0">
-            ¡Gracias por participar!
+            {isPrivacyEnd ? "Sesi\u00f3n finalizada por privacidad" : "\u00a1Gracias por participar!"}
           </h1>
           <p className="text-sm text-secondary mt-3">
-            {isEarlyEnd
+            {isPrivacyEnd
+              ? "Hemos terminado la sesi\u00f3n porque tu mensaje conten\u00eda datos personales. Ese mensaje no se ha publicado ni guardado en la conversaci\u00f3n. No compartas correos electr\u00f3nicos, tel\u00e9fonos ni otros datos que permitan identificarte a ti o a otras personas."
+              : isEarlyEnd
               ? "La sesión se ha cerrado antes de tiempo. Tus aportaciones han quedado registradas."
               : "La discusión ha terminado. Tus aportaciones han quedado registradas."}
           </p>

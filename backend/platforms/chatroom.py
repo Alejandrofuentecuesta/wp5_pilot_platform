@@ -12,6 +12,7 @@ from models import Message, Agent, SessionState
 from utils import Logger
 from utils import name_scrub
 from utils.participant_message import is_valid_participant_message
+from utils.participant_privacy import personal_information_category
 from utils.llm.llm_manager import LLMManager
 from agents.agent_manager import AgentManager
 from agents.STAGE.classifier import DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
@@ -1033,7 +1034,7 @@ class SimulationSession:
         # participant left during the hold), so it gets the same treatment.
         if reason in (
             "abandoned", "no_first_message", "idle_timeout",
-            "participant_safety", "safety_stop",
+            "participant_safety", "participant_privacy", "safety_stop",
         ):
             await self._notify_panel_return(reason)
 
@@ -1531,6 +1532,10 @@ class SimulationSession:
         """
         if not self.running or self._safety_intervention_triggered:
             return  # session has ended; silently drop
+        privacy_category = personal_information_category(content)
+        if privacy_category:
+            await self.end_for_privacy(privacy_category)
+            return
         if not is_valid_participant_message(content):
             return
         # Posting is activity, so it lifts an idle pause. The reminder does
@@ -1710,7 +1715,18 @@ class SimulationSession:
         if decision["should_stop"]:
             await self._trigger_safety_intervention(classification_data)
 
-    async def _trigger_safety_intervention(self, classification: Dict[str, object]) -> None:
+    async def end_for_privacy(self, category: str) -> None:
+        """Stop before storing, publishing or passing personal data to an LLM."""
+        await self._trigger_safety_intervention({
+            "should_stop": True,
+            "category": category,
+            "confidence": "high",
+            "rationale": "Direct personal contact details or identifier detected; message discarded.",
+        }, reason="participant_privacy")
+
+    async def _trigger_safety_intervention(
+        self, classification: Dict[str, object], *, reason: str = "participant_safety"
+    ) -> None:
         """Atomically end the experiment after a positive safety decision."""
         async with self._safety_stop_lock:
             if self._safety_intervention_triggered or not self.running:
@@ -1732,13 +1748,13 @@ class SimulationSession:
             # The trigger is primary safety/audit data, so persist it strictly.
             # Publishing the terminal event first keeps the participant-facing
             # warning responsive even if the database is temporarily slow.
-            await self._publish_session_end("participant_safety")
+            await self._publish_session_end(reason)
             try:
                 await event_repo.insert_event_strict(
                     db_conn.get_pool(),
                     session_id=self.session_id,
                     experiment_id=self.experiment_id,
-                    event_type="participant_safety_triggered",
+                    event_type=f"{reason}_triggered",
                     data=classification,
                 )
             except Exception as exc:
@@ -1747,7 +1763,7 @@ class SimulationSession:
             # Give Redis/WebSocket delivery a short grace period before the
             # subscriber is torn down, matching other terminal flows.
             await asyncio.sleep(0.5)
-            await self.stop(reason="participant_safety")
+            await self.stop(reason=reason)
 
 
     # ── Researcher freezes: safety hold and experiment pause ─────────────────

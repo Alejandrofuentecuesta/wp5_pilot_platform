@@ -32,6 +32,7 @@ from utils.session_queue import session_queue
 from platforms.chatroom import build_return_url
 from platforms.chatroom import pick_participant_alias
 from utils import token_manager
+from utils.participant_privacy import personal_information_category
 from utils.log_viewer import generate_html_from_lines
 from utils.session_csv_exporter import render_session_messages_csv
 from db import connection as db_conn
@@ -1217,10 +1218,17 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
             if data.get("type") == "pong":
                 continue  # heartbeat response, ignore
             if data.get("type") == "user_message":
+                # Check before the length cap: a contact detail beyond 2,000
+                # characters must also terminate without persisting the text.
+                raw_content = str(data.get("content") or "")
+                privacy_category = personal_information_category(raw_content)
+                if privacy_category:
+                    await session.end_for_privacy(privacy_category)
+                    continue
                 # Server-authoritative length cap (the input bar enforces the
                 # same limit client-side): one paste must not bloat prompts
                 # and the DB without bound. Truncate silently by design.
-                content = data.get("content", "").strip()[:MAX_MESSAGE_CHARS]
+                content = raw_content.strip()[:MAX_MESSAGE_CHARS]
                 if content:
                     await session.handle_user_message(
                         content,

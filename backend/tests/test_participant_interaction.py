@@ -44,6 +44,11 @@ async def test_greeting_receives_early_reply_and_guidance():
     prompt = orch.performer_llm.generate_response.call_args.args[0]
     assert "only a greeting" in prompt
     assert "not the person" in prompt
+    assert "Treatment-preserving response" in prompt
+    assert "In the SAME message" in prompt
+    assert "Uncivil agents" in prompt
+    director_prompts = [call.args[0] for call in orch.director_llm.generate_response.call_args_list]
+    assert any("Treatment-preserving response" in text for text in director_prompts)
 
 
 def test_answered_participant_does_not_trigger_another_forced_reply():

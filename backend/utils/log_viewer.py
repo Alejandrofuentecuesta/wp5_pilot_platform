@@ -391,6 +391,14 @@ def _format_time(ts_str: str) -> str:
         return ts_str
 
 
+def _format_date(ts_str: str) -> str:
+    try:
+        dt = datetime.fromisoformat(ts_str)
+        return dt.strftime("%d/%m/%Y")
+    except Exception:
+        return ""
+
+
 def _pipeline_badge(data: dict) -> str:
     """Return an HTML badge like ``P1`` if the event carries a pipeline_id, else ''."""
     pid = data.get("pipeline_id")
@@ -480,6 +488,7 @@ _EXP_STRUCTURED_KEYS = {"internal_validity_criteria", "features", "seed"}
 def render_session_start(ev: dict) -> str:
     data = ev["data"]
     ts = _format_time(ev["timestamp"])
+    date_str = _format_date(ev["timestamp"])
     sid = _esc(ev["session_id"])
     treatment_group = _esc(data.get("treatment_group", ""))
     experiment_id = _esc(data.get("experiment_id", ""))
@@ -577,7 +586,8 @@ def render_session_start(ev: dict) -> str:
     parts.append('  </div>')  # close config-grid
     parts.append('</div>')    # close session-header
     parts.append('')
-    parts.append(f'<div class="subtitle">Timeline — started at {ts}</div>')
+    timeline_started = f"Timeline — started at {ts} on {date_str}" if date_str else f"Timeline — started at {ts}"
+    parts.append(f'<div class="subtitle">{timeline_started}</div>')
     parts.append('<div class="timeline">')
     return "\n".join(parts)
 

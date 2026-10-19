@@ -299,7 +299,8 @@ function OverviewTab({
   }, [experimentId])
 
   const activeSessions = sessions.filter((s) => s.status === "active")
-  const completedSessions = sessions.filter((s) => s.status === "ended" || s.status === "crashed")
+  const performedSessions = sessions.filter((s) => s.status === "ended" || s.status === "crashed")
+  const completedSessions = sessions.filter((s) => s.end_reason === "duration_expired")
   const crashedSessions = sessions.filter((s) => s.status === "crashed")
   const totalMessages = sessions.reduce((sum, s) => sum + s.message_count, 0)
   const totalTokens = tokenStats.reduce((sum, g) => sum + g.total, 0)
@@ -344,7 +345,7 @@ function OverviewTab({
   return (
     <div className="space-y-6">
       {/* Stat cards — pastel tinted */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard label="Active Sessions" value={activeSessions.length} pastel="purple" />
         <StatCard label="Total Messages" value={totalMessages} pastel="pink" />
         <StatCard
@@ -354,9 +355,14 @@ function OverviewTab({
           pastel="amber"
         />
         <StatCard
+          label="Performed"
+          value={performedSessions.length}
+          sub={crashedSessions.length > 0 ? `${crashedSessions.length} crashed` : undefined}
+          pastel="blue"
+        />
+        <StatCard
           label="Completed"
           value={completedSessions.length}
-          sub={crashedSessions.length > 0 ? `${crashedSessions.length} crashed` : undefined}
           pastel="green"
         />
       </div>
@@ -578,11 +584,36 @@ function SessionsTab({
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
 
+  useEffect(() => {
+    setStatusFilter("")
+    setGroupFilter("")
+  }, [experimentId])
+
   const groups = Array.from(new Set(sessions.map((s) => s.treatment_group))).sort()
   const statuses = Array.from(new Set(sessions.map((s) => s.status))).sort()
+  const sessionEndReasons = sessions
+    .map((s) => s.end_reason)
+    .filter((r): r is string => Boolean(r))
+  const knownEndReasons = ["duration_expired", "user_exit", "abandoned"]
+  const endReasons = Array.from(
+    new Set([
+      ...(sessions.length > 0 ? knownEndReasons : []),
+      ...sessionEndReasons,
+    ])
+  ).sort()
 
   const filtered = sessions.filter((s) => {
-    if (statusFilter && s.status !== statusFilter) return false
+    if (statusFilter) {
+      if (statusFilter.startsWith("reason:")) {
+        const reason = statusFilter.slice(7)
+        if (s.end_reason !== reason) return false
+      } else if (statusFilter.startsWith("status:")) {
+        const status = statusFilter.slice(7)
+        if (s.status !== status) return false
+      } else {
+        if (s.status !== statusFilter && s.end_reason !== statusFilter) return false
+      }
+    }
     if (groupFilter && s.treatment_group !== groupFilter) return false
     return true
   })
@@ -625,9 +656,20 @@ function SessionsTab({
           className="text-xs border border-admin-border rounded-lg px-2.5 py-1.5 bg-admin-surface text-admin-text focus:outline-none focus:ring-1 focus:ring-admin-accent/20"
         >
           <option value="">All statuses</option>
-          {statuses.map((s) => (
-            <option key={s} value={s}>{s}</option>
-          ))}
+          {statuses.length > 0 && (
+            <optgroup label="Status">
+              {statuses.map((s) => (
+                <option key={`status:${s}`} value={`status:${s}`}>{s}</option>
+              ))}
+            </optgroup>
+          )}
+          {endReasons.length > 0 && (
+            <optgroup label="End Reason">
+              {endReasons.map((r) => (
+                <option key={`reason:${r}`} value={`reason:${r}`}>{r}</option>
+              ))}
+            </optgroup>
+          )}
         </select>
         <select
           value={groupFilter}
@@ -1445,19 +1487,21 @@ function SettingsTab({
 
 /* ── Shared small components ──────────────────────────────────────────────── */
 
-type PastelColor = "green" | "pink" | "amber" | "purple"
+type PastelColor = "green" | "pink" | "amber" | "purple" | "blue"
 
 const PASTEL_CLASSES: Record<PastelColor, string> = {
   green: "bg-admin-pastel-green border-admin-pastel-green-text/10",
   pink: "bg-admin-pastel-pink border-admin-pastel-pink-text/10",
   amber: "bg-admin-pastel-amber border-admin-pastel-amber-text/10",
   purple: "bg-admin-pastel-purple border-admin-pastel-purple-text/10",
+  blue: "bg-admin-pastel-blue border-admin-pastel-blue-text/10",
 }
 const PASTEL_TEXT: Record<PastelColor, string> = {
   green: "text-admin-pastel-green-text",
   pink: "text-admin-pastel-pink-text",
   amber: "text-admin-pastel-amber-text",
   purple: "text-admin-pastel-purple-text",
+  blue: "text-admin-pastel-blue-text",
 }
 
 function StatCard({ label, value, sub, pastel }: { label: string; value: string | number; sub?: string; pastel?: PastelColor }) {
@@ -1687,51 +1731,15 @@ function ComplianceBar({ pct, color }: { pct: number | null; color: string }) {
   )
 }
 
-function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimentId: string }) {
-  const [groups, setGroups] = useState<ComplianceGroupStats[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    const load = async (showLoading: boolean) => {
-      if (showLoading) {
-        setLoading(true)
-        setError(null)
-      }
-      try {
-        const res = await getComplianceStats(adminKey, experimentId)
-        if (!cancelled) {
-          setGroups(res.groups)
-          if (showLoading) setLoading(false)
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load compliance stats")
-          setGroups([])
-          if (showLoading) setLoading(false)
-        }
-      }
-    }
-
-    setGroups([])
-    setLoading(true)
-    setError(null)
-    void load(true)
-    const iv = setInterval(() => {
-      void load(false)
-    }, 15000)
-    return () => { cancelled = true; clearInterval(iv) }
-  }, [adminKey, experimentId])
-
-  if (loading) return <p className="text-sm text-admin-muted py-8 text-center">Loading compliance data…</p>
-  if (error) return <p className="text-sm text-admin-danger-text py-8 text-center">Error: {error}</p>
-  if (groups.length === 0) return (
-    <div className="text-center py-12">
-      <p className="text-sm text-admin-faint">No session data yet. Compliance statistics will appear here once sessions have messages classified.</p>
-    </div>
-  )
-
+function ComplianceSection({
+  groups,
+  tableTitle,
+  tableSubtitle,
+}: {
+  groups: ComplianceGroupStats[]
+  tableTitle: string
+  tableSubtitle: string
+}) {
   const totalSessions = groups.reduce((s, g) => s + g.session_count, 0)
   const totalClassified = groups.reduce((s, g) => s + g.classified_count, 0)
   const totalIncivil = groups.reduce((s, g) => s + g.incivil_count, 0)
@@ -1759,9 +1767,9 @@ function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimen
       {/* Per-group table */}
       <div className="bg-admin-surface rounded-lg border border-admin-border overflow-hidden">
         <div className="px-5 py-3 border-b border-admin-border">
-          <h3 className="text-sm font-semibold text-admin-text">Treatment Fidelity by Group</h3>
+          <h3 className="text-sm font-semibold text-admin-text">{tableTitle}</h3>
           <p className="text-xs text-admin-muted mt-0.5">
-            Shows actual incivility and structural like-mindedness rates across all agent messages in completed/active sessions.
+            {tableSubtitle}
           </p>
         </div>
         <div className="overflow-x-auto">
@@ -1800,6 +1808,84 @@ function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimen
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  )
+}
+
+function ComplianceTab({ adminKey, experimentId }: { adminKey: string; experimentId: string }) {
+  const [groups, setGroups] = useState<ComplianceGroupStats[]>([])
+  const [completedGroups, setCompletedGroups] = useState<ComplianceGroupStats[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async (showLoading: boolean) => {
+      if (showLoading) {
+        setLoading(true)
+        setError(null)
+      }
+      try {
+        const res = await getComplianceStats(adminKey, experimentId)
+        if (!cancelled) {
+          setGroups(res.groups)
+          setCompletedGroups(res.completed_groups || [])
+          if (showLoading) setLoading(false)
+        }
+      } catch (e) {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : "Failed to load compliance stats")
+          setGroups([])
+          setCompletedGroups([])
+          if (showLoading) setLoading(false)
+        }
+      }
+    }
+
+    setGroups([])
+    setCompletedGroups([])
+    setLoading(true)
+    setError(null)
+    void load(true)
+    const iv = setInterval(() => {
+      void load(false)
+    }, 15000)
+    return () => { cancelled = true; clearInterval(iv) }
+  }, [adminKey, experimentId])
+
+  if (loading) return <p className="text-sm text-admin-muted py-8 text-center">Loading compliance data…</p>
+  if (error) return <p className="text-sm text-admin-danger-text py-8 text-center">Error: {error}</p>
+  if (groups.length === 0) return (
+    <div className="text-center py-12">
+      <p className="text-sm text-admin-faint">No session data yet. Compliance statistics will appear here once sessions have messages classified.</p>
+    </div>
+  )
+
+  return (
+    <div className="space-y-8">
+      {/* 1. All sessions compliance (original) */}
+      <ComplianceSection
+        groups={groups}
+        tableTitle="Treatment Fidelity by Group"
+        tableSubtitle="Shows actual incivility and structural like-mindedness rates across all agent messages in completed/active sessions."
+      />
+
+      {/* 2. Completed sessions only (duration_expired) */}
+      <div className="pt-6 border-t border-admin-border space-y-4">
+        <div>
+          <h2 className="text-sm font-semibold text-admin-text uppercase tracking-wider text-admin-accent">
+            Completed Sessions Only (duration_expired)
+          </h2>
+          <p className="text-xs text-admin-muted mt-0.5">
+            Compliance statistics and treatment fidelity restricted to sessions that finished normally upon duration expiry.
+          </p>
+        </div>
+        <ComplianceSection
+          groups={completedGroups}
+          tableTitle="Treatment Fidelity by Group (Completed Sessions Only)"
+          tableSubtitle="Shows actual incivility and structural like-mindedness rates across agent messages in sessions ended by duration_expired."
+        />
       </div>
 
       <p className="text-[10px] text-admin-faint">

@@ -232,6 +232,7 @@ export interface ComplianceGroupStats {
 export interface ComplianceStats {
   experiment_id: string
   groups: ComplianceGroupStats[]
+  completed_groups?: ComplianceGroupStats[]
 }
 
 /* ── Safety tab ─────────────────────────────────────────────────────────── */

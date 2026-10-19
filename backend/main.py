@@ -3298,6 +3298,7 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
                 s.treatment_group,
                 s.user_name,
                 s.participant_stance,
+                s.end_reason,
                 m.sender,
                 m.content,
                 m.is_incivil,
@@ -3322,6 +3323,7 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
                 "group": r["treatment_group"],
                 "user_name": r["user_name"],
                 "participant_stance": r["participant_stance"],
+                "end_reason": r["end_reason"],
                 "messages": [],
             }
         if r["sender"] is not None:
@@ -3331,64 +3333,84 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
                 "is_incivil": r["is_incivil"],
             })
 
-    grouped: Dict[str, Dict[str, int]] = {}
-    for data in session_data.values():
-        group = data["group"]
-        stats = grouped.setdefault(group, {
-            "session_count": 0,
-            "classified_count": 0,
-            "incivil_count": 0,
-            "stance_classified_count": 0,
-            "like_minded_count": 0,
-        })
-        stats["session_count"] += 1
+    def _build_group_stats(data_list: list[Dict[str, Any]], expected_groups: Optional[list[str]] = None) -> list[Dict[str, Any]]:
+        grouped: Dict[str, Dict[str, int]] = {}
+        if expected_groups:
+            for g_name in expected_groups:
+                grouped[g_name] = {
+                    "session_count": 0,
+                    "classified_count": 0,
+                    "incivil_count": 0,
+                    "stance_classified_count": 0,
+                    "like_minded_count": 0,
+                }
+        for data in data_list:
+            group = data["group"]
+            stats = grouped.setdefault(group, {
+                "session_count": 0,
+                "classified_count": 0,
+                "incivil_count": 0,
+                "stance_classified_count": 0,
+                "like_minded_count": 0,
+            })
+            stats["session_count"] += 1
 
-        participant_name = data["user_name"]
-        participant_messages = [
-            m for m in data["messages"]
-            if m["sender"] == participant_name and (m.get("content") or "").strip()
-        ]
-        first_participant_text = participant_messages[0]["content"] if participant_messages else None
-        participant_cell = _resolve_participant_alignment_cell(
-            data["participant_stance"],
-            first_participant_text,
-        )
+            participant_name = data["user_name"]
+            participant_messages = [
+                m for m in data["messages"]
+                if m["sender"] == participant_name and (m.get("content") or "").strip()
+            ]
+            first_participant_text = participant_messages[0]["content"] if participant_messages else None
+            participant_cell = _resolve_participant_alignment_cell(
+                data["participant_stance"],
+                first_participant_text,
+            )
 
-        for message in data["messages"]:
-            sender = message["sender"]
-            if sender == participant_name:
-                continue
+            for message in data["messages"]:
+                sender = message["sender"]
+                if sender == participant_name:
+                    continue
 
-            if message["is_incivil"] is not None:
-                stats["classified_count"] += 1
-                if message["is_incivil"] is True:
-                    stats["incivil_count"] += 1
+                if message["is_incivil"] is not None:
+                    stats["classified_count"] += 1
+                    if message["is_incivil"] is True:
+                        stats["incivil_count"] += 1
 
-            agent_cell = agent_cell_by_name.get(str(sender))
-            if participant_cell and agent_cell:
-                stats["stance_classified_count"] += 1
-                if agent_cell == participant_cell:
-                    stats["like_minded_count"] += 1
+                agent_cell = agent_cell_by_name.get(str(sender))
+                if participant_cell and agent_cell:
+                    stats["stance_classified_count"] += 1
+                    if agent_cell == participant_cell:
+                        stats["like_minded_count"] += 1
 
-    groups = []
-    for group_name in sorted(grouped):
-        stats = grouped[group_name]
-        classified = stats["classified_count"]
-        incivil = stats["incivil_count"]
-        stance_classified = stats["stance_classified_count"]
-        like_minded = stats["like_minded_count"]
-        groups.append({
-            "group": group_name,
-            "session_count": stats["session_count"],
-            "classified_count": classified,
-            "incivil_count": incivil,
-            "incivil_pct": _pct(incivil, classified),
-            "stance_classified_count": stance_classified,
-            "like_minded_count": like_minded,
-            "like_minded_pct": _pct(like_minded, stance_classified),
-        })
+        result = []
+        for group_name in sorted(grouped):
+            stats = grouped[group_name]
+            classified = stats["classified_count"]
+            incivil = stats["incivil_count"]
+            stance_classified = stats["stance_classified_count"]
+            like_minded = stats["like_minded_count"]
+            result.append({
+                "group": group_name,
+                "session_count": stats["session_count"],
+                "classified_count": classified,
+                "incivil_count": incivil,
+                "incivil_pct": _pct(incivil, classified),
+                "stance_classified_count": stance_classified,
+                "like_minded_count": like_minded,
+                "like_minded_pct": _pct(like_minded, stance_classified),
+            })
+        return result
 
-    return {"experiment_id": experiment_id, "groups": groups}
+    groups = _build_group_stats(list(session_data.values()))
+    known_group_names = [g["group"] for g in groups]
+    completed_sessions = [d for d in session_data.values() if d.get("end_reason") == "duration_expired"]
+    completed_groups = _build_group_stats(completed_sessions, expected_groups=known_group_names)
+
+    return {
+        "experiment_id": experiment_id,
+        "groups": groups,
+        "completed_groups": completed_groups,
+    }
 
 
 @app.get("/admin/evaluations/summary-csv/{experiment_id}")

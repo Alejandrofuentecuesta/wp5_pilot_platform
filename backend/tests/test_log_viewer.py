@@ -80,3 +80,4 @@ def test_session_start_renders_lists_of_config_objects():
 
     assert "humanize_word_subs_list" in rendered
     assert "&quot;replacement&quot;: &quot;q&quot;" in rendered
+    assert "Timeline — started at 11:12:26.866 on 29/07/2026" in rendered

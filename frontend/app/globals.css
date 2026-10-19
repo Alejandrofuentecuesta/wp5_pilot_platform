@@ -52,6 +52,8 @@
   --color-admin-pastel-amber-text: #92400e;
   --color-admin-pastel-purple: #ede9fe;
   --color-admin-pastel-purple-text: #5b21b6;
+  --color-admin-pastel-blue: #e0f2fe;
+  --color-admin-pastel-blue-text: #0369a1;
   --color-admin-danger-soft: #fee2e2;
   --color-admin-danger-border: #fecaca;
   --color-admin-danger-text: #991b1b;
@@ -78,6 +80,8 @@
   --color-admin-pastel-amber-text: #fbbf24;
   --color-admin-pastel-purple: rgba(139, 92, 246, 0.15);
   --color-admin-pastel-purple-text: #c4b5fd;
+  --color-admin-pastel-blue: rgba(56, 189, 248, 0.15);
+  --color-admin-pastel-blue-text: #7dd3fc;
   --color-admin-danger-soft: rgba(239, 68, 68, 0.15);
   --color-admin-danger-border: rgba(239, 68, 68, 0.3);
   --color-admin-danger-text: #fca5a5;

@@ -581,13 +581,18 @@ function SessionsTab({
 }) {
   const [statusFilter, setStatusFilter] = useState<string>("")
   const [groupFilter, setGroupFilter] = useState<string>("")
+  const [outcomeFilter, setOutcomeFilter] = useState<SessionOutcome | "">("")
   const [exporting, setExporting] = useState(false)
   const [exportError, setExportError] = useState("")
 
   useEffect(() => {
     setStatusFilter("")
     setGroupFilter("")
+    setOutcomeFilter("")
   }, [experimentId])
+
+  const outcomeCounts: Record<SessionOutcome, number> = { completed: 0, left: 0, in_progress: 0 }
+  for (const s of sessions) outcomeCounts[sessionOutcome(s)] += 1
 
   const groups = Array.from(new Set(sessions.map((s) => s.treatment_group))).sort()
   const statuses = Array.from(new Set(sessions.map((s) => s.status))).sort()
@@ -615,6 +620,7 @@ function SessionsTab({
       }
     }
     if (groupFilter && s.treatment_group !== groupFilter) return false
+    if (outcomeFilter && sessionOutcome(s) !== outcomeFilter) return false
     return true
   })
 
@@ -650,6 +656,17 @@ function SessionsTab({
       {/* Filters */}
       <div className="bg-admin-surface rounded-lg border border-admin-border px-4 py-3 flex items-center gap-4 flex-wrap">
         <span className="text-xs font-medium text-admin-faint uppercase tracking-wider">Filters</span>
+        <select
+          value={outcomeFilter}
+          onChange={(e) => setOutcomeFilter(e.target.value as SessionOutcome | "")}
+          title="Completed = ran the full duration (duration_expired). Left early = any other ending."
+          className="text-xs border border-admin-border rounded-lg px-2.5 py-1.5 bg-admin-surface text-admin-text focus:outline-none focus:ring-1 focus:ring-admin-accent/20"
+        >
+          <option value="">All outcomes ({sessions.length})</option>
+          {(Object.keys(SESSION_OUTCOME_LABELS) as SessionOutcome[]).map((o) => (
+            <option key={o} value={o}>{SESSION_OUTCOME_LABELS[o]} ({outcomeCounts[o]})</option>
+          ))}
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => setStatusFilter(e.target.value)}
@@ -1561,6 +1578,27 @@ function LLMRow({
   )
 }
 
+type SessionOutcome = "completed" | "left" | "in_progress"
+
+const SESSION_OUTCOME_LABELS: Record<SessionOutcome, string> = {
+  completed: "Completed (duration_expired)",
+  left: "Left early",
+  in_progress: "In progress",
+}
+
+/** Completed = ran the full duration; left early = any other ending. */
+function sessionOutcome(s: SessionSummary): SessionOutcome {
+  if (s.status !== "ended" && s.status !== "crashed") return "in_progress"
+  return s.end_reason === "duration_expired" ? "completed" : "left"
+}
+
+function formatEntered(iso: string | null): string {
+  if (!iso) return "-"
+  return new Date(iso).toLocaleString("es-ES", {
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+  })
+}
+
 function formatDuration(startedAt: string | null, endedAt: string | null): string {
   if (!startedAt) return "-"
   const start = new Date(startedAt).getTime()
@@ -1639,6 +1677,7 @@ function SessionTable({
           <thead>
             <tr className="text-left text-[10px] text-admin-faint uppercase tracking-wider border-b border-admin-border">
               <th className="px-3 py-1.5">Session</th>
+              <th className="px-3 py-1.5">Entered</th>
               <th className="px-3 py-1.5">Token</th>
               <th className="px-3 py-1.5">Group</th>
               <th className="px-3 py-1.5 text-right">Msgs</th>
@@ -1650,6 +1689,7 @@ function SessionTable({
             {sessions.map((s) => (
               <tr key={s.session_id} className="border-b border-admin-border/50 last:border-0 hover:bg-admin-raised/50">
                 <td className="px-3 py-1.5 font-mono text-admin-faint">{s.session_id.slice(0, 8)}&hellip;</td>
+                <td className="px-3 py-1.5 whitespace-nowrap text-admin-muted">{formatEntered(s.created_at)}</td>
                 <td className="px-3 py-1.5 font-mono text-admin-faint">{s.token}</td>
                 <td className="px-3 py-1.5 font-mono text-admin-faint">{s.treatment_group}</td>
                 <td className="px-3 py-1.5 text-right font-medium text-admin-text">{s.message_count}</td>

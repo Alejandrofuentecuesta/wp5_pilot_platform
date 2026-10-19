@@ -198,6 +198,7 @@ export interface SessionSummary {
   treatment_group: string
   token: string
   status: "pending" | "active" | "ended" | "crashed"
+  created_at: string | null
   started_at: string | null
   ended_at: string | null
   end_reason: string | null

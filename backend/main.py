@@ -3053,6 +3053,7 @@ async def admin_list_sessions(
                 s.treatment_group,
                 s.token,
                 s.status,
+                s.created_at,
                 s.started_at,
                 s.ended_at,
                 s.end_reason,
@@ -3063,7 +3064,7 @@ async def admin_list_sessions(
                 FROM messages GROUP BY session_id
             ) m USING (session_id)
             WHERE s.experiment_id = $1
-            ORDER BY s.started_at DESC NULLS LAST
+            ORDER BY s.created_at DESC NULLS LAST
         """, eid)
     return {
         "sessions": [
@@ -3072,6 +3073,9 @@ async def admin_list_sessions(
                 "treatment_group": r["treatment_group"],
                 "token": r["token"],
                 "status": r["status"],
+                # When the participant entered with their link; started_at
+                # is reset at their first message.
+                "created_at": r["created_at"].isoformat() if r["created_at"] else None,
                 "started_at": r["started_at"].isoformat() if r["started_at"] else None,
                 "ended_at": r["ended_at"].isoformat() if r["ended_at"] else None,
                 "end_reason": r["end_reason"],

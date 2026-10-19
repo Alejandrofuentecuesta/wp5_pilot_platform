@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 
 import { getPreChatSurvey } from "@/lib/pre-chat-surveys"
-import { loadGenderMap, sanitizeName } from "@/lib/name"
+import { loadGenderMap, sanitizeName, validateParticipantName } from "@/lib/name"
 import type { ParticipantStance, SessionIntakeResponse } from "@/lib/types"
 
 // Panel hand-off: participants arrive with ?token=XXXX-XXXX&s=1|2 in the URL.
@@ -101,8 +101,9 @@ export default function LoginScreen({
 
   // Manual flow: validate the typed token, then move to the stance question.
   const handlePreview = useCallback(async () => {
-    if (!sanitizeName(username)) {
-      setError(NAME_REQUIRED_ERROR)
+    const nameError = validateParticipantName(username)
+    if (nameError) {
+      setError(nameError)
       return
     }
     if (!token.trim()) {
@@ -130,11 +131,12 @@ export default function LoginScreen({
   // Handoff flow: stance is already known, start directly from the access step.
   const handleHandoffStart = useCallback(async () => {
     if (loading || !handoff?.stance) return
-    const cleanName = sanitizeName(username)
-    if (!cleanName) {
-      setError(NAME_REQUIRED_ERROR)
+    const nameError = validateParticipantName(username)
+    if (nameError) {
+      setError(nameError)
       return
     }
+    const cleanName = sanitizeName(username)
     setLoading(true)
     setError("")
     try {
@@ -146,12 +148,13 @@ export default function LoginScreen({
   }, [loading, handoff, username, onStart])
 
   const handleManualStart = useCallback(async () => {
-    const cleanName = sanitizeName(username)
-    if (!cleanName) {
-      setError(NAME_REQUIRED_ERROR)
+    const nameError = validateParticipantName(username)
+    if (nameError) {
+      setError(nameError)
       setStep("access")
       return
     }
+    const cleanName = sanitizeName(username)
     if (!selectedStance) {
       setError("Elige la columna que se acerque más a tu posición.")
       return

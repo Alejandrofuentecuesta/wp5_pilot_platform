@@ -4,7 +4,14 @@
  */
 import { describe, expect, it } from "vitest"
 
-import { apparentGender, fold, isOwnSender, makeNameMapper, sanitizeName } from "./name"
+import {
+  apparentGender,
+  fold,
+  isOwnSender,
+  makeNameMapper,
+  sanitizeName,
+  validateParticipantName,
+} from "./name"
 
 describe("sanitizeName", () => {
   it("trims, collapses whitespace and strips control characters", () => {
@@ -141,6 +148,64 @@ describe("makeNameMapper with an agent sharing the typed name", () => {
   it("still maps the alias to the typed name inbound", () => {
     const m = makeNameMapper("Hugo", "Carlos", ["Carlos"])
     expect(m.inbound("Hugo tiene razón")).toBe("Carlos tiene razón")
+  })
+})
+
+describe("validateParticipantName", () => {
+  it("rejects empty or whitespace-only names", () => {
+    expect(validateParticipantName("")).toBe("Introduce tu nombre para continuar.")
+    expect(validateParticipantName("   ")).toBe("Introduce tu nombre para continuar.")
+  })
+
+  it("rejects single-letter names", () => {
+    expect(validateParticipantName("a")).toBe("El nombre debe tener al menos dos letras.")
+    expect(validateParticipantName("A")).toBe("El nombre debe tener al menos dos letras.")
+    expect(validateParticipantName(" x ")).toBe("El nombre debe tener al menos dos letras.")
+  })
+
+  it("rejects common Spanish prepositions and articles", () => {
+    expect(validateParticipantName("de")).not.toBeNull()
+    expect(validateParticipantName("el")).not.toBeNull()
+    expect(validateParticipantName("la")).not.toBeNull()
+    expect(validateParticipantName("para")).not.toBeNull()
+    expect(validateParticipantName("por")).not.toBeNull()
+    expect(validateParticipantName("con")).not.toBeNull()
+  })
+
+  it("rejects combinations consisting solely of grammatical words", () => {
+    expect(validateParticipantName("de la")).not.toBeNull()
+    expect(validateParticipantName("en un")).not.toBeNull()
+  })
+
+  it("accepts valid names (including short genuine names)", () => {
+    expect(validateParticipantName("Ana")).toBeNull()
+    expect(validateParticipantName("Ot")).toBeNull()
+    expect(validateParticipantName("Pol")).toBeNull()
+    expect(validateParticipantName("María José")).toBeNull()
+    expect(validateParticipantName("Carlos")).toBeNull()
+    expect(validateParticipantName("Clara")).toBeNull()
+  })
+})
+
+describe("makeNameMapper single-letter and stopword safety", () => {
+  it("refuses to substitute single-letter names", () => {
+    const mapper = makeNameMapper("Vega", "a")
+    // Must NOT replace 'a' in 'Contento/a' or in prepositions
+    expect(mapper.outbound("Contento/a")).toBe("Contento/a")
+    expect(mapper.outbound("voy a comer")).toBe("voy a comer")
+    expect(mapper.inbound("Vega tiene razón")).toBe("Vega tiene razón")
+  })
+
+  it("refuses to substitute common Spanish stopwords", () => {
+    const mapper = makeNameMapper("Vega", "de")
+    expect(mapper.outbound("hablar de política")).toBe("hablar de política")
+  })
+
+  it("still substitutes legitimate participant names correctly", () => {
+    const mapper = makeNameMapper("Vega", "María")
+    expect(mapper.outbound("soy María")).toBe("soy Vega")
+    expect(mapper.outbound("Contento/a")).toBe("Contento/a")
+    expect(mapper.inbound("Vega opina bien")).toBe("María opina bien")
   })
 })
 

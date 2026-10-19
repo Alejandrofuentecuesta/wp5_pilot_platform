@@ -118,6 +118,46 @@ function replaceTokenSequence(
   return out.join("")
 }
 
+export const SPANISH_GRAMMATICAL_WORDS = new Set([
+  // Artículos y contracciones
+  "el", "la", "los", "las", "un", "una", "unos", "unas", "lo", "al", "del",
+  // Preposiciones
+  "a", "ante", "bajo", "cabe", "con", "contra", "de", "desde", "durante",
+  "en", "entre", "hacia", "hasta", "mediante", "para", "por", "segun",
+  "sin", "so", "sobre", "tras", "versus", "via",
+  // Conjunciones
+  "y", "e", "ni", "o", "u", "pero", "sino", "aunque", "porque", "pues",
+  "que", "si", "como", "cuando", "donde",
+  // Pronombres y determinantes comunes
+  "yo", "tu", "el", "ella", "ello", "nosotros", "nosotras", "vosotros",
+  "vosotras", "ellos", "ellas", "me", "te", "se", "nos", "os", "le", "les",
+  "mi", "mis", "tu", "tus", "su", "sus", "este", "esta", "estos", "estas",
+  "esto", "ese", "esa", "esos", "esas", "eso", "aquel", "aquella",
+  "aquellos", "aquellas", "aquello", "nada", "nadie", "algo", "alguien",
+  // Palabras genéricas o de prueba
+  "test", "prueba", "anonimo", "usuario", "user", "null", "undefined",
+])
+
+/** Validate participant name: prohibit single-letter names and common grammatical words. */
+export function validateParticipantName(raw: string): string | null {
+  const clean = sanitizeName(raw)
+  if (!clean) {
+    return "Introduce tu nombre para continuar."
+  }
+  const letters = clean.match(/[\p{L}]/gu) || []
+  if (letters.length < 2) {
+    return "El nombre debe tener al menos dos letras."
+  }
+  const words = fold(clean).split(" ").filter(Boolean)
+  if (words.length === 1 && SPANISH_GRAMMATICAL_WORDS.has(words[0])) {
+    return "Por favor, introduce un nombre de pila válido (no preposiciones, artículos ni palabras comunes)."
+  }
+  if (words.every((w) => SPANISH_GRAMMATICAL_WORDS.has(w))) {
+    return "Por favor, introduce un nombre de pila válido."
+  }
+  return null
+}
+
 export function makeNameMapper(
   alias: string,
   typedName: string,
@@ -127,7 +167,13 @@ export function makeNameMapper(
   const foldedTyped = fold(sanitizeName(typedName))
   const typedWords = foldedTyped.split(" ").filter(Boolean)
   const display = sanitizeName(typedName)
-  const usable = alias.length > 0 && typedWords.length > 0
+
+  // Extra safety: do not substitute if typedName has fewer than 2 letters
+  // or consists exclusively of grammatical stopwords.
+  const hasValidWord = typedWords.some(
+    (w) => w.length > 1 && !SPANISH_GRAMMATICAL_WORDS.has(w),
+  )
+  const usable = alias.length > 0 && typedWords.length > 0 && hasValidWord
   // When an agent in the room has exactly the typed name, the name in an
   // outgoing message most likely addresses that agent, and it is already
   // visible in the room as the agent's name: send it as written rather

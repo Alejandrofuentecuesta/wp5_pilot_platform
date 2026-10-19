@@ -639,11 +639,13 @@ export function useChat() {
   // twice. The POST is validated server-side and also works after the chat
   // connection has closed (the final check-up).
   const submitEmotionsCheckup = useCallback((emotions: EmotionRating[], explanation: string) => {
-    // The free-text "other" emotion and explanation can contain the participant's own
-    // name; predefined labels pass through the mapper unchanged.
+    // Predefined labels ("Contento/a", etc.) pass through unchanged; only the
+    // free-text "Otra: ..." text and explanation can contain the participant's own name.
     const mappedEmotions = emotions.map((e) => ({
       ...e,
-      emotion: mapperRef.current.outbound(e.emotion),
+      emotion: e.emotion.startsWith("Otra: ")
+        ? `Otra: ${mapperRef.current.outbound(e.emotion.slice(6))}`
+        : e.emotion,
     }))
     const mappedExplanation = mapperRef.current.outbound(explanation)
     if (sessionId) {
@@ -660,7 +662,9 @@ export function useChat() {
   const submitFinalEmotionsCheckup = useCallback(async (emotions: EmotionRating[], explanation: string) => {
     const mappedEmotions = emotions.map((e) => ({
       ...e,
-      emotion: mapperRef.current.outbound(e.emotion),
+      emotion: e.emotion.startsWith("Otra: ")
+        ? `Otra: ${mapperRef.current.outbound(e.emotion.slice(6))}`
+        : e.emotion,
     }))
     const mappedExplanation = mapperRef.current.outbound(explanation)
     if (sessionId) {

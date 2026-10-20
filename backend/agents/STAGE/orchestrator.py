@@ -57,6 +57,17 @@ from utils.vocab_blacklist import (
 
 
 MAX_PERFORMER_RETRIES = 3
+# Rejection phrasings offered at random, so agents do not all recite
+# "la violencia nunca es la solución" (31 times in 22 pre-test 2 sessions).
+# Each must satisfy violence_guard.explicitly_rejects_violence.
+VIOLENCE_REJECTION_PHRASINGS = (
+    "nada justifica la violencia",
+    "con violencia no se arregla nada",
+    "no a la violencia, eso sobra",
+    "la violencia no es el camino",
+    "rechazo cualquier tipo de violencia",
+    "no justifico ninguna violencia",
+)
 # A threat to democracy rarely fits in a clipped reaction.
 MIN_THREAT_MESSAGE_WORDS = 12
 MAX_STANCE_RETRIES = 1
@@ -909,6 +920,29 @@ class Orchestrator:
         if last_rejection_idx is None:
             return False
         return last_violence_idx is None or last_violence_idx <= last_rejection_idx
+
+    def _violence_already_rejected_since_participant(self) -> bool:
+        """True when an agent has rejected violence since the participant last
+        spoke and no explicit violence has appeared after that rejection.
+
+        Enforces "one rejection is enough" in code: the Director kept setting
+        violence_requires_rejection on later turns, so several agents in a row
+        recited the same rejection line.
+        """
+        last_rejection = None
+        for i in range(len(self.state.messages) - 1, -1, -1):
+            message = self.state.messages[i]
+            if message.sender == self.state.user_name:
+                return False
+            if message.sender != "[news]" and explicitly_rejects_violence(message.content):
+                last_rejection = i
+                break
+        if last_rejection is None:
+            return False
+        return not any(
+            contains_explicit_violence_cue(m.content) and not explicitly_rejects_violence(m.content)
+            for m in self.state.messages[last_rejection + 1:]
+        )
 
     def _pending_participant_target(
         self,
@@ -2470,6 +2504,9 @@ class Orchestrator:
         # ask it to judge this on meaning instead of relying solely on a
         # pattern list that can never be exhaustive (see violence_guard.py).
         director_flagged_violence = bool(action_data.get("violence_requires_rejection"))
+        if director_flagged_violence and self._violence_already_rejected_since_participant():
+            director_flagged_violence = False
+            action_data["violence_requires_rejection"] = False
         if violence_source is not None or director_flagged_violence:
             original_action = action_type
             action_type = "message"
@@ -2481,8 +2518,9 @@ class Orchestrator:
             existing_instruction = dict(action_data.get("performer_instruction") or {})
             directive = (existing_instruction.get("directive") or "").strip()
             violence_clause = (
-                "Reject the violent suggestion explicitly and unequivocally. State in natural Spanish that "
-                "violence is never a solution. Do not quote, paraphrase, repeat, soften, joke about, or endorse "
+                "Reject the violent suggestion explicitly and unequivocally, in one short sentence in your own "
+                f"words (for example '{self._rng.choice(VIOLENCE_REJECTION_PHRASINGS)}'). Do not use the stock "
+                "line 'la violencia nunca es la solución'. Do not quote, paraphrase, repeat, soften, joke about, or endorse "
                 "the proposal or any euphemism for it. Do not use 'pero' to follow the rejection with coercion, "
                 "retaliation, intimidation, 'dar caña', 'mano dura', or 'no queda otra'. You may preserve your "
                 "political stance, but the complete message must reject violence."
@@ -2608,7 +2646,8 @@ class Orchestrator:
             and not explicitly_rejects_violence(latest_room_message.content)
         )
         instructed_violence_rejection = bool(
-            "violence" in instruction_text
+            not self._violence_already_rejected_since_participant()
+            and "violence" in instruction_text
             and re.search(r"\b(?:reject|condemn|never acceptable|must not endorse)\b", instruction_text)
         )
         # Same semantic backstop as the deterministic override above: trust
@@ -2915,8 +2954,8 @@ class Orchestrator:
                 )
                 performer_user_prompt = prompt_with_retry_correction(
                     "Important safety correction:\n"
-                    "The latest violent suggestion must be rejected clearly and explicitly. "
-                    "State naturally in Spanish that violence is never an acceptable solution. "
+                    "The latest violent suggestion must be rejected clearly and explicitly, in one short "
+                    f"sentence in your own words (for example '{self._rng.choice(VIOLENCE_REJECTION_PHRASINGS)}'). "
                     "Do not begin with agreement words such as 'exacto' or 'claro que si', do not use "
                     "'mano dura', 'dar caña', or 'no queda otra', and do not repeat, paraphrase, endorse, "
                     "or soften the violent wording. Do not follow the rejection with 'pero' and a coercive, "
@@ -3341,15 +3380,26 @@ class Orchestrator:
         # that are especially common at session start.
         MAX_ACTION_ATTEMPTS = 3
         BACKOFF_SECONDS = [0, 2, 5]  # delay before attempt 1, 2, 3
+        # A rejected answer is fed back on the next attempt: re-sending the same
+        # prompt got the same invalid pick back on all three attempts (pre-test 2:
+        # 47 unknown performers, 26 invalid reply targets, 9 lost turns).
+        retry_feedback: Optional[str] = None
+        eligible_performers = sorted(name for name in profiles if name != self.state.user_name)
 
         for attempt in range(MAX_ACTION_ATTEMPTS):
             if BACKOFF_SECONDS[attempt] > 0:
                 await asyncio.sleep(BACKOFF_SECONDS[attempt])
 
+            attempt_prompt = action_user
+            if retry_feedback:
+                attempt_prompt = (
+                    f"{action_user.rstrip()}\n\n**Your previous answer was rejected:** {retry_feedback} "
+                    "Return a corrected JSON action."
+                )
             action_raw = None
             try:
                 action_raw = await self.director_llm.generate_response(
-                    action_user, max_retries=1,
+                    attempt_prompt, max_retries=1,
                     system_prompt=self._action_system_prompt,
                 )
             except Exception as e:
@@ -3361,7 +3411,7 @@ class Orchestrator:
 
             self.logger.log_llm_call(
                 agent_name="__director_action__",
-                prompt=f"[SYSTEM]\n{self._action_system_prompt}\n\n[USER]\n{action_user}",
+                prompt=f"[SYSTEM]\n{self._action_system_prompt}\n\n[USER]\n{attempt_prompt}",
                 response=action_raw,
                 error=None if action_raw else f"Director Action LLM returned no response (attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS})",
             )
@@ -3385,6 +3435,11 @@ class Orchestrator:
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned next_performer '{selected_performer}', "
                     "which is not one of the visible performer labels in AGENT_PROFILES",
                 )
+                retry_feedback = (
+                    f"'{selected_performer}' cannot speak this turn. `next_performer` must be exactly one of: "
+                    + ", ".join(eligible_performers + [self.state.user_name])
+                    + f" (choose {self.state.user_name} only to wait)."
+                )
                 continue
 
             selected_target_user = action_data.get("target_user")
@@ -3393,6 +3448,10 @@ class Orchestrator:
                     "director_action_unknown_target_label",
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned target_user '{selected_target_user}', "
                     "which is not one of the visible session-member labels for this turn",
+                )
+                retry_feedback = (
+                    f"'{selected_target_user}' is not a member of this chat. `target_user` must be one of: "
+                    + ", ".join(sorted(visible_target_labels)) + ", or null."
                 )
                 continue
 
@@ -3406,6 +3465,13 @@ class Orchestrator:
                     "director_action_invalid_target_for_speaker",
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned target_user '{selected_target_user}' "
                     f"for '{selected_performer}', but that target is not valid for the chosen speaker",
+                )
+                valid_targets = sorted(valid_direct_targets_by_speaker.get(selected_performer, set()))
+                retry_feedback = (
+                    f"'{selected_performer}' shares an alignment cell with '{selected_target_user}' and cannot target them. "
+                    f"Valid targets for '{selected_performer}': "
+                    + ", ".join(valid_targets + [self.state.user_name])
+                    + "; or pick another performer, or use a plain `message` with no target."
                 )
                 if attempt < MAX_ACTION_ATTEMPTS - 1:
                     continue
@@ -3422,6 +3488,19 @@ class Orchestrator:
                         f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned reply target "
                         f"'{action_data['target_message_id']}' for '{selected_performer}', but that message is not "
                         "a valid reply target for the chosen speaker",
+                    )
+                    if reply_target.sender == selected_performer:
+                        why = "it is their own message"
+                    elif reply_target.sender == "[news]":
+                        why = "it is the news article"
+                    elif self._agents_share_alignment_cell(speaker_real, reply_target.sender):
+                        why = f"'{reply_target.sender}' is on the same side"
+                    else:
+                        why = "that message already has enough direct replies"
+                    retry_feedback = (
+                        f"'{selected_performer}' cannot reply to message {action_data['target_message_id']}: {why}. "
+                        f"Pick a reply target listed for '{selected_performer}' in the target constraints, "
+                        "another performer, or a plain `message`."
                     )
                     if attempt < MAX_ACTION_ATTEMPTS - 1:
                         continue

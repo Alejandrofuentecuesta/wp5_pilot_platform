@@ -80,3 +80,35 @@ def test_literal_hunting_trip_is_not_a_cue(text):
     caza de <ethnic/national-origin group>' — hunting language aimed at
     people — is treated as a violence cue."""
     assert not contains_explicit_violence_cue(text)
+
+
+# Pre-test 2 review of the violence override (urgent-problems deck, problem 7).
+
+@pytest.mark.parametrize("text", [
+    "prefieren matar los pactos de cuotas",
+    "eso es matar a la democracia",
+    "Deberíamos ilegalizar a Vox y a los racistas por decreto",
+    "Hace falta un caudillo militar que ponga orden",
+    "Con Franco no entraba ni un ilegal",
+    "mano dura con la inmigración irregular",
+])
+def test_threats_to_democracy_and_figurative_killing_are_not_violence(text):
+    assert contains_explicit_violence_cue(text) is False
+
+
+@pytest.mark.parametrize("text", [
+    "el segundo aviso es un disparo a la cabeza",
+    "es hora de mancharnos un poco las manos",
+    "no digo un paredón, pero casi",
+    "muerte a los traidores",
+    "Ojalá matarán a gente tan estúpida como usted",
+    "hay que matarlos a todos",
+])
+def test_physical_violence_missing_from_the_old_list_is_detected(text):
+    assert contains_explicit_violence_cue(text) is True
+
+
+def test_every_offered_rejection_phrasing_counts_as_a_rejection():
+    from agents.STAGE.orchestrator import VIOLENCE_REJECTION_PHRASINGS
+    for phrase in VIOLENCE_REJECTION_PHRASINGS:
+        assert explicitly_rejects_violence(phrase), phrase

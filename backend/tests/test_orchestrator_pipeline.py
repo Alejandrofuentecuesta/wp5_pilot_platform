@@ -1038,6 +1038,9 @@ class TestExecuteTurnMessage:
         state = _make_state(
             participant_stance_hint="pro_policy_pro_topic",
             agents=[Agent(name="Alice"), Agent(name="Bob")],
+            # The forced reply to an addressed agent is sampled per message id
+            # (75% by default); pin it so the test does not fail 1 run in 4.
+            simulation_config={"participant_target_reply_probability": 1.0},
         )
         participant_msg = Message.create(
             sender="participant",
@@ -1576,6 +1579,78 @@ class TestExecuteTurnReply:
             context={"agent_name": "Alice", "action_type": "reply"},
         )
 
+
+
+class TestViolenceOverrideAndDirectorRetries:
+
+    @pytest.mark.asyncio
+    async def test_director_violence_flag_ignored_once_already_rejected(self):
+        """Regression: the Director kept flagging violence after it had been rejected,
+        so several agents in a row recited the same rejection line."""
+        state = _make_state()
+        state.add_message(Message.create(sender="participant", content="Habría que darles un escarmiento"))
+        state.add_message(Message.create(sender="Bob", content="Nada justifica la violencia, hablemos de vivienda."))
+        orch, logger = _make_orchestrator(state=state)
+        orch.auto_like_probability = 0.0
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message", violence_requires_rejection=True)
+        )
+        orch.performer_llm.generate_response = AsyncMock(return_value="Lo de la vivienda viene de lejos.")
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        assert result.message.content == "Lo de la vivienda viene de lejos."
+        events = [c.args[0] for c in logger.log_event.call_args_list]
+        assert "director_violence_override" not in events
+
+    @pytest.mark.asyncio
+    async def test_director_violence_flag_honoured_after_new_participant_message(self):
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="Nada justifica la violencia."))
+        state.add_message(Message.create(sender="participant", content="Pues yo les metería un tiro"))
+        orch, logger = _make_orchestrator(state=state)
+        orch.auto_like_probability = 0.0
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message", violence_requires_rejection=True)
+        )
+        orch.performer_llm.generate_response = AsyncMock(return_value="Con violencia no se arregla nada.")
+
+        await orch.execute_turn("criteria_A")
+
+        events = [c.args[0] for c in logger.log_event.call_args_list]
+        assert "director_violence_override" in events
+
+    @pytest.mark.asyncio
+    async def test_rejected_director_answer_is_fed_back_on_retry(self, monkeypatch):
+        """Regression: the same prompt was re-sent and the Director returned the same
+        ineligible performer on all three attempts, losing the turn."""
+        import agents.STAGE.orchestrator as orch_mod
+        monkeypatch.setattr(orch_mod.asyncio, "sleep", AsyncMock())
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="Hola"))
+        orch, logger = _make_orchestrator(state=state)
+        orch.auto_like_probability = 0.0
+        action_answers = iter([
+            _action_json(next_performer="Zed", action_type="message"),
+            _action_json(next_performer="Alice", action_type="message"),
+        ])
+
+        async def director(prompt, **kwargs):
+            if "Design Action" in prompt:
+                return next(action_answers)
+            return _evaluate_json()
+
+        orch.director_llm.generate_response = AsyncMock(side_effect=director)
+        orch.performer_llm.generate_response = AsyncMock(return_value="Hola a todos")
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.agent_name == "Alice"
+        prompts = [c.args[0] for c in orch.director_llm.generate_response.call_args_list if "Design Action" in c.args[0]]
+        assert "Your previous answer was rejected" not in prompts[0]
+        assert "'Zed' cannot speak this turn" in prompts[1]
+        assert "Alice" in prompts[1].split("Your previous answer was rejected")[1]
 
 
 class TestIncivilityDrawnBeforeDirector:

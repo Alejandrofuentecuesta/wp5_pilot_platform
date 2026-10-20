@@ -28,8 +28,15 @@ def contains_explicit_violence_cue(text: str | None) -> bool:
         r"(?:salir|ir|salgamos|vamos|coger|cojamos|armarse|armarnos)\s+con\s+(?:el\s+|los\s+|un\s+|unos\s+)?"
         r"(?:bates?|machetes?|navajas?|cadenas?)|"
         r"un(?:os)?\s+palos\b|"
-        r"dos\s+tiros|tiro\s+en\s+la\s+cabeza|"
-        r"(?:disparar|matar|asesinar)(?:los|las|le|les)?|"
+        r"dos\s+tiros|(?:un\s+)?(?:tiro|disparo)\s+(?:en|a)\s+la\s+cabeza|"
+        # Killing needs a person as object: bare "matar" fired on
+        # "prefieren matar los pactos de cuotas".
+        r"(?:disparar|matar|asesinar)(?:los|las|le|les)\b|"
+        r"(?:disparar|disparen|matar|maten|mataran|matarian|matemos|asesinar|asesinen)\s+a\s+"
+        r"(?!la\s+(?:democracia|ley|propuesta|idea)\b|el\s+(?:debate|pacto|acuerdo)\b)\w+|"
+        r"muerte\s+a\s+(?:los|las|todos|todas|esos|esas)\b|"
+        r"manchar(?:nos|se|me|te|os)?\s+(?:un\s+poco\s+)?las\s+manos|"
+        r"paredon|"
         r"poner\s+(?:una\s+)?bomba|violencia\s+armada|"
         r"patrullas?\s+ciudadanas?\s+contra|"
         r"(?:hacer|tomar(?:se)?)\s+(?:la\s+)?justicia\s+por\s+(?:su|nuestra|mi)?\s*mano\s+propia|"
@@ -57,7 +64,13 @@ def explicitly_rejects_violence(text: str | None) -> bool:
         r"\b(?:rechazo|rechazamos|condeno|condenamos)\s+(?:la\s+)?violencia|"
         r"\b(?:nunca|jamas)\s+(?:es|sera)\s+(?:una\s+)?solucion|"
         r"\bno\s+(?:hay\s+que|se\s+debe|debemos)\s+pegar(?:les|le|los|las)?|"
-        r"\bno\s+(?:se\s+)?(?:puede|debe)\s+(?:aceptar|justificar)\s+la\s+violencia"
+        r"\bno\s+(?:se\s+)?(?:puede|debe)\s+(?:aceptar|justificar)\s+la\s+violencia|"
+        r"\bnada\s+justifica\s+(?:la\s+)?violencia|"
+        r"\bcon\s+(?:la\s+)?violencia\s+no\s+(?:se\s+)?(?:arregla|soluciona|consigue|gana)|"
+        r"\bno\s+a\s+la\s+violencia|"
+        r"\bviolencia\s+(?:sobra|no\s+tiene\s+(?:ningun\s+)?sentido)|"
+        r"\b(?:rechazo|condeno)\s+(?:cualquier|toda)\s+(?:tipo\s+de\s+)?violencia|"
+        r"\bno\s+(?:apoyo|justifico|defiendo)\s+(?:ningun\w*\s+)?(?:tipo\s+de\s+)?(?:la\s+)?violencia"
         r")",
         value,
     ))

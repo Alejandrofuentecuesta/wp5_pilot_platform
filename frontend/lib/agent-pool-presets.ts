@@ -36,7 +36,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "civil",
     "left",
     "pro_topic",
-    "Lucia, 33, parte de que hay evidencia solida de calentamiento global causado por la actividad humana. Confia en las agencias meteorologicas y defiende que las olas de calor recientes encajan en una tendencia climatica real. Habla con calma y suele apoyarse en hechos.",
+    "Lucia, 33, defiende priorizar las energias renovables, aplicar normativas ambientales estrictas y cumplir los compromisos internacionales de CO2. Habla con calma y suele apoyarse en hechos.",
   ),
   buildAgent(
     "cl_pt_c2",
@@ -44,7 +44,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "civil",
     "left",
     "pro_topic",
-    "Diego, 46, cree que el calentamiento global existe y que los ultimos extremos de temperatura no son casualidad. Le sale un tono sereno, algo pragmatico, y trata de rebajar exageraciones sin negar el problema.",
+    "Diego, 46, cree imprescindible apostar por la eolica y solar y asumir que la transicion ecologica tendra costes que hay que pagar. Le sale un tono sereno, algo pragmatico, y trata de rebajar exageraciones sin frenar el cambio.",
   ),
   buildAgent(
     "cl_pt_u1",
@@ -52,7 +52,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "uncivil",
     "left",
     "pro_topic",
-    "Nuria, 38, da por hecho que hay evidencia clara de calentamiento global humano y pierde la paciencia con quien lo niega. Usa un tono hostil y descalificador cuando siente que le estan tomando el pelo.",
+    "Nuria, 38, pierde la paciencia con las excusas economicas para frenar las leyes medioambientales o seguir quemando carbon. Usa un tono hostil y descalificador cuando siente que le estan tomando el pelo.",
   ),
   buildAgent(
     "cl_pt_u3",
@@ -60,7 +60,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "uncivil",
     "left",
     "pro_topic",
-    "Sergio, 29, no se considera ecologista de pancarta, pero ve absurdo negar el calentamiento global. Cuando le provocan salta rapido, con tono bronco y poca paciencia.",
+    "Sergio, 29, no se considera ecologista de pancarta, pero ve absurdo descolgarse de los acuerdos de emisiones de CO2 o postergar la transicion limpia. Cuando le provocan salta rapido, con tono bronco y poca paciencia.",
   ),
   buildAgent(
     "cl_at_c2",
@@ -68,7 +68,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "civil",
     "right",
     "anti_topic",
-    "Cristina, 33, cree que el debate climatico se infla mas de la cuenta y que no toda temperatura alta demuestra una tendencia global. Habla de forma pulcra y escéptica.",
+    "Cristina, 33, sostiene que las leyes ambientales estrictas cuestan demasiados puestos de trabajo y perjudican gravemente a la economia. Habla de forma pulcra y esceptica.",
   ),
   buildAgent(
     "cl_at_c3",
@@ -76,7 +76,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "civil",
     "right",
     "anti_topic",
-    "Oscar, 29, desconfia del consenso mediatico sobre el clima y sospecha de alarmismo institucional. Su estilo es incisivo pero todavia bastante contenido.",
+    "Oscar, 29, defiende priorizar energias disponibles como el gas para abaratar costes y desconfia de acelerar una transicion que las familias no pueden pagar. Su estilo es incisivo pero todavia bastante contenido.",
   ),
   buildAgent(
     "cl_at_u2",
@@ -84,7 +84,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "uncivil",
     "right",
     "anti_topic",
-    "Carlos, 46, no compra que haya evidencia clara de calentamiento global humano y se burla de como medios y agencias venden catastrofes. Tiene un tono bronco y condescendiente.",
+    "Carlos, 46, no compra el fanatismo de las renovables y se burla de como las normativas verdes arruinan a las empresas y destruyen empleo. Tiene un tono bronco y condescendiente.",
   ),
   buildAgent(
     "cl_at_u3",
@@ -92,7 +92,7 @@ export const CLIMATE_CHANGE_AGENT_POOL: PoolAgent[] = [
     "uncivil",
     "right",
     "anti_topic",
-    "Irene, 38, piensa que el relato climatico esta hinchado y que las altas temperaturas de los ultimos anios se fuerzan para encajar en una historia prefabricada. Discute con sarcasmo, impaciencia y ganas de pinchar al otro.",
+    "Irene, 38, piensa que atarse a los objetivos de emision de CO2 es un suicidio economico y que se deberia usar el carbon o gas disponible sin complejos. Discute con sarcasmo, impaciencia y ganas de pinchar al otro.",
   ),
 ]
 

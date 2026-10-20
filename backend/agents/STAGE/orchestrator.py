@@ -492,19 +492,43 @@ class Orchestrator:
 
     @staticmethod
     def _looks_like_attack_on_participant(content: Optional[str]) -> bool:
-        """Heuristic guard for direct, adversarial language aimed at the participant."""
+        """Heuristic guard for adversarial language aimed at the participant.
+
+        Only called when the message replies to or mentions the participant.
+        An insult only counts when it is pointed at them or their message:
+        a dismissive imperative ("deja de..."), an insult next to a
+        second-person marker or "ese argumento", or an opening verdict on
+        what they wrote ("qué patético"). A swear word about the situation
+        ("es una puta mierda, @Inés", said in agreement) does not count:
+        that matched the old word-anywhere check and dropped 12 of the 14
+        failed agent turns in pre-test 2.
+        """
         if not content:
             return False
-        normalized = " ".join(str(content).lower().split())
-        return bool(re.search(
-            r"\b("
-            r"deja de|no digas|no vayas|calla|"
-            r"eres|es pat[eé]tico|pat[eé]tico|rid[ií]culo|"
-            r"estupideces|tonter[ií]as|gilipolleces|mierda|"
-            r"imb[eé]cil|idiota|analfabeta|ignorante|ingenuo"
-            r")\b",
-            normalized,
-        ))
+        normalized = unicodedata.normalize("NFKD", str(content).lower())
+        normalized = "".join(c for c in normalized if not unicodedata.combining(c))
+        # "se deja de improvisar" is impersonal, not an order to the reader.
+        if re.search(r"(?<!\bse )\b(deja de|dejad de|no digas|no vayas|callate|calla ya)\b", normalized):
+            return True
+        tokens = re.findall(r"\w+", normalized)
+        insult = re.compile(
+            r"^(mierda|gilipollez|gilipolleces|tonteria|tonterias|estupidez|estupideces|chorrada|chorradas|"
+            r"patetic[oa]s?|ridicul[oa]s?|imbecil(es)?|idiotas?|analfabet[oa]s?|ignorantes?|ingenu[oa]s?)$"
+        )
+        addressed = re.compile(
+            r"^(pedazo|tu|tus|te|ti|contigo|eres|pareces|dices|piensas|crees|sueltas|escribes|opinas|defiendes|"
+            r"vosotros|vuestro|vuestra|vuestros|vuestras|sois)$"
+        )
+        their_message = re.compile(r"^(argumento|razonamiento|comentario|mensaje|planteamiento)s?$")
+        insult_at = [i for i, t in enumerate(tokens) if insult.match(t)]
+        for i in insult_at:
+            window = tokens[max(0, i - 4): i + 5]
+            if any(addressed.match(t) or their_message.match(t) for t in window):
+                return True
+        # An opening verdict on the message being answered: "qué patético",
+        # "menuda gilipollez", "cuántas tonterías", "menudo imbécil".
+        opening = tokens[:3]
+        return any(insult.match(t) and t != "mierda" for t in opening)
 
     @staticmethod
     def _looks_like_direct_personal_label_on_participant(content: Optional[str]) -> bool:

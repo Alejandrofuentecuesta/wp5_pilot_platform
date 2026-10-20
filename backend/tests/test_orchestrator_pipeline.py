@@ -2116,6 +2116,29 @@ class TestFixedStanceGuard:
             "Lo de fondo que dices es verdad y habría que ir más lejos."
         ) is False
 
+    @pytest.mark.parametrize("text", [
+        "Es que es una puta mierda, @Inés. Nos venden que ayudan al PIB mientras el país se hunde.",
+        "Claro q aportan, @Mario. El problema es que hay peña que prefiere soltar gilipolleces antes que admitir que sin ellos el país se iría a la mierda.",
+        "Exacto, joder, que a muchos les importa una mierda la dignidad.",
+        "Solo si se deja de improvisar y se empieza a regular la entrada.",
+    ])
+    def test_swearing_about_the_situation_is_not_an_attack_on_participant(self, text):
+        """Regression: any swear word anywhere counted as an attack, dropping 12 of
+        the 14 failed agent turns in pre-test 2, mostly agents agreeing with the
+        participant."""
+        assert Orchestrator._looks_like_attack_on_participant(text) is False
+
+    @pytest.mark.parametrize("text", [
+        "Tu argumento es una mierda, @Inés",
+        "Lo que dices son gilipolleces",
+        "Eres patético",
+        "Ese razonamiento es una gilipollez q solo beneficia a los fondos buitre",
+        "Culpa al PP, PEDAZO DE IGNORANTE",
+        "Menuda gilipollez acabas de soltar",
+    ])
+    def test_insults_pointed_at_participant_are_attacks(self, text):
+        assert Orchestrator._looks_like_attack_on_participant(text) is True
+
     def test_detects_direct_personal_label_on_participant(self):
         assert Orchestrator._looks_like_direct_personal_label_on_participant("eres un racista") is True
         assert Orchestrator._looks_like_direct_personal_label_on_participant("eres una racista") is True

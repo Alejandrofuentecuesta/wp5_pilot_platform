@@ -213,6 +213,35 @@ INCIVILITY_DIMENSIONS = {
 }
 
 
+def build_director_incivility_block(selected_dims: List[str]) -> str:
+    """Tell the Director which incivility types an uncivil performer must use this turn.
+
+    The dimensions are drawn before the Director writes its brief. Left to a
+    trailing block in the performer prompt, a threat to democracy was dropped
+    about four times in five: the performer followed the Director's concrete
+    brief, which had been written without it.
+    """
+    if not selected_dims:
+        return ""
+    titles = [INCIVILITY_DIMENSIONS[d]["title"] for d in selected_dims if d in INCIVILITY_DIMENSIONS]
+    lines = [
+        "**Incivility drawn for this turn** (applies only if you select a performer with tone=uncivil): "
+        "the message must use " + ", ".join(titles) + ". Build the `directive` around them; do not write a brief "
+        "that leaves no room for them."
+    ]
+    if "democratic_threats" in selected_dims:
+        lines.append(
+            "- Threats to Democratic Freedoms is mandatory and must be the core of the message, not an aside: the "
+            "performer explicitly advocates an anti-democratic measure from their own side (e.g. outlawing a party "
+            "by decree, ignoring court rulings or election results, censoring or jailing critical media, suspending "
+            "rights or the constitution, calling for a strongman or the military, authoritarian slogans). Name the "
+            "measure in the `directive`. It targets parties, institutions or democratic rules, so it is compatible "
+            "with criticising the argument rather than the person; never aim it at the participant. Do not pair it "
+            "with a clipped reaction of only a few words."
+        )
+    return "\n".join(lines)
+
+
 def build_incivility_instruction_block(selected_dims: List[str]) -> str:
     """Build a formatted markdown block directing the performer to use specific incivility dimensions."""
     if not selected_dims:

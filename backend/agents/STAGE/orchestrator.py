@@ -32,6 +32,7 @@ from agents.STAGE.director import (
     format_target_constraints_by_speaker,
 )
 from agents.STAGE.performer import (
+    build_director_incivility_block,
     build_performer_system_prompt,
     build_performer_user_prompt,
     build_incivility_instruction_block,
@@ -56,6 +57,8 @@ from utils.vocab_blacklist import (
 
 
 MAX_PERFORMER_RETRIES = 3
+# A threat to democracy rarely fits in a clipped reaction.
+MIN_THREAT_MESSAGE_WORDS = 12
 MAX_STANCE_RETRIES = 1
 MAX_ROOM_WIDE_OPENERS = 3
 TARGET_ELIGIBLE_SPEAKER_COUNT = 4
@@ -360,6 +363,9 @@ class Orchestrator:
 
         # Track the last agent that acted (anonymous name) and their action type, for Update calls.
         self._last_agent: Optional[str] = None
+        # Incivility dimensions drawn for the current turn, before the Director
+        # writes its brief, so the brief and the performer prompt agree.
+        self._turn_incivility_dims: List[str] = []
         self._last_action_type: Optional[str] = None
 
         # Running action counts for the Evaluate prompt.
@@ -1992,6 +1998,7 @@ class Orchestrator:
         if auto_like is not None:
             return auto_like
 
+        self._turn_incivility_dims = select_incivility_dimensions(self._rng)
         action_data = await self._director_action(
             recent_action,
             real_recent=recent_action,
@@ -2645,6 +2652,12 @@ class Orchestrator:
             except (ValueError, TypeError):
                 pass
 
+        selected_dims: List[str] = []
+        if self._agent_civility_bucket(agent_name) == "uncivil":
+            selected_dims = self._turn_incivility_dims or select_incivility_dimensions(self._rng)
+            if "democratic_threats" in selected_dims and target_word_count is not None:
+                target_word_count = max(target_word_count, MIN_THREAT_MESSAGE_WORDS)
+
         # Extract narratives for this agent's cell
         narratives_str = None
         if self.narrative_pool and self._agent_traits:
@@ -2685,8 +2698,7 @@ class Orchestrator:
         )
         performer_user_prompt = base_performer_user_prompt
 
-        if self._agent_civility_bucket(agent_name) == "uncivil":
-            selected_dims = select_incivility_dimensions(self._rng)
+        if selected_dims:
             incivility_instructions = build_incivility_instruction_block(selected_dims)
             if incivility_instructions:
                 performer_user_prompt = performer_user_prompt.rstrip() + "\n\n" + incivility_instructions
@@ -3273,6 +3285,7 @@ class Orchestrator:
                     recent_messages=recent_messages,
                 ),
                 format_blacklist_block(self._session_blacklist()),
+                build_director_incivility_block(self._turn_incivility_dims),
             ])),
             action_counts=self._action_counts,
             exclude_performer=self.state.user_name,

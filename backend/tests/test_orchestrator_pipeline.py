@@ -1578,6 +1578,47 @@ class TestExecuteTurnReply:
 
 
 
+class TestIncivilityDrawnBeforeDirector:
+
+    @pytest.mark.asyncio
+    async def test_director_and_performer_see_the_same_threat_draw(self, monkeypatch):
+        """Regression: dimensions were drawn after the Director wrote its brief, so a
+        requested threat to democracy was dropped about four times in five."""
+        import agents.STAGE.orchestrator as orch_mod
+        monkeypatch.setattr(orch_mod, "select_incivility_dimensions", lambda rng: ["democratic_threats"])
+        state = _make_state()
+        state.add_message(Message.create(sender="Bob", content="Hola"))
+        orch, _ = _make_orchestrator(
+            state=state,
+            agent_traits={"Alice": {"incivility": "uncivil", "message_length_min": 2, "message_length_max": 5}},
+        )
+        orch.auto_like_probability = 0.0
+        orch.director_llm.generate_response = AsyncMock(
+            return_value=_action_json(next_performer="Alice", action_type="message")
+        )
+        orch.performer_llm.generate_response = AsyncMock(
+            return_value="Habria que ilegalizar a ese partido por decreto y punto."
+        )
+
+        result = await orch.execute_turn("criteria_A")
+
+        assert result is not None and result.message is not None
+        director_prompts = [c.args[0] for c in orch.director_llm.generate_response.call_args_list]
+        assert any("Incivility drawn for this turn" in p and "Threats to Democratic Freedoms is mandatory" in p
+                   for p in director_prompts)
+        performer_prompt = orch.performer_llm.generate_response.call_args_list[0].args[0]
+        assert "- **Threats to Democratic Freedoms**:" in performer_prompt
+        assert "- **Impoliteness**:" not in performer_prompt
+        assert "approximately 12 words" in performer_prompt
+
+    def test_director_block_only_insists_on_threats_when_drawn(self):
+        from agents.STAGE.performer import build_director_incivility_block
+        block = build_director_incivility_block(["impoliteness", "hate_speech"])
+        assert "Impoliteness, Hate Speech and Stereotyping" in block
+        assert "mandatory" not in block
+        assert build_director_incivility_block([]) == ""
+
+
 class TestInlineNameTags:
 
     def test_bare_names_get_at_prefix_accent_insensitively(self):

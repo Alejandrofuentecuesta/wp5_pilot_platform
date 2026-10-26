@@ -12,7 +12,7 @@ async def create_session(
     pool: asyncpg.Pool,
     *,
     session_id: str,
-    token: str,
+    token: Optional[str],
     experiment_id: str,
     treatment_group: str,
     user_name: str,

@@ -236,6 +236,16 @@ CREATE INDEX IF NOT EXISTS idx_safety_flags_open
     ON safety_flags(created_at) WHERE reviewed_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_safety_flags_session
     ON safety_flags(session_id, created_at);
+
+CREATE TABLE IF NOT EXISTS synthetic_batches (
+    batch_id UUID PRIMARY KEY,
+    source_experiment_id TEXT NOT NULL,
+    experiment_id TEXT NOT NULL REFERENCES experiments(experiment_id) ON DELETE CASCADE,
+    status TEXT NOT NULL,
+    data JSONB NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 DO $$ BEGIN
     ALTER TABLE safety_flags ADD COLUMN rationale TEXT;
 EXCEPTION WHEN duplicate_column THEN NULL;

@@ -9,7 +9,7 @@ retry logic, and action routing.
 import json
 import random
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from models.message import Message
 from models.agent import Agent
@@ -2512,6 +2512,14 @@ class TestExecuteTurnErrors:
 
         assert result is not None
         assert result["next_performer"] == anon_alice
+        calls = orch.director_llm.generate_response.call_args_list
+        assert len(calls) == 2
+        assert calls[1].args[0].startswith(calls[0].args[0])
+        assert calls[1].kwargs["system_prompt"] == calls[0].kwargs["system_prompt"]
+        feedback = json.loads(calls[1].args[0].splitlines()[-1])
+        assert feedback["rejected_next_performer"] == "Performer 99"
+        assert feedback["eligible_agent_speakers"] == ["Alice", "Bob"]
+        assert calls[1].args[0] in logger.log_llm_call.call_args_list[1].kwargs["prompt"]
         logger.log_error.assert_any_call(
             "director_action_unknown_performer_label",
             "attempt 1/3: Director returned next_performer 'Performer 99', which is not one of the visible performer labels in AGENT_PROFILES",
@@ -2534,6 +2542,9 @@ class TestExecuteTurnErrors:
 
         assert result is not None
         assert result["target_user"] == anon_bob
+        feedback = json.loads(orch.director_llm.generate_response.call_args_list[1].args[0].splitlines()[-1])
+        assert feedback["rejected_target_user"] == "Performer 99"
+        assert feedback["visible_target_labels"] == ["Alice", "Bob", "participant"]
         logger.log_error.assert_any_call(
             "director_action_unknown_target_label",
             "attempt 1/3: Director returned target_user 'Performer 99', which is not one of the visible session-member labels for this turn",
@@ -2578,10 +2589,78 @@ class TestExecuteTurnErrors:
 
         assert result is not None
         assert result["target_message_id"] == valid_target_msg.message_id
+        feedback = json.loads(orch.director_llm.generate_response.call_args_list[1].args[0].splitlines()[-1])
+        assert feedback["rejected_target_message_id"] == same_cell_msg.message_id
+        assert feedback["valid_recent_reply_message_ids"] == [valid_target_msg.message_id]
+        assert "'Bob' is on the same side" in feedback["reason"]
         logger.log_error.assert_any_call(
             "director_action_invalid_reply_target",
             f"attempt 1/3: Director returned reply target '{same_cell_msg.message_id}' for '{anon_alice}', but that message is not a valid reply target for the chosen speaker",
         )
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("synthetic", [False, True])
+    async def test_retry_preserves_eligibility_dimensions_and_targets_for_human_and_synthetic_sessions(self, synthetic):
+        state = _make_state(simulation_config={"synthetic_participant": synthetic})
+        orch, _ = _make_orchestrator(state=state)
+        orch._turn_incivility_dims = ["democratic_threats"]
+        rng_before = orch._rng.getstate()
+        profiles_before = dict(orch.agent_profiles)
+        orch.director_llm.generate_response = AsyncMock(side_effect=[
+            _action_json(next_performer="Bob"),
+            _action_json(next_performer="Alice", action_type="@mention", target_user="Bob"),
+        ])
+        with patch("agents.STAGE.orchestrator.asyncio.sleep", new_callable=AsyncMock):
+            result = await orch._director_action(
+                recent=[], override_profiles={"Alice": "Eligible this turn", "participant": ""},
+            )
+        assert result["next_performer"] == "Alice"
+        assert result["target_user"] == "Bob"
+        calls = orch.director_llm.generate_response.call_args_list
+        feedback = json.loads(calls[1].args[0].splitlines()[-1])
+        assert feedback["eligible_agent_speakers"] == ["Alice"]
+        assert feedback["rejected_next_performer"] == "Bob"
+        assert feedback["wait_label"] == "participant"
+        assert "Threats to Democratic Freedoms is mandatory" in calls[0].args[0]
+        assert calls[1].args[0].startswith(calls[0].args[0])
+        assert orch._turn_incivility_dims == ["democratic_threats"]
+        assert orch._rng.getstate() == rng_before
+        assert orch.agent_profiles == profiles_before
+
+    @pytest.mark.asyncio
+    async def test_retry_never_expands_the_speaker_pool_or_exceeds_three_attempts(self):
+        orch, logger = _make_orchestrator()
+        orch.director_llm.generate_response = AsyncMock(return_value=_action_json(next_performer="Bob"))
+        with patch("agents.STAGE.orchestrator.asyncio.sleep", new_callable=AsyncMock):
+            result = await orch._director_action(recent=[], override_profiles={"Alice": "Eligible this turn"})
+        assert result is None
+        calls = orch.director_llm.generate_response.call_args_list
+        assert len(calls) == 3
+        assert "## Retry Correction" not in calls[0].args[0]
+        for call in calls[1:]:
+            assert call.args[0].count("## Retry Correction") == 1
+            feedback = json.loads(call.args[0].splitlines()[-1])
+            assert feedback["eligible_agent_speakers"] == ["Alice"]
+            assert feedback["wait_label"] is None
+        assert logger.log_error.call_args.args[0] == "director_action_failed"
+
+    @pytest.mark.asyncio
+    async def test_director_retry_can_still_yield_to_the_participant(self):
+        orch, _ = _make_orchestrator()
+        orch._director_evaluate = AsyncMock()
+        orch.director_llm.generate_response = AsyncMock(side_effect=[
+            _action_json(next_performer="UnknownAgent"),
+            _action_json(next_performer="participant"),
+        ])
+        with patch("agents.STAGE.orchestrator.asyncio.sleep", new_callable=AsyncMock):
+            result = await orch.execute_turn("criteria_A")
+        assert result is not None
+        assert result.action_type == "wait"
+        orch.performer_llm.generate_response.assert_not_called()
+        calls = orch.director_llm.generate_response.call_args_list
+        feedback = json.loads(calls[1].args[0].splitlines()[-1])
+        assert feedback["wait_label"] == "participant"
+        assert "participant" not in feedback["eligible_agent_speakers"]
 
     @pytest.mark.asyncio
     async def test_no_agents_returns_wait(self):

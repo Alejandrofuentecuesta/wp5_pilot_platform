@@ -29,6 +29,7 @@ from platforms.chatroom import _parse_target_percentage
 from models import Message
 from utils.session_manager import session_manager
 from utils.session_queue import session_queue
+from utils.synthetic_sessions import BatchRequest, list_batches, synthetic_batches
 from platforms.chatroom import build_return_url
 from platforms.chatroom import pick_participant_alias
 from utils import token_manager
@@ -273,6 +274,7 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
     # Connect to Redis.
     await redis_client.init_redis(REDIS_URL)
     print(f"Redis ready ({REDIS_URL})")
+    await synthetic_batches.recover()
 
     # Restore the live experiment so participants can join without the
     # researcher re-activating after a restart. Activation pauses every other
@@ -332,6 +334,7 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
     yield
 
     # ── Shutdown ──
+    await synthetic_batches.shutdown()
     reaper_task.cancel()
     queue_reaper_task.cancel()
     try:
@@ -2252,6 +2255,8 @@ async def _make_experiment_live(experiment_id: str) -> int:
     exists = await config_repo.get_experiment_config(pool, experiment_id)
     if not exists:
         raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
+    if exists.get("synthetic"):
+        raise HTTPException(status_code=409, detail="Synthetic experiments cannot be activated for human participants")
 
     async with _activation_lock:
         live = await session_repo.count_live_sessions_by_experiment(
@@ -2382,6 +2387,7 @@ async def admin_list_experiments(x_admin_key: str = Header(None)):
                 e.starts_at,
                 e.ends_at,
                 e.paused,
+                (e.config->'synthetic' IS NOT NULL) AS synthetic,
                 COALESCE(s.session_count, 0)  AS sessions,
                 COALESCE(m.message_count, 0)  AS messages,
                 COALESCE(t.token_count, 0)    AS tokens,
@@ -2412,6 +2418,7 @@ async def admin_list_experiments(x_admin_key: str = Header(None)):
                 "starts_at": r["starts_at"].isoformat() if r["starts_at"] else None,
                 "ends_at": r["ends_at"].isoformat() if r["ends_at"] else None,
                 "paused": r["paused"] or False,
+                "synthetic": r["synthetic"],
                 "sessions": r["sessions"],
                 "messages": r["messages"],
                 "tokens": r["tokens"],
@@ -2432,6 +2439,33 @@ async def admin_stop_session(session_id: str, x_admin_key: str = Header(None)):
         raise HTTPException(status_code=404, detail=f"Session '{session_id}' not found or already stopped")
     await session.stop(reason="admin_stopped")
     return {"status": "stopped", "session_id": session_id}
+
+
+@app.get("/admin/synthetic-batches")
+async def admin_list_synthetic_batches(source_experiment_id: Optional[str] = None, x_admin_key: str = Header(None)):
+    _require_admin(x_admin_key)
+    return {"batches": await list_batches(source_experiment_id)}
+
+
+@app.post("/admin/synthetic-batches", status_code=202)
+async def admin_start_synthetic_batch(body: BatchRequest, x_admin_key: str = Header(None)):
+    _require_admin(x_admin_key)
+    try:
+        return await synthetic_batches.start(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+
+@app.post("/admin/synthetic-batches/{batch_id}/cancel")
+async def admin_cancel_synthetic_batch(batch_id: uuid.UUID, x_admin_key: str = Header(None)):
+    _require_admin(x_admin_key)
+    try:
+        await synthetic_batches.cancel(str(batch_id))
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    return {"status": "cancelling"}
 
 
 # ── Safety tab ────────────────────────────────────────────────────────────────

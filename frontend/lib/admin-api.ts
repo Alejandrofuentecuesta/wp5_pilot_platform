@@ -3,7 +3,7 @@
 import { API_BASE } from "./constants"
 import type { AdminMeta, SafetyFlag, SafetyPolicy, SafetySummary, SessionSummary, SimulationConfig, ExperimentalConfig, TokenConfig, TokenGroupStats, TestLLMResult, ComplianceStats, ProviderKeyStatus, ExperimentToken } from "./admin-types"
 
-async function adminFetch(
+export async function adminFetch(
   path: string,
   adminKey: string,
   options: RequestInit = {},
@@ -86,7 +86,7 @@ export async function getExperimentConfig(
 ): Promise<{
   experiment_id: string
   description: string
-  config: { simulation: SimulationConfig; experimental: ExperimentalConfig }
+  config: { simulation: SimulationConfig; experimental: ExperimentalConfig; synthetic?: { batch_id: string; source_experiment_id: string } }
   created_at: string
   starts_at: string | null
   ends_at: string | null
@@ -268,6 +268,7 @@ export interface ExperimentSummary {
   starts_at: string | null
   ends_at: string | null
   paused: boolean
+  synthetic?: boolean
   sessions: number
   messages: number
   tokens: number

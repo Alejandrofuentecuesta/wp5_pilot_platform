@@ -671,6 +671,9 @@ def render_llm_call(ev: dict) -> str:
     elif is_moderator:
         role_label = "Moderator"
         role_class = "moderator"
+    elif agent == "__synthetic_participant__":
+        role_label = "Synthetic Participant"
+        role_class = "performer"
     else:
         role_label = f"Performer \u2192 {agent}"
         role_class = "performer"

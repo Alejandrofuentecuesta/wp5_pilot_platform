@@ -16,6 +16,7 @@ Performer labels stay fixed for the full session and now use the agents' real na
 """
 import asyncio
 import hashlib
+import json
 import random
 import re
 import unicodedata
@@ -3383,7 +3384,7 @@ class Orchestrator:
         # A rejected answer is fed back on the next attempt: re-sending the same
         # prompt got the same invalid pick back on all three attempts (pre-test 2:
         # 47 unknown performers, 26 invalid reply targets, 9 lost turns).
-        retry_feedback: Optional[str] = None
+        retry_feedback: Optional[dict] = None
         eligible_performers = sorted(name for name in profiles if name != self.state.user_name)
 
         for attempt in range(MAX_ACTION_ATTEMPTS):
@@ -3391,11 +3392,23 @@ class Orchestrator:
                 await asyncio.sleep(BACKOFF_SECONDS[attempt])
 
             attempt_prompt = action_user
-            if retry_feedback:
-                attempt_prompt = (
-                    f"{action_user.rstrip()}\n\n**Your previous answer was rejected:** {retry_feedback} "
-                    "Return a corrected JSON action."
+            if retry_feedback is not None:
+                correction = {
+                    **retry_feedback,
+                    "eligible_agent_speakers": eligible_performers,
+                    "wait_label": self.state.user_name if self.state.user_name in profiles else None,
+                }
+                attempt_prompt += (
+                    "\n\n## Retry Correction\n"
+                    "Your previous answer was rejected by the platform. Correct the stated problem and return "
+                    "one new JSON action using the original schema. Speaker eligibility is a hard constraint: "
+                    "use only an eligible agent from this turn, even if another session member would improve "
+                    "the treatment balance. Historical speakers and valid targets are not automatically eligible "
+                    "to speak now. If a wait_label is provided, it may be selected only to yield, never to instruct "
+                    "the participant. Keep all treatment, incivility-dimension, targeting and safety rules unchanged.\n"
+                    + json.dumps(correction, ensure_ascii=False)
                 )
+
             action_raw = None
             try:
                 action_raw = await self.director_llm.generate_response(
@@ -3407,6 +3420,7 @@ class Orchestrator:
                     "director_action_llm_call",
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: {e}",
                 )
+                retry_feedback = {"reason": "The provider call failed; no action was accepted."}
                 continue
 
             self.logger.log_llm_call(
@@ -3417,6 +3431,7 @@ class Orchestrator:
             )
 
             if not action_raw:
+                retry_feedback = {"reason": "The provider returned no response; no action was accepted."}
                 continue
 
             try:
@@ -3426,6 +3441,7 @@ class Orchestrator:
                     "director_action_parse",
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: {e}",
                 )
+                retry_feedback = {"reason": "The response did not match the required JSON action schema."}
                 continue
 
             selected_performer = action_data.get("next_performer")
@@ -3435,11 +3451,10 @@ class Orchestrator:
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned next_performer '{selected_performer}', "
                     "which is not one of the visible performer labels in AGENT_PROFILES",
                 )
-                retry_feedback = (
-                    f"'{selected_performer}' cannot speak this turn. `next_performer` must be exactly one of: "
-                    + ", ".join(eligible_performers + [self.state.user_name])
-                    + f" (choose {self.state.user_name} only to wait)."
-                )
+                retry_feedback = {
+                    "reason": f"'{selected_performer}' cannot speak this turn. Choose an eligible performer or the wait label.",
+                    "rejected_next_performer": selected_performer,
+                }
                 continue
 
             selected_target_user = action_data.get("target_user")
@@ -3449,10 +3464,11 @@ class Orchestrator:
                     f"attempt {attempt + 1}/{MAX_ACTION_ATTEMPTS}: Director returned target_user '{selected_target_user}', "
                     "which is not one of the visible session-member labels for this turn",
                 )
-                retry_feedback = (
-                    f"'{selected_target_user}' is not a member of this chat. `target_user` must be one of: "
-                    + ", ".join(sorted(visible_target_labels)) + ", or null."
-                )
+                retry_feedback = {
+                    "reason": f"'{selected_target_user}' is not a member of this chat. Use a visible target label or null.",
+                    "rejected_target_user": selected_target_user,
+                    "visible_target_labels": sorted(visible_target_labels),
+                }
                 continue
 
             if (
@@ -3467,12 +3483,13 @@ class Orchestrator:
                     f"for '{selected_performer}', but that target is not valid for the chosen speaker",
                 )
                 valid_targets = sorted(valid_direct_targets_by_speaker.get(selected_performer, set()))
-                retry_feedback = (
-                    f"'{selected_performer}' shares an alignment cell with '{selected_target_user}' and cannot target them. "
-                    f"Valid targets for '{selected_performer}': "
-                    + ", ".join(valid_targets + [self.state.user_name])
-                    + "; or pick another performer, or use a plain `message` with no target."
-                )
+                retry_feedback = {
+                    "reason": f"'{selected_target_user}' is not a valid direct agent target for '{selected_performer}'. "
+                              "Do not target the same alignment cell; choose a valid target, another performer, "
+                              "or a plain message with no target.",
+                    "speaker": selected_performer, "rejected_target_user": selected_target_user,
+                    "valid_direct_agent_targets": valid_targets,
+                }
                 if attempt < MAX_ACTION_ATTEMPTS - 1:
                     continue
 
@@ -3497,11 +3514,17 @@ class Orchestrator:
                         why = f"'{reply_target.sender}' is on the same side"
                     else:
                         why = "that message already has enough direct replies"
-                    retry_feedback = (
-                        f"'{selected_performer}' cannot reply to message {action_data['target_message_id']}: {why}. "
-                        f"Pick a reply target listed for '{selected_performer}' in the target constraints, "
-                        "another performer, or a plain `message`."
-                    )
+                    retry_feedback = {
+                        "reason": f"'{selected_performer}' cannot reply to message {action_data['target_message_id']}: {why}. "
+                                  "Pick a reply target listed in the target constraints, another performer, "
+                                  "or a plain message.",
+                        "speaker": selected_performer,
+                        "rejected_target_message_id": action_data["target_message_id"],
+                        "valid_recent_reply_message_ids": [
+                            message.message_id for message in recent_messages
+                            if self._can_directly_target_message(speaker_real, message)
+                        ],
+                    }
                     if attempt < MAX_ACTION_ATTEMPTS - 1:
                         continue
 

@@ -145,6 +145,7 @@ class SessionManager:
         user_name: str = "participant",
         experiment_id: str = "default",
         participant_stance: Optional[str] = None,
+        synthetic_config: Optional[Dict] = None,
     ) -> SimulationSession:
         """Create, start, and register a new SimulationSession.
 
@@ -157,6 +158,10 @@ class SessionManager:
         config = await config_repo.get_experiment_config(pool, experiment_id)
         if not config:
             raise RuntimeError(f"No config found for experiment '{experiment_id}'")
+        if synthetic_config is not None:
+            if not config.get("synthetic") or not synthetic_config.get("synthetic"):
+                raise ValueError("Synthetic overrides require an isolated synthetic experiment")
+            config = synthetic_config
 
         async with self._lock:
             if session_id in self._sessions:
@@ -182,7 +187,9 @@ class SessionManager:
         except Exception as exc:
             await self._discard_failed_session(session_id, session)
             raise RuntimeError(f"Session start failed for {session_id}: {exc}") from exc
-        await self._apply_experiment_pause(session)
+        # Synthetic experiments remain closed to public entry; only the admin runner starts them.
+        if synthetic_config is None:
+            await self._apply_experiment_pause(session)
 
         # Cache metadata in Redis for other workers.
         r = redis_client.get_redis()

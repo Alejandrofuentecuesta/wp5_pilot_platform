@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
+import { Bot } from "lucide-react"
 import {
   listSessions,
   getTokenStats,
@@ -30,6 +31,7 @@ import { API_BASE } from "../../lib/constants"
 import type { AdminTheme } from "./AdminPanel"
 import EvaluateTab from "./EvaluateTab"
 import SafetyTab from "./SafetyTab"
+import SyntheticTab from "./SyntheticTab"
 
 interface DashboardProps {
   adminKey: string
@@ -42,7 +44,7 @@ interface DashboardProps {
   onToggleTheme: () => void
 }
 
-type Tab = "overview" | "sessions" | "safety" | "evaluate" | "compliance" | "logs" | "settings"
+type Tab = "overview" | "sessions" | "synthetic" | "safety" | "evaluate" | "compliance" | "logs" | "settings"
 
 /* ── Theme toggle button ─────────────────────────────────────────────────── */
 
@@ -92,7 +94,7 @@ function TopBar({
 }) {
   return (
     <div className="bg-admin-surface border-b border-admin-border sticky top-0 z-30">
-      <div className="max-w-6xl mx-auto px-6 py-3 flex items-center gap-4">
+      <div className="max-w-6xl mx-auto px-6 py-3 flex flex-wrap sm:flex-nowrap items-center gap-4">
         {/* Left: title */}
         <h1 className="text-sm font-semibold text-admin-text whitespace-nowrap">Admin Dashboard</h1>
 
@@ -173,6 +175,7 @@ function StatusDot({ label, online }: { label: string; online: boolean | null })
 /* ── Tab bar ──────────────────────────────────────────────────────────────── */
 
 const TAB_LABELS: { key: Tab; label: string; icon: string }[] = [
+  { key: "synthetic", label: "Synthetic", icon: "" },
   { key: "overview", label: "Overview", icon: "M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" },
   { key: "sessions", label: "Sessions", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" },
   { key: "safety", label: "Safety", icon: "M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7l8-4z M12 8v4m0 3h.01" },
@@ -198,7 +201,7 @@ function TabBar({
   return (
     <div className="bg-admin-surface border-b border-admin-border">
       <div className="max-w-6xl mx-auto px-6">
-        <nav className="flex gap-0">
+        <nav className="flex gap-0 overflow-x-auto">
           {TAB_LABELS.map(({ key, label, icon }) => {
             const isActive = activeTab === key
             const badge =
@@ -219,9 +222,9 @@ function TabBar({
                     : "text-admin-muted hover:text-admin-text border-b-2 border-transparent"
                 }`}
               >
-                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                {key === "synthetic" ? <Bot size={14} /> : <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
                   <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
-                </svg>
+                </svg>}
                 {label}
                 {badge !== null && (
                   <span
@@ -2040,6 +2043,11 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
   // still be able to activate it.
   const handleSelect = (id: string) => {
     const target = experiments.find((e) => e.experiment_id === id)
+    if (target?.synthetic) {
+      setSelectedExperimentId(id)
+      setActiveTab("synthetic")
+      return
+    }
     if (id === selectedExperimentId && target && !target.paused) return
     setSwitchError(null)
     setPendingSwitchId(id)
@@ -2142,6 +2150,9 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
                 )}
                 {activeTab === "sessions" && (
                   <SessionsTab adminKey={adminKey} experimentId={selectedExperimentId} sessions={sessions} />
+                )}
+                {activeTab === "synthetic" && (
+                  <SyntheticTab key={selectedExperimentId} adminKey={adminKey} experimentId={selectedExperimentId} sources={experiments.filter(e => !e.synthetic).map(e => e.experiment_id)} />
                 )}
                 {activeTab === "evaluate" && (
                   <EvaluateTab

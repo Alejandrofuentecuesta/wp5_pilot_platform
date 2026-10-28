@@ -1,75 +1,180 @@
+import json
+from unittest.mock import AsyncMock
+
 import pytest
 
-from utils.participant_alignment import infer_clear_topic_stance, resolve_first_message_alignment
+from utils.participant_alignment import (
+    build_alignment_classifier_prompt,
+    parse_alignment_classifier_response,
+    resolve_first_message_alignment,
+    resolve_first_message_alignment_sync,
+)
 
 
-@pytest.mark.parametrize("topic,text,expected", [
-    ("immigration", "Estoy a favor de la inmigracion.", "pro_topic"),
-    ("immigration", "Personalmente apoyo la inmigraci\u00f3n", "pro_topic"),
-    ("immigration", "La inmigracion es un derecho.", "pro_topic"),
-    ("immigration", "Creo que la inmigracion es positiva para nuestro pais.", "pro_topic"),
-    ("immigration", "Estoy en contra de la inmigracion.", "anti_topic"),
-    ("immigration", "Hay que restringir la inmigracion", "anti_topic"),
-    ("immigration", "Los inmigrantes reciben un trato de favor del Estado", "anti_topic"),
-    ("immigration", "Los inmigrantes no hacen ningun esfuerzo por integrarse", "anti_topic"),
-    ("climate_change", "Estoy a favor de las energias renovables", "pro_topic"),
-    ("climate_change", "Debemos priorizar las energias renovables", "pro_topic"),
-    ("climate_change", "Apoyo las leyes medioambientales mas estrictas", "pro_topic"),
-    ("climate_change", "Hay que cumplir los objetivos internacionales de CO2", "pro_topic"),
-    ("climate_change", "Estoy en contra de las energias renovables", "anti_topic"),
-    ("climate_change", "No apoyo las normativas medioambientales mas estrictas", "anti_topic"),
-    ("climate_change", "Debemos priorizar el gas para reducir costes", "anti_topic"),
-    ("climate_change", "El Gobierno no deberia dar prioridad al cumplimiento de los objetivos de emision de CO2", "anti_topic"),
-])
-def test_explicit_topic_statements(topic, text, expected):
-    side, evidence = infer_clear_topic_stance(text, topic)
-    assert side == expected
-    assert evidence
-
-
-@pytest.mark.parametrize("text", [
-    "Hola a todos, ya he leido la noticia.",
-    "Estoy a favor de esta medida", "Estoy en contra de esta medida",
-    "La medida esta mal planteada", "No estoy a favor de la inmigracion",
-    "No creo que la inmigracion es positiva", "Quizas apoyo la inmigracion",
-    "Estoy a favor de la inmigracion pero tengo dudas",
-    "Estoy a favor de la inmigracion. Estoy en contra de la inmigracion.",
-    'Dice: "Estoy en contra de la inmigracion"',
-    "'Estoy en contra de la inmigracion' es una frase ajena",
-    "Segun Pedro, la inmigracion es positiva",
-    "Estoy en contra de la inmigracion, dice Pedro",
-    "Si estoy en contra de la inmigracion, me cambiariais de grupo",
-    "Estoy en contra de la inmigracion?",
-    "Estoy a favor de la inmigracion. Es broma.",
-    "Estoy a favor de la inmigracion. No es lo que pienso.",
-    "No se. Estoy en contra de la inmigracion.",
-    "El cambio climatico es real", "El cambio climatico es una farsa",
-])
-def test_ambiguous_generic_quoted_and_unrelated_statements_do_not_override(text):
-    for topic in ("immigration", "climate_change", "unknown"):
-        assert infer_clear_topic_stance(text, topic) == (None, [])
-
-
-@pytest.mark.parametrize("survey,inferred", [("pro_topic", "anti_topic"), ("anti_topic", "pro_topic")])
-def test_only_a_clear_opposite_side_corrects_the_survey(survey, inferred):
-    text = "Estoy en contra de la inmigracion" if inferred == "anti_topic" else "Apoyo la inmigracion"
-    result = resolve_first_message_alignment(
-        survey_stance=survey, survey_cell=survey, content=text,
-        topic="immigration", message_id="first",
+def test_build_prompts_contains_required_rules():
+    sys_prompt, user_prompt = build_alignment_classifier_prompt(
+        content="Creo que los inmigrantes aportan mucho a este país y deberian regularizarlos.",
+        topic="immigration",
+        survey_cell="anti_topic",
+        headline="España supera los 6,9 millones de residentes extranjeros",
     )
-    assert result["survey_stance"] == survey
-    assert result["effective_cell"] == inferred
+    assert "Telegram-style group chat" in sys_prompt
+    assert "Conservative override requirement" in sys_prompt
+    assert '"pro"' in sys_prompt and '"anti"' in sys_prompt and '"neutral"' in sys_prompt
+    assert "regularisation" in sys_prompt
+    assert "España supera los 6,9 millones" in user_prompt
+    assert "anti_topic" in user_prompt
+
+
+def test_parse_classifier_response():
+    raw_markdown = '```json\n{"stance": "pro", "confidence": "high", "rationale": "Economic contribution."}\n```'
+    parsed = parse_alignment_classifier_response(raw_markdown)
+    assert parsed["stance"] == "pro"
+    assert parsed["confidence"] == "high"
+
+    raw_plain = '{"stance": "anti", "confidence": "medium", "rationale": "Security concerns."}'
+    parsed2 = parse_alignment_classifier_response(raw_plain)
+    assert parsed2["stance"] == "anti"
+
+
+def test_sync_resolution_fallback():
+    result = resolve_first_message_alignment_sync(
+        survey_stance="anti_topic",
+        survey_cell="anti_topic",
+        content="Estoy a favor de la inmigracion",
+        topic="immigration",
+        message_id="sync-1",
+    )
+    assert result["effective_cell"] == "anti_topic"
+    assert result["source"] == "survey"
+    assert result["locked"] is True
+
+
+@pytest.mark.asyncio
+async def test_llm_classifier_corrects_raul_message():
+    """Test 1: Survey says anti_topic, but first message is clearly pro-immigration."""
+    mock_llm = AsyncMock()
+    mock_llm.generate_response.return_value = json.dumps({
+        "stance": "pro",
+        "confidence": "high",
+        "rationale": "Stresses economic contribution and calls for regularisation.",
+    })
+
+    content = "Creo que los inmigrantes aportan mucho a este país y deberian regularizarlos. nuestra economia se va a pique sin ellos"
+    result = await resolve_first_message_alignment(
+        survey_stance="anti_topic",
+        survey_cell="anti_topic",
+        content=content,
+        topic="immigration",
+        message_id="msg-raul",
+        classifier_llm=mock_llm,
+    )
+    assert result["inferred_cell"] == "pro_topic"
+    assert result["effective_cell"] == "pro_topic"
     assert result["source"] == "first_message_correction"
     assert result["locked"] is True
-    assert result["first_message_id"] == "first"
+    assert mock_llm.generate_response.call_count == 1
 
 
-@pytest.mark.parametrize("text", ["Hola", "Apoyo la inmigracion", "Estoy en contra de esta medida"])
-def test_no_contradiction_keeps_survey(text):
-    result = resolve_first_message_alignment(
-        survey_stance="favor", survey_cell="pro_topic", content=text,
-        topic="immigration", message_id="first",
+@pytest.mark.asyncio
+async def test_llm_classifier_corrects_mario_message():
+    """Test 2: Survey says pro_topic, but first message is violently anti-immigration."""
+    mock_llm = AsyncMock()
+    mock_llm.generate_response.return_value = json.dumps({
+        "stance": "anti",
+        "confidence": "high",
+        "rationale": "Uses dehumanizing language ('parásitos') and demands cleaning the streets.",
+    })
+
+    content = "Debemos limpiar ya las calles de estos parasitos, delinquen, nos dejan sin vivienda i sin servicios y encima les dan paguitas"
+    result = await resolve_first_message_alignment(
+        survey_stance="pro_topic",
+        survey_cell="pro_topic",
+        content=content,
+        topic="immigration",
+        message_id="msg-mario",
+        classifier_llm=mock_llm,
     )
-    assert result["survey_stance"] == "favor"
-    assert result["effective_cell"] == "pro_topic"
+    assert result["inferred_cell"] == "anti_topic"
+    assert result["effective_cell"] == "anti_topic"
+    assert result["source"] == "first_message_correction"
+    assert result["locked"] is True
+
+
+@pytest.mark.asyncio
+async def test_llm_classifier_abstains_on_greeting_or_ambiguity():
+    """Test 3: Greeting should NOT override the survey."""
+    mock_llm = AsyncMock()
+    mock_llm.generate_response.return_value = json.dumps({
+        "stance": "off_topic",
+        "confidence": "high",
+        "rationale": "Just a greeting.",
+    })
+
+    result = await resolve_first_message_alignment(
+        survey_stance="anti_topic",
+        survey_cell="anti_topic",
+        content="Hola a todos, acabo de leer la noticia.",
+        topic="immigration",
+        message_id="msg-greeting",
+        classifier_llm=mock_llm,
+    )
+    assert result["inferred_cell"] is None
+    assert result["effective_cell"] == "anti_topic"
     assert result["source"] == "survey"
+    assert result["locked"] is True
+
+
+@pytest.mark.asyncio
+async def test_llm_classifier_abstains_on_low_confidence():
+    """Test 4: Low confidence should not override the survey."""
+    mock_llm = AsyncMock()
+    mock_llm.generate_response.return_value = json.dumps({
+        "stance": "pro",
+        "confidence": "low",
+        "rationale": "Vague mention of economy.",
+    })
+
+    result = await resolve_first_message_alignment(
+        survey_stance="anti_topic",
+        survey_cell="anti_topic",
+        content="La economia es rara.",
+        topic="immigration",
+        message_id="msg-vague",
+        classifier_llm=mock_llm,
+    )
+    assert result["inferred_cell"] is None
+    assert result["effective_cell"] == "anti_topic"
+    assert result["source"] == "survey"
+
+
+@pytest.mark.asyncio
+async def test_llm_classifier_abstains_when_llm_fails_or_times_out():
+    """Test 5: If LLM call fails, the survey stance is preserved safely."""
+    mock_llm = AsyncMock()
+    mock_llm.generate_response.side_effect = TimeoutError("Anthropic timeout")
+
+    result = await resolve_first_message_alignment(
+        survey_stance="anti_topic",
+        survey_cell="anti_topic",
+        content="Estoy claramente a favor de la inmigracion",
+        topic="immigration",
+        message_id="msg-timeout",
+        classifier_llm=mock_llm,
+    )
+    assert result["inferred_cell"] is None
+    assert result["effective_cell"] == "anti_topic"
+    assert result["source"] == "survey"
+    assert result["locked"] is True
+
+
+@pytest.mark.asyncio
+async def test_climate_change_prompt():
+    """Test 6: Climate change topic builds correct prompt and labels."""
+    sys_prompt, user_prompt = build_alignment_classifier_prompt(
+        content="Debemos priorizar las energias renovables",
+        topic="climate_change",
+        survey_cell="anti_topic",
+    )
+    assert "Climate change and energy transition" in sys_prompt
+    assert "renewable energy" in sys_prompt

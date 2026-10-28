@@ -834,7 +834,7 @@ class SimulationSession:
             break
         return names, personas, traits
 
-    def _resolve_first_participant_alignment(self, message: Message) -> None:
+    async def _resolve_first_participant_alignment(self, message: Message) -> None:
         """Freeze the reference before enabling the clock or any agent pipeline."""
         seed = self.experimental_config.get("seed") or {}
         topic = str(seed.get("template_id") or "")
@@ -844,10 +844,18 @@ class SimulationSession:
                 for group in self._experimental_full.get("groups", {}).values()
                 if (group.get("seed") or {}).get("template_id")
             ), "")
-        resolution = resolve_first_message_alignment(
+        headline = str(seed.get("headline") or "")
+        survey_cell = _participant_alignment_cell(self.participant_stance_hint)
+
+        resolution = await resolve_first_message_alignment(
             survey_stance=self.participant_stance_hint,
-            survey_cell=_participant_alignment_cell(self.participant_stance_hint),
-            content=message.content, topic=topic, message_id=message.message_id,
+            survey_cell=survey_cell,
+            content=message.content,
+            topic=topic,
+            message_id=message.message_id,
+            classifier_llm=self.classifier_llm,
+            headline=headline,
+            logger=self.logger,
         )
         self._participant_alignment = resolution
         self.state.participant_alignment = resolution
@@ -1605,7 +1613,7 @@ class SimulationSession:
             mentions=mentions,
         )
         if not self._first_user_message_received:
-            self._resolve_first_participant_alignment(message)
+            await self._resolve_first_participant_alignment(message)
         self.state.add_message(message)
 
         # Reset session start_time when the participant posts their first message

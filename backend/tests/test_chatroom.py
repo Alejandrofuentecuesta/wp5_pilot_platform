@@ -111,7 +111,17 @@ def _patch_externals():
 
             # LLMManager.from_simulation_config returns a mock LLMManager
             mock_llm = MagicMock()
-            mock_llm.generate_response = AsyncMock(return_value=None)
+            def _fake_generate_response(prompt, **kwargs):
+                sys_p = kwargs.get("system_prompt", "")
+                if "annotator for a social-science study" in sys_p:
+                    p_lower = prompt.lower()
+                    if "en contra de la inmigracion" in p_lower:
+                        return json.dumps({"stance": "anti", "confidence": "high", "rationale": "anti"})
+                    if "apoyo la inmigracion" in p_lower or "a favor de la inmigracion" in p_lower:
+                        return json.dumps({"stance": "pro", "confidence": "high", "rationale": "pro"})
+                    return json.dumps({"stance": "off_topic", "confidence": "high", "rationale": "off_topic"})
+                return None
+            mock_llm.generate_response = AsyncMock(side_effect=_fake_generate_response)
             MockLLMManager.from_simulation_config.return_value = mock_llm
 
             yield {
@@ -647,6 +657,7 @@ class TestParticipantSafety:
 
     @pytest.mark.asyncio
     async def test_user_message_does_not_wait_for_safety_classifier(self):
+        from platforms.chatroom import PARTICIPANT_SAFETY_SYSTEM_PROMPT
         with _patch_externals():
             session, _ = _create_session()
             session.running = True
@@ -654,6 +665,8 @@ class TestParticipantSafety:
             release_classifier = asyncio.Event()
 
             async def slow_classifier(*args, **kwargs):
+                if kwargs.get("system_prompt") != PARTICIPANT_SAFETY_SYSTEM_PROMPT:
+                    return None
                 classifier_started.set()
                 await release_classifier.wait()
                 return None

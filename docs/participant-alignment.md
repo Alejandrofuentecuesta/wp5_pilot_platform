@@ -6,13 +6,16 @@ check for an explicit topic-side statement contradicting that survey. Only a
 clear opposite side replaces the treatment reference. The treatment group itself
 does not change.
 
-Rules live in `backend/utils/participant_alignment.py`. They use direct Spanish
-statements specific to the seed's `template_id` (`immigration` or
-`climate_change`), not an extra model call. Unknown topics, generic reactions to
-the article, questions, quotations, reported speech, uncertainty and mixed
-signals abstain. This deliberately sacrifices recall to avoid false corrections.
-Climate rules concern energy and environmental policy, not belief in climate
-science alone. A greeting counts as the first post and exhausts this opportunity.
+Rules and prompts live in `backend/utils/participant_alignment.py`. They use
+the fast classifier model (`classifier_llm`, typically Claude Haiku) with a
+structured annotation prompt specific to the seed's `template_id`
+(`immigration` or `climate_change`). If the model is unavailable or fails, the
+survey stance is preserved without alteration. Unknown topics, generic reactions
+to the article, questions, quotations, reported speech, uncertainty and mixed
+signals abstain. This deliberately avoids false corrections while reliably
+capturing natural Spanish phrasing and informal expressions. Climate rules concern
+energy and environmental policy, not belief in climate science alone. A greeting
+counts as the first post and exhausts this opportunity.
 
 The decision is locked even if no correction is made. Later posts, Director
 retries, reconnections and restarts never reconsider it. If the survey side is

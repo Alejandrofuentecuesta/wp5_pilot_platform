@@ -164,6 +164,7 @@ HTML_HEAD = """\
   .badge-session_start {{ background: var(--blue-light); color: var(--blue); }}
   .badge-websocket_detach {{ background: var(--gray-light); color: var(--gray); }}
   .badge-session_end {{ background: var(--red-light); color: var(--red); }}
+  .badge-participant_alignment_resolution {{ background: var(--green-light); color: var(--green); }}
   .badge-like {{ background: var(--orange-light); color: var(--orange); }}
   .badge-emotions_checkup_response {{ background: var(--orange-light); color: var(--orange); }}
   .badge-agent_impressions {{ background: var(--red-light); color: var(--red); }}
@@ -228,6 +229,7 @@ HTML_HEAD = """\
   .llm-agent.director {{ color: var(--purple); }}
   .llm-agent.performer {{ color: var(--orange); }}
   .llm-agent.moderator {{ color: var(--blue); }}
+  .llm-agent.classifier {{ color: var(--green); }}
   .llm-sections {{ margin-top: 0.5rem; }}
 
   details {{
@@ -480,6 +482,8 @@ _SIM_STRUCTURED_KEYS = {
     "performer_top_p", "performer_max_tokens",
     "moderator_llm_provider", "moderator_llm_model", "moderator_temperature",
     "moderator_top_p", "moderator_max_tokens",
+    "classifier_llm_provider", "classifier_llm_model", "classifier_temperature",
+    "classifier_top_p", "classifier_max_tokens",
 }
 
 _EXP_STRUCTURED_KEYS = {"internal_validity_criteria", "features", "seed"}
@@ -558,6 +562,8 @@ def render_session_start(ev: dict) -> str:
     parts.append(_llm_row("Director", sim_cfg))
     parts.append(_llm_row("Performer", sim_cfg))
     parts.append(_llm_row("Moderator", sim_cfg))
+    if "classifier_llm_provider" in sim_cfg or "classifier_llm_model" in sim_cfg:
+        parts.append(_llm_row("Classifier", sim_cfg))
     parts.append('    </div>')
 
     # ── Internal Validity section ──
@@ -671,9 +677,18 @@ def render_llm_call(ev: dict) -> str:
     elif is_moderator:
         role_label = "Moderator"
         role_class = "moderator"
+    elif agent == "__participant_alignment_classifier__":
+        role_label = "Classifier \u2192 Alignment"
+        role_class = "classifier"
+    elif agent in ("__participant_safety_classifier__", "__safety__"):
+        role_label = "Classifier \u2192 Safety"
+        role_class = "classifier"
     elif agent == "__synthetic_participant__":
         role_label = "Synthetic Participant"
         role_class = "performer"
+    elif "classifier" in agent:
+        role_label = f"Classifier \u2192 {agent}"
+        role_class = "classifier"
     else:
         role_label = f"Performer \u2192 {agent}"
         role_class = "performer"
@@ -959,7 +974,7 @@ def render_generic(ev: dict) -> str:
     ts = _format_time(ev["timestamp"])
     etype = ev.get("event_type", "unknown")
     badge_class = f"badge-{etype}" if etype in (
-        "session_start", "session_end", "websocket_detach"
+        "session_start", "session_end", "websocket_detach", "participant_alignment_resolution"
     ) else "badge-llm_call"
 
     data_str = json.dumps(ev.get("data", {}), indent=2)

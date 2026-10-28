@@ -1,6 +1,6 @@
 """Regression tests for the HTML session report renderer."""
 
-from utils.log_viewer import render_agent_impressions, render_session_start
+from utils.log_viewer import render_agent_impressions, render_llm_call, render_session_start
 
 
 def _impressions_event(survey):
@@ -81,3 +81,31 @@ def test_session_start_renders_lists_of_config_objects():
     assert "humanize_word_subs_list" in rendered
     assert "&quot;replacement&quot;: &quot;q&quot;" in rendered
     assert "Timeline — started at 11:12:26.866 on 29/07/2026" in rendered
+
+
+def test_render_llm_call_classifier_labels():
+    alignment_call = {
+        "timestamp": "2026-10-28T12:20:27.368369+00:00",
+        "data": {
+            "agent_name": "__participant_alignment_classifier__",
+            "prompt": "prompt text",
+            "response": '{"stance": "neutral"}',
+        },
+    }
+    rendered = render_llm_call(alignment_call)
+    assert "Classifier → Alignment" in rendered
+    assert "llm-agent classifier" in rendered
+    assert "Performer" not in rendered
+
+    safety_call = {
+        "timestamp": "2026-10-28T12:20:28.000000+00:00",
+        "data": {
+            "agent_name": "__participant_safety_classifier__",
+            "prompt": "prompt text",
+            "response": '{"status": "ok"}',
+        },
+    }
+    rendered_safety = render_llm_call(safety_call)
+    assert "Classifier → Safety" in rendered_safety
+    assert "llm-agent classifier" in rendered_safety
+

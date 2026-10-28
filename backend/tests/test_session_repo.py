@@ -71,7 +71,7 @@ async def test_first_message_alignment_round_trips_without_overwriting_survey(db
         treatment_group="civil_support", user_name="alice", participant_stance="pro_topic",
     )
     mid = str(uuid.uuid4())
-    resolution = resolve_first_message_alignment(
+    resolution = await resolve_first_message_alignment(
         survey_stance="pro_topic", survey_cell="pro_topic", content="Estoy en contra de la inmigracion",
         topic="immigration", message_id=mid,
     )

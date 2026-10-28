@@ -3340,6 +3340,7 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
                 m.sender,
                 m.content,
                 m.is_incivil,
+                m.metadata,
                 m.sent_at
             FROM sessions s
             LEFT JOIN messages m
@@ -3365,10 +3366,14 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
                 "messages": [],
             }
         if r["sender"] is not None:
+            metadata = r.get("metadata") or {}
+            if isinstance(metadata, str):
+                metadata = json.loads(metadata)
             session_data[session_id]["messages"].append({
                 "sender": r["sender"],
                 "content": r["content"],
                 "is_incivil": r["is_incivil"],
+                "participant_alignment_resolution": metadata.get("participant_alignment_resolution"),
             })
 
     def _build_group_stats(data_list: list[Dict[str, Any]], expected_groups: Optional[list[str]] = None) -> list[Dict[str, Any]]:
@@ -3403,6 +3408,9 @@ async def admin_experiment_compliance(experiment_id: str, x_admin_key: str = Hea
                 data["participant_stance"],
                 first_participant_text,
             )
+            resolution = participant_messages[0].get("participant_alignment_resolution") if participant_messages else None
+            if isinstance(resolution, dict) and resolution.get("version") == 1 and resolution.get("locked"):
+                participant_cell = resolution.get("effective_cell")
 
             for message in data["messages"]:
                 sender = message["sender"]

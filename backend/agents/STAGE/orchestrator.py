@@ -322,7 +322,7 @@ class Orchestrator:
         self.ecological_criteria = ecological_criteria
         self._agent_traits = agent_traits or {}
         self.participant_stance_hint = getattr(state, "participant_stance_hint", None)
-        self._participant_hint_text = format_participant_hint(self.participant_stance_hint)
+        self._participant_hint_text = self._format_participant_stance_reference()
         self.classifier_prompt_template = (
             classifier_prompt_template
             if isinstance(classifier_prompt_template, str) and classifier_prompt_template.strip()
@@ -743,7 +743,10 @@ class Orchestrator:
         return None
 
     def _participant_alignment_cell_live(self) -> Optional[str]:
-        """Resolve participant cell, treating the pre-chat survey as authoritative when present."""
+        """Use the locked first-post decision, or the survey for legacy sessions."""
+        resolution = self.state.participant_alignment
+        if resolution is not None:
+            return resolution.get("effective_cell")
         hint_cell = self._participant_alignment_cell_from_hint(self.participant_stance_hint)
         if hint_cell is not None:
             return hint_cell
@@ -1760,10 +1763,22 @@ class Orchestrator:
             count += 1
         return speaker, count
 
+    def _format_participant_stance_reference(self) -> str:
+        survey = format_participant_hint(self.participant_stance_hint)
+        resolution = self.state.participant_alignment
+        if resolution is None:
+            return survey
+        effective = resolution.get("effective_cell") or "unclear / mixed"
+        return (
+            f"{survey}. Fixed effective side for this session: {effective}; "
+            f"source: {resolution.get('source')}. The first-message check is complete. "
+            "Use the effective side for treatment roles; never reclassify from later messages."
+        )
+
     def set_participant_stance_hint(self, participant_stance_hint: Optional[str]) -> None:
-        """Refresh the participant's fixed survey-based side in prompts and summaries."""
+        """Refresh the survey and the separately locked effective side in prompts."""
         self.participant_stance_hint = participant_stance_hint
-        self._participant_hint_text = format_participant_hint(participant_stance_hint)
+        self._participant_hint_text = self._format_participant_stance_reference()
         self._participant_alignment_cell_text = format_participant_alignment_cell(
             self._participant_alignment_cell_live()
         )

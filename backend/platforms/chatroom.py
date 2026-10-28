@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict, List, Optional
 from models import Message, Agent, SessionState
 from utils import Logger
 from utils import name_scrub
+from utils.participant_alignment import RESOLUTION_KEY, resolve_first_message_alignment
 from utils.llm.llm_manager import LLMManager
 from agents.agent_manager import AgentManager
 from agents.STAGE.classifier import DEFAULT_CLASSIFIER_PROMPT_TEMPLATE
@@ -352,6 +353,20 @@ class SimulationSession:
         self.redirect_url = experimental_full.get("redirect_url", "")
         self.narrative_pool = experimental_full.get("narrative_pool", [])
         self.participant_stance_hint = participant_stance_hint
+        first_post = next(
+            (m for m in (_preloaded_messages or []) if m.get("sender") == user_name), None,
+        )
+        saved_alignment = first_post.get(RESOLUTION_KEY) if first_post else None
+        self._participant_alignment = (
+            saved_alignment if isinstance(saved_alignment, dict)
+            and saved_alignment.get("version") == 1 and saved_alignment.get("locked")
+            and saved_alignment.get("first_message_id") == first_post.get("message_id")
+            else None
+        )
+        roster_stance = (
+            self._participant_alignment.get("effective_cell")
+            if self._participant_alignment is not None else participant_stance_hint
+        )
 
         # Optionally inject the seed article summary into chatroom_context so agents know the article content.
         if self.experimental_config.get("agents_see_article"):
@@ -382,7 +397,7 @@ class SimulationSession:
         if self._agent_mode == "pool":
             agent_names, agent_personas, self._agent_traits = self._select_pool_agents(
                 experimental_full=experimental_full,
-                participant_stance_hint=participant_stance_hint,
+                participant_stance_hint=roster_stance,
             )
         else:
             # Copies: the roster is mutated below (blocks, name collisions)
@@ -416,24 +431,9 @@ class SimulationSession:
         # an agent's identity. The colliding agent is renamed instead — same
         # persona and traits, gender-matched alias, name swapped inside the
         # persona text so the agent doesn't call itself by the old name.
-        folded_user = name_scrub.fold(user_name)
-        for index, existing_name in enumerate(agent_names):
-            if name_scrub.fold(existing_name) != folded_user:
-                continue
-            collision_used = set(agent_names) | set(_preloaded_blocks or {}) | {user_name}
-            replacement_name = _next_replacement_agent_name_like(existing_name, collision_used)
-            if index < len(agent_personas) and agent_personas[index]:
-                agent_personas[index] = name_scrub.scrub_text(
-                    agent_personas[index], existing_name, replacement=replacement_name,
-                )[0]
-            agent_names[index] = replacement_name
-            if existing_name in self._agent_traits:
-                self._agent_traits[replacement_name] = self._agent_traits.pop(existing_name)
-            print(
-                f"[Session {session_id}] agent '{existing_name}' renamed to "
-                f"'{replacement_name}' — participant shares the name"
-            )
-            break  # roster names are unique; at most one can collide
+        agent_names, agent_personas, self._agent_traits = self._avoid_participant_name_collision(
+            agent_names, agent_personas, self._agent_traits, user_name, _preloaded_blocks or {},
+        )
 
         self._agent_names = agent_names
 
@@ -447,6 +447,7 @@ class SimulationSession:
             agents=agents,
             duration_minutes=self.simulation_config["session_duration_minutes"],
             participant_stance_hint=participant_stance_hint,
+            participant_alignment=self._participant_alignment,
             experimental_config=self.experimental_config,
             treatment_group=treatment_group,
             simulation_config=self.simulation_config,
@@ -693,7 +694,7 @@ class SimulationSession:
     ) -> tuple[List[str], List[str], Dict[str, Dict[str, str]]]:
         """Pick a stable pool roster for the current treatment.
 
-        The participant's pre-chat topic survey acts as a fixed side assignment
+        The participant's resolved topic side acts as a fixed side assignment
         for like-minded vs not-like-minded selection, while treatment targets
         still control the overall stance/incivility mix.
         """
@@ -812,6 +813,61 @@ class SimulationSession:
         for a in pool_agents:
             traits[a["name"]] = self._pool_agent_traits(a)
         return agent_names, agent_personas, traits
+
+    def _avoid_participant_name_collision(
+        self, names: List[str], personas: List[str], traits: dict,
+        user_name: str, blocks: dict,
+    ) -> tuple[List[str], List[str], dict]:
+        for index, existing_name in enumerate(names):
+            if name_scrub.fold(existing_name) != name_scrub.fold(user_name):
+                continue
+            replacement = _next_replacement_agent_name_like(
+                existing_name, set(names) | set(blocks) | {user_name},
+            )
+            if index < len(personas) and personas[index]:
+                personas[index] = name_scrub.scrub_text(
+                    personas[index], existing_name, replacement=replacement,
+                )[0]
+            names[index] = replacement
+            if existing_name in traits:
+                traits[replacement] = traits.pop(existing_name)
+            break
+        return names, personas, traits
+
+    def _resolve_first_participant_alignment(self, message: Message) -> None:
+        """Freeze the reference before enabling the clock or any agent pipeline."""
+        seed = self.experimental_config.get("seed") or {}
+        topic = str(seed.get("template_id") or "")
+        if not topic:
+            topic = next((
+                str((group.get("seed") or {}).get("template_id"))
+                for group in self._experimental_full.get("groups", {}).values()
+                if (group.get("seed") or {}).get("template_id")
+            ), "")
+        resolution = resolve_first_message_alignment(
+            survey_stance=self.participant_stance_hint,
+            survey_cell=_participant_alignment_cell(self.participant_stance_hint),
+            content=message.content, topic=topic, message_id=message.message_id,
+        )
+        self._participant_alignment = resolution
+        self.state.participant_alignment = resolution
+        message.metadata[RESOLUTION_KEY] = resolution
+        if (
+            resolution["effective_cell"] and resolution["effective_cell"] != resolution["survey_cell"]
+            and self._agent_mode == "pool"
+        ):
+            names, personas, traits = self._select_pool_agents(
+                experimental_full=self._experimental_full,
+                participant_stance_hint=resolution["effective_cell"],
+            )
+            names, personas, traits = self._avoid_participant_name_collision(
+                names, personas, traits, self.state.user_name, self.state.blocked_agents,
+            )
+            self._apply_agent_roster(names, personas, traits)
+        else:
+            for orchestrator in self._pipeline_orchestrators:
+                orchestrator.set_participant_stance_hint(self.participant_stance_hint)
+        self.logger.log_event(RESOLUTION_KEY, resolution)
 
     @staticmethod
     def _pool_agent_traits(agent: dict) -> Dict[str, Any]:
@@ -1548,6 +1604,8 @@ class SimulationSession:
             quoted_text=canonical_quoted_text,
             mentions=mentions,
         )
+        if not self._first_user_message_received:
+            self._resolve_first_participant_alignment(message)
         self.state.add_message(message)
 
         # Reset session start_time when the participant posts their first message

@@ -61,6 +61,31 @@ async def test_activate_session(db_pool, experiment_id):
     assert row["random_seed"] == 42
 
 
+async def test_first_message_alignment_round_trips_without_overwriting_survey(db_pool, experiment_id):
+    import uuid
+    from db.repositories import message_repo
+    from utils.participant_alignment import RESOLUTION_KEY, resolve_first_message_alignment
+
+    await session_repo.create_session(
+        db_pool, session_id=SESSION_ID, token=TOKEN, experiment_id=experiment_id,
+        treatment_group="civil_support", user_name="alice", participant_stance="pro_topic",
+    )
+    mid = str(uuid.uuid4())
+    resolution = resolve_first_message_alignment(
+        survey_stance="pro_topic", survey_cell="pro_topic", content="Estoy en contra de la inmigracion",
+        topic="immigration", message_id=mid,
+    )
+    await message_repo.insert_message(
+        db_pool, message_id=mid, session_id=SESSION_ID, experiment_id=experiment_id,
+        sender="alice", content="Estoy en contra de la inmigracion", sent_at=datetime.now(timezone.utc),
+        metadata={RESOLUTION_KEY: resolution},
+    )
+    saved = await message_repo.get_session_messages(db_pool, SESSION_ID)
+    assert saved[0][RESOLUTION_KEY] == resolution
+    row = await session_repo.get_session(db_pool, SESSION_ID)
+    assert row["participant_stance"] == "pro_topic"
+
+
 async def test_end_session(db_pool, experiment_id):
     await session_repo.create_session(
         db_pool,

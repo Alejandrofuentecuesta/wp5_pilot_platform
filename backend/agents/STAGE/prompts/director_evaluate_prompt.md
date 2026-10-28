@@ -11,7 +11,7 @@ Here is the chatroom context, as described by the researcher for this experiment
 
 ## Participant Self-Report
 
-If available, treat this as the participant's fixed pre-chat classification for the session.
+The survey is the initial reference. If a fixed effective side resolved from the first participant message is supplied, it takes precedence. Never reclassify the participant from later messages.
 
 `{PARTICIPANT_STANCE_HINT}`
 

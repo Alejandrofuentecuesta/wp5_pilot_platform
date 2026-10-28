@@ -80,3 +80,32 @@ async def test_admin_experiment_compliance_filters_duration_expired():
     assert completed_by_name["group_a"]["incivil_count"] == 0  # s1 had is_incivil=False
     assert completed_by_name["group_b"]["session_count"] == 1
     assert completed_by_name["group_b"]["incivil_count"] == 1  # s3 had is_incivil=True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("effective,expected_like", [("anti_topic", 1), ("pro_topic", 0), (None, 0)])
+async def test_compliance_uses_persisted_first_message_decision(effective, expected_like):
+    import json
+    pool = MagicMock()
+    conn = AsyncMock()
+    pool.acquire.return_value.__aenter__.return_value = conn
+    base = {
+        "session_id": "s1", "treatment_group": "group_a", "user_name": "Human",
+        "participant_stance": "pro_topic", "end_reason": "duration_expired", "is_incivil": None,
+    }
+    conn.fetch.return_value = [
+        {**base, "sender": "Human", "content": "Estoy en contra de la inmigracion", "metadata": json.dumps({
+            "participant_alignment_resolution": {"version": 1, "locked": True, "effective_cell": effective},
+        })},
+        # An apparent later switch must not change compliance either.
+        {**base, "sender": "Human", "content": "Apoyo la inmigracion", "metadata": {}},
+        {**base, "sender": "Bot", "content": "Mi postura", "is_incivil": False},
+    ]
+    cfg = {"experimental": {"agent_pool": [{"name": "Bot", "alignment_cell": "anti_topic"}]}}
+    with patch.object(main, "_require_admin"), patch.object(main, "_get_pool", return_value=pool), \
+         patch.object(main.config_repo, "get_experiment", AsyncMock(return_value={"id": "exp1"})), \
+         patch.object(main.config_repo, "get_experiment_config", AsyncMock(return_value=cfg)):
+        result = await main.admin_experiment_compliance("exp1", x_admin_key="test")
+    group = result["groups"][0]
+    assert group["like_minded_count"] == expected_like
+    assert group["stance_classified_count"] == (0 if effective is None else 1)

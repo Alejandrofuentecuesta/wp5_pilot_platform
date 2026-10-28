@@ -19,6 +19,8 @@ class SessionState:
     user_name: str = "participant"
     # Optional pre-session self-report used as a prior when selecting pool agents.
     participant_stance_hint: Optional[str] = None
+    # One-shot first-message decision; the survey above remains unchanged.
+    participant_alignment: Optional[dict] = None
     experimental_config: dict = field(default_factory=dict)
     simulation_config: dict = field(default_factory=dict)
     treatment_group: Optional[str] = None

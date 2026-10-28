@@ -79,6 +79,11 @@ show expandable profiles. Seeds reproduce assignments and delay sequences, not
 model responses or wall-clock delivery times. No demographic identities or
 survey results are invented.
 
+Synthetic initial posts use the same one-shot survey-side correction as human
+posts. The assigned survey/profile is preserved; only a clear contradiction in
+the first delivered post can change the locked effective treatment reference.
+See [Participant Alignment](participant-alignment.md).
+
 ## Persistence and Restart
 
 Batch progress is stored in `synthetic_batches` and survives browser reloads.

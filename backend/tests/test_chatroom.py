@@ -454,6 +454,103 @@ class TestSessionLifecycle:
 
 class TestHandleUserMessage:
 
+    @staticmethod
+    def alignment_config(parallel_turns=1):
+        from copy import deepcopy
+        cfg = deepcopy(MINIMAL_CONFIG)
+        cfg["simulation"].update(agent_mode="pool", num_agents=2, parallel_turns=parallel_turns)
+        cfg["experimental"]["groups"]["control"].update(
+            internal_validity_criteria="LIKEMINDED_TARGET = 100\nINCIVILITY_TARGET = 0",
+            seed={"template_id": "immigration"},
+        )
+        cfg["experimental"]["agent_pool"] = [
+            {"id": name, "name": name, "alignment_cell": side, "incivility": "civil", "persona": name}
+            for name, side in [("Alice", "pro_topic"), ("Bob", "pro_topic"),
+                               ("Carol", "anti_topic"), ("Dora", "anti_topic")]
+        ]
+        return cfg
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("parallel_turns", [1, 2])
+    @pytest.mark.parametrize("survey,first,effective", [
+        ("pro_topic", "Estoy en contra de la inmigracion", "anti_topic"),
+        ("anti_topic", "Apoyo la inmigracion", "pro_topic"),
+    ])
+    async def test_first_contradiction_updates_roster_and_every_pipeline(self, parallel_turns, survey, first, effective):
+        with _patch_externals() as mocks:
+            session, _ = _create_session(config=self.alignment_config(parallel_turns), participant_stance_hint=survey)
+            session.running = True
+            session.logger = MagicMock()
+            await session.handle_user_message(first)
+            resolution = session.state.participant_alignment
+            assert resolution["effective_cell"] == effective
+            assert session.participant_stance_hint == survey
+            assert session.state.participant_stance_hint == survey
+            assert session.treatment_group == "control"
+            assert all(traits["alignment_cell"] == effective for traits in session._agent_traits.values())
+            for orch in session._pipeline_orchestrators:
+                assert orch._participant_alignment_cell_live() == effective
+                assert f"Fixed effective side for this session: {effective}" in orch._participant_hint_text
+                assert all(orch._expected_like_minded_for_agent(name) is True for name in orch._agent_traits)
+            persisted = mocks["message_repo"].insert_message.call_args.kwargs["metadata"]
+            assert persisted["participant_alignment_resolution"] == resolution
+            assert session.agent_manager.orchestrator is session._pipeline_orchestrators[0]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("first,effective", [
+        ("Hola, ya he leido la noticia", "pro_topic"),
+        ("Estoy en contra de esta medida", "pro_topic"),
+        ("Estoy en contra de la inmigracion", "anti_topic"),
+    ])
+    async def test_later_messages_never_reconsider_the_first_decision(self, first, effective):
+        with _patch_externals():
+            session, _ = _create_session(config=self.alignment_config(), participant_stance_hint="pro_topic")
+            session.running = True
+            await session.handle_user_message(first)
+            resolution = dict(session.state.participant_alignment)
+            with patch("platforms.chatroom.resolve_first_message_alignment", side_effect=AssertionError("Reclassified")):
+                await session.handle_user_message("Estoy en contra de la inmigracion")
+                await session.handle_user_message("Apoyo la inmigracion")
+            assert session.state.participant_alignment == resolution
+            assert resolution["effective_cell"] == effective
+            assert all("participant_alignment_resolution" not in m.metadata for m in session.state.messages[1:])
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("first,effective", [
+        ("Estoy en contra de la inmigracion", "anti_topic"), ("Hola a todos", "pro_topic"),
+    ])
+    async def test_recovery_restores_decision_without_reinterpreting_any_message(self, first, effective):
+        with _patch_externals():
+            cfg = self.alignment_config(2)
+            session, _ = _create_session(config=cfg, participant_stance_hint="pro_topic")
+            session.running = True
+            await session.handle_user_message(first)
+            await session.handle_user_message("Apoyo la inmigracion")
+            saved = [m.to_dict() for m in session.state.messages]
+            with patch("platforms.chatroom.resolve_first_message_alignment", side_effect=AssertionError("Reclassified")):
+                restored, _ = _create_session(
+                    config=cfg, participant_stance_hint="pro_topic", _preloaded_messages=saved,
+                )
+                assert restored._first_user_message_received is True
+                assert restored._agent_names == session._agent_names
+                assert restored.state.participant_alignment == session.state.participant_alignment
+                assert all(o._participant_alignment_cell_live() == effective for o in restored._pipeline_orchestrators)
+                restored.running = True
+                await restored.handle_user_message("Estoy en contra de la inmigracion")
+                assert restored.state.participant_alignment == session.state.participant_alignment
+
+    @pytest.mark.asyncio
+    async def test_legacy_session_is_not_retroactively_corrected(self):
+        with _patch_externals(), patch("platforms.chatroom.resolve_first_message_alignment", side_effect=AssertionError("Reclassified")):
+            old_post = Message.create(sender="participant", content="Estoy en contra de la inmigracion").to_dict()
+            session, _ = _create_session(
+                config=self.alignment_config(), participant_stance_hint="pro_topic", _preloaded_messages=[old_post],
+            )
+            session.running = True
+            await session.handle_user_message("Estoy en contra de la inmigracion")
+            assert session.state.participant_alignment is None
+            assert session._pipeline_orchestrators[0]._participant_alignment_cell_live() == "pro_topic"
+
     @pytest.mark.asyncio
     async def test_adds_to_state(self):
         with _patch_externals() as mocks:

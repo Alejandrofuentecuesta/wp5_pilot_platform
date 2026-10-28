@@ -11,7 +11,7 @@ Here is the chatroom context, as described by the researcher for this experiment
 
 ## Participant Self-Report
 
-If available, treat this as the participant's fixed pre-chat classification for the session. Use it as the grounding for like-minded vs not-like-minded decisions.
+The survey is the initial reference. If the supplied reference includes a fixed effective side resolved from the first participant message, that effective side takes precedence over the survey. Use the supplied side for like-minded vs not-like-minded decisions; never reclassify from later messages.
 
 `{PARTICIPANT_STANCE_HINT}`
 

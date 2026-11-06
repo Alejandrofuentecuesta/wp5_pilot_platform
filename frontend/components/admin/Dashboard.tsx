@@ -596,7 +596,7 @@ function SessionsTab({
     setOutcomeFilter("")
   }, [experimentId])
 
-  const outcomeCounts: Record<SessionOutcome, number> = { completed: 0, left: 0, in_progress: 0 }
+  const outcomeCounts: Record<SessionOutcome, number> = { completed: 0, left: 0, failed: 0, in_progress: 0 }
   for (const s of sessions) outcomeCounts[sessionOutcome(s)] += 1
 
   const groups = Array.from(new Set(sessions.map((s) => s.treatment_group))).sort()
@@ -604,7 +604,7 @@ function SessionsTab({
   const sessionEndReasons = sessions
     .map((s) => s.end_reason)
     .filter((r): r is string => Boolean(r))
-  const knownEndReasons = ["duration_expired", "user_exit", "abandoned"]
+  const knownEndReasons = ["duration_expired", "user_exit", "abandoned", "session_failed", "session_stalled"]
   const endReasons = Array.from(
     new Set([
       ...(sessions.length > 0 ? knownEndReasons : []),
@@ -1604,18 +1604,22 @@ function LLMRow({
   )
 }
 
-type SessionOutcome = "completed" | "left" | "in_progress"
+type SessionOutcome = "completed" | "left" | "failed" | "in_progress"
 
 const SESSION_OUTCOME_LABELS: Record<SessionOutcome, string> = {
   completed: "Completed (duration_expired)",
   left: "Left early",
+  failed: "Failed before treatment (session_failed, r=4)",
   in_progress: "In progress",
 }
 
-/** Completed = ran the full duration; left early = any other ending. */
+/** Completed = ran the full duration; failed = no agent message was ever
+ * shown (r=4, participant not treated); left early = any other ending. */
 function sessionOutcome(s: SessionSummary): SessionOutcome {
   if (s.status !== "ended" && s.status !== "crashed") return "in_progress"
-  return s.end_reason === "duration_expired" ? "completed" : "left"
+  if (s.end_reason === "duration_expired") return "completed"
+  if (s.end_reason === "session_failed") return "failed"
+  return "left"
 }
 
 function formatEntered(iso: string | null): string {

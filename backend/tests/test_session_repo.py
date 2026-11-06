@@ -123,3 +123,28 @@ async def test_agent_block_update_on_conflict(db_pool, experiment_id):
     blocks = await session_repo.get_agent_blocks(db_pool, SESSION_ID)
     # Should reflect the later timestamp.
     assert "2026-01-02" in blocks["Carlos"]
+
+
+async def test_activate_session_never_revives_an_ended_row(db_pool, experiment_id):
+    """A late or duplicate activation (e.g. a stale pending reservation after
+    the session already ended) must not flip an ended row back to active."""
+    await session_repo.create_session(
+        db_pool,
+        session_id=SESSION_ID,
+        token=TOKEN,
+        experiment_id=experiment_id,
+        treatment_group="civil_support",
+        user_name="alice",
+    )
+    await session_repo.end_session(db_pool, session_id=SESSION_ID, reason="session_failed")
+    await session_repo.activate_session(
+        db_pool,
+        session_id=SESSION_ID,
+        started_at=datetime.now(timezone.utc),
+        random_seed=42,
+        simulation_config={"key": "value"},
+        experimental_config={"internal_validity_criteria": "be civil"},
+    )
+    row = await session_repo.get_session(db_pool, SESSION_ID)
+    assert row["status"] == "ended"
+    assert row["end_reason"] == "session_failed"

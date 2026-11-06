@@ -1106,6 +1106,22 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
         row = await session_repo.get_session(pool, session_id)
         if not row or row.get("status") != "ended":
             return False
+        if row.get("end_reason") == "session_failed":
+            # The session failed before any agent spoke and its token was
+            # reopened, so a return with the same link is a recontact: tell
+            # the browser to forget this session and go through intake again
+            # instead of showing it the end screen a second time.
+            await websocket.send_json({
+                "event_type": "session_end",
+                "reason": "session_failed",
+                "reentry": True,
+                "redirect_url": "",
+                "agent_names": [],
+            })
+            # Same close reason as every other ended session: it is the one
+            # the browser's reconnect loop recognises as final.
+            await websocket.close(code=1000, reason="session_ended")
+            return True
         redirect = ""
         try:
             # If the server already delivered the return signal for this
@@ -1183,6 +1199,15 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 return
             await websocket.close(code=1008)
             print(f"WebSocket rejected for {session_id}: missing treatment_group")
+            return
+
+        # A pending reservation can outlive its session (it is only popped
+        # here, and the session may have been rebuilt from the DB row and
+        # ended since). Never start a fresh session on an ended row: with a
+        # reopened token that would revive a failed session beside its
+        # replacement.
+        if await send_ended_and_close():
+            print(f"WebSocket rejected for {session_id}: session already ended")
             return
 
         user_name = pending.get("user_name", "participant")

@@ -74,3 +74,23 @@ async def test_seed_idempotent(db_pool, experiment_id):
     await token_repo.seed_tokens(db_pool, experiment_id, GROUPS)
     rows = await token_repo.list_tokens(db_pool, experiment_id)
     assert len(rows) == 4  # same as after first seed
+
+
+async def test_reopen_token_only_by_the_session_that_consumed_it(db_pool, experiment_id):
+    sid = "aaaaaaaa-0000-0000-0000-000000000001"
+    await token_repo.consume_token(db_pool, "tok_cs_001", sid)
+
+    assert await token_repo.reopen_token(db_pool, "tok_cs_001", "bbbbbbbb-0000-0000-0000-000000000002") is False
+    assert (await token_repo.get_token_status(db_pool, "tok_cs_001"))["used"] is True
+
+    assert await token_repo.reopen_token(db_pool, "tok_cs_001", sid) is True
+    status = await token_repo.get_token_status(db_pool, "tok_cs_001")
+    assert status["used"] is False and status["session_id"] is None and status["used_at"] is None
+
+    # Reopened: a second session can consume it; the first can no longer reopen it.
+    assert await token_repo.consume_token(db_pool, "tok_cs_001", "bbbbbbbb-0000-0000-0000-000000000002") is not None
+    assert await token_repo.reopen_token(db_pool, "tok_cs_001", sid) is False
+
+
+async def test_reopen_unused_token_is_a_noop(db_pool, experiment_id):
+    assert await token_repo.reopen_token(db_pool, "tok_cs_001", "aaaaaaaa-0000-0000-0000-000000000001") is False

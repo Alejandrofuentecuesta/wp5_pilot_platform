@@ -29,12 +29,18 @@ class AgentManager:
         session_active=None,
         turn_lock=None,
         task_registry=None,
+        on_message_shown=None,
     ) -> None:
         self.state = state
         self.orchestrator = orchestrator
         self.logger = logger
         self.session_id = session_id
         self.experiment_id = experiment_id
+        # Called once per agent message that reaches the room (including a
+        # withheld message released by a reviewer). The only place agent text
+        # is shown, so the session's silence clock hangs off it. Likes are not
+        # messages and do not count.
+        self.on_message_shown = on_message_shown
         # The safety gate. Every agent message is screened here before it is
         # added to state, persisted or broadcast; this is the only route by
         # which agent text reaches the participant.
@@ -122,6 +128,12 @@ class AgentManager:
             await redis_client.publish_event(r, self.session_id, message.to_dict())
         except Exception as exc:
             self.logger.log_error("publish_agent_message", str(exc))
+
+        if self.on_message_shown is not None:
+            try:
+                self.on_message_shown()
+            except Exception as exc:
+                self.logger.log_error("on_message_shown", str(exc))
 
     async def _auto_resolve_withheld(self, original: Message, outcome) -> None:
         """Close an unreviewed held turn as concern after two minutes."""

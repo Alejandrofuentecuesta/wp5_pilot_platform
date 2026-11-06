@@ -60,7 +60,7 @@ async def activate_session(
                    simulation_config = $3,
                    experimental_config = $4,
                    paused_seconds = 0
-            WHERE  session_id = $5
+            WHERE  session_id = $5 AND status <> 'ended'
             """,
             started_at,
             random_seed,

@@ -272,6 +272,18 @@ export function useChat() {
       setEmotionsCheckupOpen(false)
       const feedbackAlreadySubmitted = Boolean(obj.agent_feedback_submitted)
       setSessionEndReason(reason)
+      if (reason === "session_failed" && obj.reentry === true) {
+        // Late return to a session that failed before any agent spoke: its
+        // token was reopened, so this visit is a recontact. Forget the old
+        // session and let the handoff flow run intake again, which starts a
+        // fresh session on the same link.
+        setTypingCount(0)
+        setSessionEnded(false)
+        setFinalEmotionsCheckupOpen(false)
+        setAgentImpressionSurveyOpen(false)
+        concludeSession()
+        return
+      }
       if (reason === "participant_safety") {
         setTypingCount(0)
         setRedirectUrl(url || null)

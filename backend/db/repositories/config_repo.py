@@ -189,6 +189,13 @@ def validate_simulation_config(cfg: Dict[str, Any]) -> Dict[str, Any]:
     if out["idle_prompt_enabled"] and out["idle_prompt_seconds"] <= 0:
         raise ValueError("'idle_prompt_seconds' must be > 0")
 
+    # Silence failure: active seconds without an agent message after which
+    # the session ends as failed (r=4, nothing shown) or stalled (r=2).
+    # 0 disables it. Agreed with UB at 240 s (2026-10-30).
+    out["silence_failure_seconds"] = int(out.get("silence_failure_seconds", 240))
+    if out["silence_failure_seconds"] < 0:
+        raise ValueError("'silence_failure_seconds' must be >= 0")
+
     # Custom word-contractions list for the humanizer. Optional: when absent the
     # backend uses its built-in DEFAULT_WORD_SUBS. Normalised defensively.
     raw_subs = out.get("humanize_word_subs_list")

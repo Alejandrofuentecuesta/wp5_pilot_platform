@@ -342,3 +342,40 @@ class TestPendingReviewBlocking:
         screen.resolve_flag("does-not-exist", "Nobody")
         screen.resolve_flag("does-not-exist")
         assert screen.pending_review_agents() == set()
+
+
+class TestUnsafeHold:
+    """The silence clock pauses only for a withheld message with an unsafe
+    verdict; an unavailable verdict (classifier down) is not a hold."""
+
+    @pytest.mark.asyncio
+    async def test_unsafe_withheld_opens_a_hold_until_resolved(self, repo):
+        repo.insert_flag = AsyncMock(return_value="flag-1")
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="unsafe", categories=["S10"])))
+        assert screen.unsafe_hold_open() is False
+
+        outcome = await screen.screen_agent(Message.create(sender="Agent", content="x"), _state())
+
+        assert outcome.publish is False
+        assert screen.unsafe_hold_open() is True
+        screen.resolve_flag(outcome.flag_id, "Agent")
+        assert screen.unsafe_hold_open() is False
+
+    @pytest.mark.asyncio
+    async def test_resolve_without_agent_name_also_clears_the_hold(self, repo):
+        repo.insert_flag = AsyncMock(return_value="flag-2")
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="unsafe", categories=["S10"])))
+        outcome = await screen.screen_agent(Message.create(sender="Agent", content="x"), _state())
+        screen.resolve_flag(outcome.flag_id)
+        assert screen.unsafe_hold_open() is False
+
+    @pytest.mark.asyncio
+    async def test_unavailable_withheld_is_not_a_hold(self, repo):
+        repo.insert_flag = AsyncMock(return_value="flag-3")
+        screen, _ = _screen(FakeClient(SafetyVerdict(status="unavailable", error="timeout")))
+
+        outcome = await screen.screen_agent(Message.create(sender="Agent", content="x"), _state())
+
+        assert outcome.publish is False
+        assert screen.pending_review_agents() == {"Agent"}
+        assert screen.unsafe_hold_open() is False

@@ -22,7 +22,7 @@ from agents.STAGE.safety_classifier import (
 from agents.STAGE.orchestrator import Orchestrator
 from features import load_features
 from db import connection as db_conn
-from db.repositories import session_repo, message_repo, config_repo, event_repo, safety_repo
+from db.repositories import session_repo, message_repo, config_repo, event_repo, safety_repo, token_repo
 from db.repositories.config_repo import validate_safety_config
 from platforms.safety_screen import SafetyScreen
 from utils.safety import SafetyClient
@@ -31,6 +31,11 @@ from cache import redis_client
 # How long a disconnected participant has to rejoin before their session is
 # ended as non-complete. Takes effect on container recreate.
 REJOIN_WINDOW_MINUTES = int(os.getenv("REJOIN_WINDOW_MINUTES", "60"))
+
+# Active seconds without an agent message after which a session ends as
+# failed (r=4) or stalled (r=2). Per-experiment override:
+# simulation.silence_failure_seconds. Agreed with UB at 240 s (2026-10-30).
+SILENCE_FAILURE_DEFAULT_SECONDS = 240
 
 _REPLACEMENT_AGENT_NAMES = [
     "Raúl", "Alba", "Sergio", "Inés", "Hugo", "Nerea", "Iván", "Marina",
@@ -104,7 +109,9 @@ def _next_replacement_agent_name_like(old_name: str, used_names: set[str]) -> st
 def build_return_url(redirect_url: str, token: str, reason: str) -> str:
     """Append the panel hand-back parameters (token + completion status) to
     the configured return URL. r=1: full session duration received (complete);
-    r=3: participant chose to leave via the exit button; r=2: any other
+    r=3: participant chose to leave via the exit button; r=4: the session
+    failed before any agent message was shown (technical failure, the
+    participant was not treated and may be recontacted); r=2: any other
     outcome (non-complete), including a safety intervention ending the
     exposure early."""
     if not redirect_url:
@@ -122,6 +129,8 @@ def build_return_url(redirect_url: str, token: str, reason: str) -> str:
         r_code = "1"
     elif reason.startswith("user_exit"):
         r_code = "3"
+    elif reason == "session_failed":
+        r_code = "4"
     else:
         r_code = "2"
     sep = "&" if "?" in redirect_url else "?"
@@ -560,6 +569,7 @@ class SimulationSession:
             session_active=lambda: self.running,
             turn_lock=self._turn_lock,
             task_registry=self._safety_tasks,
+            on_message_shown=self._note_agent_message_shown,
         )
 
         # Researcher-initiated hold (Safety tab). Independent of the
@@ -592,6 +602,22 @@ class SimulationSession:
         self._first_user_message_received = any(
             m.get("sender") == self.state.user_name for m in (_preloaded_messages or [])
         )
+
+        # Silence clock: active seconds since the participant's first message
+        # or the last agent message shown, whichever is later. Reaching the
+        # threshold ends the session as failed (r=4, nothing was ever shown)
+        # or stalled (r=2, agents had spoken). Cause-agnostic by design: a
+        # hung Director call, a dead performer and a safety model returning
+        # no verdict all look the same to the participant. 0 disables it;
+        # synthetic runs never use it. Reconstructed sessions restart at 0.
+        self._silence_failure_seconds = int(
+            self.simulation_config.get("silence_failure_seconds", SILENCE_FAILURE_DEFAULT_SECONDS)
+        )
+        if self.simulation_config.get("synthetic_participant"):
+            self._silence_failure_seconds = 0
+        self._silence_seconds = 0.0
+        self._last_watchdog_tick: Optional[float] = None
+        self._agent_message_shown = bool(self._appeared_agent_names())
 
 
     def _build_orchestrator(self, agent_names_subset: Optional[List[str]] = None) -> Orchestrator:
@@ -1030,13 +1056,37 @@ class SimulationSession:
         # signal per token as authoritative, so the duplicate is harmless.
         # A reviewer-ended session may also have no browser attached (the
         # participant left during the hold), so it gets the same treatment.
+        # A failed session (r=4) is also pinged: the participant may be
+        # recontacted with the same link, so its token is reopened first.
+        if reason == "session_failed":
+            await self._reopen_token()
         if reason in (
             "abandoned", "no_first_message", "idle_timeout",
             "participant_safety", "safety_stop",
+            "session_failed", "session_stalled",
         ):
             await self._notify_panel_return(reason)
 
         print(f"Session {self.session_id} stopped: {reason}")
+
+    async def _reopen_token(self) -> None:
+        """Make this session's token usable again after a failed session.
+
+        Guarded in SQL on the token still being bound to this session, so a
+        token already reused by a later session is never reopened twice.
+        """
+        try:
+            pool = db_conn.get_pool()
+            row = await session_repo.get_session(pool, self.session_id)
+            token = (row or {}).get("token")
+            if not token:
+                return
+            reopened = await token_repo.reopen_token(pool, token, self.session_id)
+            print(f"[TOKEN_REOPEN] session={self.session_id} reopened={reopened}")
+            self.logger.log_event("token_reopened", {"reopened": bool(reopened)})
+        except Exception as exc:
+            self.logger.log_error("reopen_token", str(exc))
+            print(f"[TOKEN_REOPEN] session={self.session_id} FAILED: {exc}")
 
     async def _notify_panel_return(self, reason: str) -> None:
         """Server-side GET to the panel return URL (token + r code).
@@ -1079,6 +1129,9 @@ class SimulationSession:
         """Sub-second watchdog that cuts off the session at exactly active duration.
 
         Prevents in-flight agent turns or typing delays from causing overshoot.
+        Also advances the silence clock: it lives here, not in the clock loop,
+        because the clock loop awaits each turn and a hung LLM call would
+        stall it, which is one of the failures the silence clock must catch.
         """
         while self.running:
             try:
@@ -1088,10 +1141,73 @@ class SimulationSession:
                 if self.is_session_expired():
                     await self._end_for_duration()
                     break
+                if self._tick_silence_clock():
+                    await self._end_for_silence()
+                    break
             except asyncio.CancelledError:
                 break
             except Exception as exc:
                 self.logger.log_error("expiration_watchdog", str(exc))
+
+    def _silence_clock_runs(self) -> bool:
+        """True while quiet counts against the session.
+
+        Not before the participant's first message (agents never speak first),
+        not while the room is frozen (participant away or idle, reviewer hold,
+        experiment pause), and not while an unsafe agent message waits for a
+        human. An unavailable-verdict hold is not excluded: a safety-model
+        outage is a failure the participant experiences as silence.
+        """
+        if self._silence_failure_seconds <= 0:
+            return False
+        if not self._first_user_message_received or self.frozen:
+            return False
+        if self.safety_screen is not None and self.safety_screen.unsafe_hold_open():
+            return False
+        return True
+
+    def _tick_silence_clock(self) -> bool:
+        """Advance the silence clock by the time since the last tick.
+
+        Each step is capped at one second so a stalled event loop cannot
+        count a long gap as silence. Returns True once the threshold is
+        reached.
+        """
+        now = time.monotonic()
+        dt = 0.0 if self._last_watchdog_tick is None else min(1.0, now - self._last_watchdog_tick)
+        self._last_watchdog_tick = now
+        if not self._silence_clock_runs():
+            return False
+        self._silence_seconds += dt
+        return self._silence_seconds >= self._silence_failure_seconds
+
+    def _note_agent_message_shown(self) -> None:
+        """An agent message reached the room: the silence clock starts over."""
+        self._agent_message_shown = True
+        self._silence_seconds = 0.0
+
+    async def _end_for_silence(self) -> None:
+        """End a session nobody has spoken to for too long, exactly once.
+
+        Shares the once-only guard with the duration ending so expiry and
+        silence can never both end the same session. ``session_failed`` when
+        no agent message was ever shown (r=4: not treated, recontactable),
+        ``session_stalled`` when agents had spoken (r=2, debriefed).
+        """
+        if self._duration_end_started:
+            return
+        self._duration_end_started = True
+        reason = "session_stalled" if self._agent_message_shown else "session_failed"
+        self.logger.log_event("silence_failure", {
+            "reason": reason,
+            "silent_seconds": round(self._silence_seconds, 1),
+            "threshold_seconds": self._silence_failure_seconds,
+            "agent_messages_shown": len(self._appeared_agent_names()),
+        })
+        print(f"Session {self.session_id} ending for silence: {reason}")
+        await self._publish_session_end(reason)
+        await asyncio.sleep(0.5)  # let pub/sub deliver before teardown
+        await self.stop(reason=reason)
 
     async def _end_for_duration(self) -> None:
         """End the session for running out of active time, exactly once.

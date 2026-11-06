@@ -20,19 +20,30 @@ interface ThankYouScreenProps {
 // "safety_stop", but chatroom.py deliberately relabels it "closed_by_researcher"
 // for the browser (end_for_safety() passes client_reason=), so that's the
 // string that actually arrives here — see _publish_session_end.
-const EARLY_END_REASONS = new Set(["closed_by_researcher", "user_exit"])
+//
+// "session_stalled" is the platform ending a session whose agents had gone
+// silent after speaking: an early end like the others, with the debriefing.
+const EARLY_END_REASONS = new Set(["closed_by_researcher", "user_exit", "session_stalled"])
+
+// "session_failed": no agent message was ever shown (a technical failure
+// before the treatment), so there is nothing to debrief. The participant
+// is told what happened and handed back to the panel (r=4) after a pause
+// long enough to read the notice, with a button for the impatient.
+const FAILED_REDIRECT_MS = 8000
+const NORMAL_REDIRECT_MS = 2000
 
 export default function ThankYouScreen({ redirectUrl, reason }: ThankYouScreenProps) {
   const isEarlyEnd = !!reason && EARLY_END_REASONS.has(reason)
+  const isFailed = reason === "session_failed"
 
   useEffect(() => {
     if (redirectUrl && !isEarlyEnd) {
       const timer = setTimeout(() => {
         window.location.href = redirectUrl
-      }, 2000)
+      }, isFailed ? FAILED_REDIRECT_MS : NORMAL_REDIRECT_MS)
       return () => clearTimeout(timer)
     }
-  }, [redirectUrl, isEarlyEnd])
+  }, [redirectUrl, isEarlyEnd, isFailed])
 
   const leaveExperiment = () => {
     if (redirectUrl) window.location.href = redirectUrl
@@ -61,15 +72,27 @@ export default function ThankYouScreen({ redirectUrl, reason }: ThankYouScreenPr
             </svg>
           </div>
           <h1 className="text-xl font-semibold text-primary m-0">
-            ¡Gracias por participar!
+            {isFailed ? "Lo sentimos" : "¡Gracias por participar!"}
           </h1>
           <p className="text-sm text-secondary mt-3">
-            {isEarlyEnd
-              ? "La sesión se ha cerrado antes de tiempo. Tus aportaciones han quedado registradas."
-              : "La discusión ha terminado. Tus aportaciones han quedado registradas."}
+            {isFailed
+              ? "Ha ocurrido un problema técnico y la conversación no ha podido empezar. Tu participación queda registrada; en unos segundos volverás a la encuesta."
+              : isEarlyEnd
+                ? "La sesión se ha cerrado antes de tiempo. Tus aportaciones han quedado registradas."
+                : "La discusión ha terminado. Tus aportaciones han quedado registradas."}
           </p>
 
-          {isEarlyEnd ? (
+          {isFailed ? (
+            redirectUrl && (
+              <button
+                type="button"
+                onClick={leaveExperiment}
+                className="mt-6 w-full rounded-lg bg-accent px-5 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                Continuar
+              </button>
+            )
+          ) : isEarlyEnd ? (
             <>
               <div className="mt-6 border-t border-border pt-5">
                 <DebriefingNotice />

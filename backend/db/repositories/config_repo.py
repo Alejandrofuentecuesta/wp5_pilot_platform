@@ -278,8 +278,25 @@ def validate_experimental_config(
 
     out["safety"] = validate_safety_config(out.get("safety"))
 
+    # NetQuest topic code: which panel arrivals (`e` in the link) this
+    # experiment receives. None means internal, token-only entry.
+    code = out.get("netquest_topic_code")
+    if code is None or (isinstance(code, str) and not code.strip()):
+        out["netquest_topic_code"] = None
+    else:
+        code = str(code).strip()
+        if code not in NETQUEST_TOPIC_CODES:
+            raise ValueError(
+                "'netquest_topic_code' must be one of "
+                + ", ".join(NETQUEST_TOPIC_CODES) + ", or empty"
+            )
+        out["netquest_topic_code"] = code
+
     return out
 
+
+# Agreed with NetQuest/UB: e=1 immigration, e=2 climate change.
+NETQUEST_TOPIC_CODES = ("1", "2")
 
 SAFETY_TRANSPORTS = ("openai_chat", "anthropic_messages")
 # Llama Guard settings saved before the switch to gpt-oss-safeguard. They are
@@ -450,27 +467,58 @@ async def set_paused(
             raise ValueError(f"Experiment '{experiment_id}' not found")
 
 
-async def activate_exclusively(
+async def find_experiment_by_topic_code(
     pool: asyncpg.Pool,
-    experiment_id: str,
-) -> None:
-    """Make one experiment the only unpaused one, in a single transaction.
+    code: str,
+) -> Optional[str]:
+    """Return the experiment a panel arrival with topic code ``code`` goes to.
 
-    'Active' and 'not paused' are therefore the same fact, so a restart can
-    only ever resume the experiment that was last activated.
+    A live (unpaused) experiment with the code wins; failing that, the newest
+    paused one, so the arrival is told the study is closed rather than that
+    its link is invalid. Synthetic experiments never qualify.
     """
     async with pool.acquire() as conn:
-        async with conn.transaction():
-            updated = await conn.execute(
-                "UPDATE experiments SET paused = FALSE WHERE experiment_id = $1",
-                experiment_id,
-            )
-            if updated == "UPDATE 0":
-                raise ValueError(f"Experiment '{experiment_id}' not found")
-            await conn.execute(
-                "UPDATE experiments SET paused = TRUE WHERE experiment_id <> $1",
-                experiment_id,
-            )
+        return await conn.fetchval(
+            "SELECT experiment_id FROM experiments "
+            "WHERE config->'experimental'->>'netquest_topic_code' = $1 "
+            "AND config->'synthetic' IS NULL "
+            "ORDER BY (paused IS TRUE), created_at DESC LIMIT 1",
+            code,
+        )
+
+
+async def find_live_experiment_with_code(
+    pool: asyncpg.Pool,
+    code: str,
+    *,
+    excluding_experiment_id: str,
+) -> Optional[str]:
+    """Return another unpaused experiment carrying ``code``, if any.
+
+    Two live experiments with the same code would make a panel arrival
+    ambiguous, so activation refuses while this returns an ID.
+    """
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "SELECT experiment_id FROM experiments "
+            "WHERE paused IS NOT TRUE "
+            "AND config->'experimental'->>'netquest_topic_code' = $1 "
+            "AND config->'synthetic' IS NULL "
+            "AND experiment_id <> $2 "
+            "ORDER BY created_at DESC LIMIT 1",
+            code,
+            excluding_experiment_id,
+        )
+
+
+async def newest_unpaused_experiment_id(pool: asyncpg.Pool) -> Optional[str]:
+    """Default experiment for admin views: the newest live one, or None."""
+    async with pool.acquire() as conn:
+        return await conn.fetchval(
+            "SELECT experiment_id FROM experiments "
+            "WHERE paused IS NOT TRUE AND config->'synthetic' IS NULL "
+            "ORDER BY created_at DESC LIMIT 1"
+        )
 
 
 async def update_experiment_config(

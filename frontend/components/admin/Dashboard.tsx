@@ -109,7 +109,9 @@ function TopBar({
             >
               {experiments.map((exp) => (
                 <option key={exp.experiment_id} value={exp.experiment_id}>
+                  {exp.synthetic ? "" : exp.paused ? "⏸ " : "● "}
                   {exp.experiment_id}
+                  {exp.netquest_topic_code ? ` [e=${exp.netquest_topic_code}]` : ""}
                   {exp.description ? ` — ${exp.description.slice(0, 30)}` : ""}
                 </option>
               ))}
@@ -1204,11 +1206,16 @@ function SettingsTab({
     setPauseFeedback(null)
     try {
       if (selectedExperiment.paused) {
-        // Resuming makes this the live experiment, pausing any other — the
-        // same guarded operation as the dropdown switch.
+        // Activation leaves other experiments as they are; it is refused only
+        // when another live experiment carries the same NetQuest topic code.
         const res = await activateExperiment(adminKey, selectedExperiment.experiment_id)
         const resumed = res.sessions_resumed ? ` ${res.sessions_resumed} frozen session(s) resumed.` : ""
-        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" is now live — participants can join again. Any other experiment is paused.${resumed}`, ok: true })
+        const code = selectedExperiment.netquest_topic_code
+        const routing = code
+          ? ` NetQuest arrivals with e=${code} now come here.`
+          : " It accepts its own token links only (no NetQuest topic code)."
+        const warning = res.warning ? ` Warning: ${res.warning}` : ""
+        setPauseFeedback({ msg: `Experiment "${selectedExperiment.experiment_id}" is now live.${routing}${resumed}${warning}`, ok: !res.warning })
       } else {
         const res = await pauseExperiment(adminKey, selectedExperiment.experiment_id, confirmFreeze)
         const frozen = res.sessions_paused ? ` ${res.sessions_paused} session(s) in progress are frozen until you resume.` : ""
@@ -1219,14 +1226,13 @@ function SettingsTab({
       if (e instanceof PauseNeedsConfirmError) {
         setFreezeConfirm(e.total)
       } else if (e instanceof ActivationBlockedError) {
-        const where = e.liveSessions.map((s) => `${s.experiment_id} (${s.count})`).join(", ")
-        setPauseFeedback({ msg: `${e.message} ${e.total} session(s) still running: ${where}.`, ok: false })
+        setPauseFeedback({ msg: e.message, ok: false })
       } else {
         setPauseFeedback({ msg: e instanceof Error ? e.message : "Action failed", ok: false })
       }
     }
     setPauseLoading(false)
-    setTimeout(() => setPauseFeedback(null), 5000)
+    setTimeout(() => setPauseFeedback(null), 12000)
   }
 
   const matchedExperiment = experiments.find((e) => e.experiment_id === typedId.trim())
@@ -1265,7 +1271,7 @@ function SettingsTab({
       {/* API Key management */}
       <ProviderKeysPanel adminKey={adminKey} />
 
-      {/* Experiment control — pause/resume */}
+      {/* Experiment control — activate/pause */}
       {selectedExperiment && (
         <div className="bg-admin-surface rounded-lg border border-admin-pastel-amber-text/20 overflow-hidden">
           <div className="px-5 py-3 border-b border-admin-pastel-amber-text/20 bg-admin-pastel-amber">
@@ -1277,6 +1283,17 @@ function SettingsTab({
 
           <div className="px-5 py-4 space-y-4">
             <div className="text-xs text-admin-muted leading-relaxed space-y-2">
+              <p>
+                A new experiment starts paused. Activating it opens it to participants; other experiments are left
+                as they are, so several can be live at once.
+                {selectedExperiment.netquest_topic_code ? (
+                  <> NetQuest arrivals carrying topic code <strong>e={selectedExperiment.netquest_topic_code}</strong> are
+                  routed to this experiment while it is live; no other live experiment may carry the same code.</>
+                ) : (
+                  <> This experiment has <strong>no NetQuest topic code</strong>, so panel arrivals are never routed
+                  to it; it accepts only its own pre-generated token links.</>
+                )}
+              </p>
               <p>
                 Ordinarily, participants can use their tokens and take the study at any time within the configured
                 participation window
@@ -1309,13 +1326,19 @@ function SettingsTab({
                 {pauseLoading
                   ? "Updating..."
                   : selectedExperiment.paused
-                    ? "Resume Experiment"
+                    ? "Activate Experiment"
                     : "Pause Experiment"}
               </button>
-              {selectedExperiment.paused && (
+              {selectedExperiment.paused ? (
                 <span className="inline-flex items-center gap-1.5 text-xs font-medium text-admin-pastel-amber-text">
                   <span className="w-2 h-2 rounded-full bg-admin-pastel-amber-text animate-pulse" />
-                  Currently paused
+                  Paused — not accepting participants
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs font-medium text-admin-pastel-green-text">
+                  <span className="w-2 h-2 rounded-full bg-admin-pastel-green-text" />
+                  Live
+                  {selectedExperiment.netquest_topic_code ? ` — receiving NetQuest e=${selectedExperiment.netquest_topic_code}` : ""}
                 </span>
               )}
             </div>
@@ -1949,9 +1972,6 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
   const [backendOnline, setBackendOnline] = useState<boolean | null>(null)
   const [activeTab, setActiveTab] = useState<Tab>("overview")
   const [openFlags, setOpenFlags] = useState(0)
-  const [pendingSwitchId, setPendingSwitchId] = useState<string | null>(null)
-  const [switching, setSwitching] = useState(false)
-  const [switchError, setSwitchError] = useState<string | null>(null)
 
   const checkHealth = useCallback(async () => {
     try {
@@ -2036,47 +2056,13 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
     return () => { document.title = base }
   }, [openFlags])
 
-  // Selecting an experiment makes it the live one, which pauses the current
-  // one. The selection therefore only moves once the switch has succeeded.
-  // Re-selecting a paused experiment still prompts: when nothing is live,
-  // the selection falls back to a paused experiment, and the dropdown must
-  // still be able to activate it.
+  // Selecting an experiment only changes what the dashboard shows. Making it
+  // live is a separate, explicit action in the Settings tab, so browsing the
+  // dropdown can never open or close a study by accident.
   const handleSelect = (id: string) => {
     const target = experiments.find((e) => e.experiment_id === id)
-    if (target?.synthetic) {
-      setSelectedExperimentId(id)
-      setActiveTab("synthetic")
-      return
-    }
-    if (id === selectedExperimentId && target && !target.paused) return
-    setSwitchError(null)
-    setPendingSwitchId(id)
-  }
-
-  const confirmSwitch = async () => {
-    if (!pendingSwitchId) return
-    setSwitching(true)
-    setSwitchError(null)
-    try {
-      await activateExperiment(adminKey, pendingSwitchId)
-      setSelectedExperimentId(pendingSwitchId)
-      setPendingSwitchId(null)
-      refresh()
-    } catch (err) {
-      if (err instanceof ActivationBlockedError) {
-        const where = err.liveSessions
-          .map((s) => `${s.experiment_id} (${s.count})`)
-          .join(", ")
-        setSwitchError(
-          `${err.message} ${err.total} session(s) still running: ${where}. ` +
-          `Wait for them to finish, or stop them from the Sessions tab.`,
-        )
-      } else {
-        setSwitchError(err instanceof Error ? err.message : "Activation failed")
-      }
-    } finally {
-      setSwitching(false)
-    }
+    setSelectedExperimentId(id)
+    if (target?.synthetic) setActiveTab("synthetic")
   }
 
   const noExperiments = experiments.length === 0 && !loading
@@ -2190,61 +2176,6 @@ export default function Dashboard({ adminKey, onOpenWizard, onEditExperiment, on
         </>
       )}
 
-      {/* Switching the live experiment. What gets paused is derived from the
-          server's paused flags, not from the local view selection, which can
-          point at a paused experiment when nothing is live. */}
-      {pendingSwitchId && (() => {
-        const liveExperiment = experiments.find((e) => !e.paused)
-        return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="bg-admin-surface rounded-lg shadow-xl w-full max-w-sm mx-4 overflow-hidden border border-admin-border">
-            <div className="px-5 pt-5 pb-3">
-              <h3 className="text-sm font-semibold text-admin-text">
-                {liveExperiment ? "Switch the live experiment?" : "Make this experiment live?"}
-              </h3>
-              {liveExperiment && liveExperiment.experiment_id !== pendingSwitchId ? (
-                <p className="text-xs text-admin-muted mt-2 leading-relaxed">
-                  <strong>{liveExperiment.experiment_id}</strong> will be paused and
-                  will stop accepting new participants.
-                </p>
-              ) : !liveExperiment ? (
-                <p className="text-xs text-admin-muted mt-2 leading-relaxed">
-                  No experiment is currently live.
-                </p>
-              ) : null}
-              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
-                <strong>{pendingSwitchId}</strong> will become the live experiment
-                and will receive all incoming panel participants.
-              </p>
-              <p className="text-xs text-admin-muted mt-2 leading-relaxed">
-                Only one experiment accepts participants at a time.
-              </p>
-              {switchError && (
-                <p className="text-xs text-admin-danger-text mt-3 leading-relaxed" role="alert">
-                  {switchError}
-                </p>
-              )}
-            </div>
-            <div className="flex border-t border-admin-border">
-              <button
-                onClick={() => { setPendingSwitchId(null); setSwitchError(null) }}
-                disabled={switching}
-                className="flex-1 py-2.5 text-xs font-medium text-admin-muted hover:bg-admin-raised transition-colors disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSwitch}
-                disabled={switching}
-                className="flex-1 py-2.5 text-xs font-medium text-admin-pastel-amber-text hover:bg-admin-pastel-amber transition-colors border-l border-admin-border disabled:opacity-50"
-              >
-                {switching ? "Switching…" : "Yes, switch"}
-              </button>
-            </div>
-          </div>
-        </div>
-        )
-      })()}
     </div>
   )
 }

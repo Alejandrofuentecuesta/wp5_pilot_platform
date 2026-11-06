@@ -127,6 +127,7 @@ function normalizeExperimentalConfig(config: ExperimentalConfig): ExperimentalCo
     incivility_framework: config.incivility_framework ?? "",
     ecological_validity_criteria: config.ecological_validity_criteria ?? "",
     redirect_url: config.redirect_url ?? "",
+    netquest_topic_code: config.netquest_topic_code ?? null,
     agent_pool: config.agent_pool
       ? config.agent_pool.map((agent) => ({ ...agent }))
       : undefined,
@@ -295,7 +296,7 @@ export default function AdminPanel() {
           starts_at: startsAt ? new Date(startsAt).toISOString() : null,
           ends_at: endsAt ? new Date(endsAt).toISOString() : null,
         })
-        setSaveBanner(`Experiment "${experimentId}" saved and activated. Participants can now join.`)
+        setSaveBanner(`Experiment "${experimentId}" saved. It starts paused: activate it from the Settings tab when it should accept participants.`)
       }
       setView("dashboard")
       setStep(0)
@@ -554,6 +555,8 @@ export default function AdminPanel() {
       setEndsAt={setEndsAt}
       redirectUrl={experimental.redirect_url}
       setRedirectUrl={(v) => setExperimental((prev) => ({ ...prev, redirect_url: v }))}
+      netquestTopicCode={experimental.netquest_topic_code ?? null}
+      setNetquestTopicCode={(v) => setExperimental((prev) => ({ ...prev, netquest_topic_code: v }))}
       adminKey={adminKey}
       isEditing={!!editingExperimentId}
     />,

@@ -14,8 +14,20 @@ interface StepExperimentProps {
   setEndsAt: (v: string) => void
   redirectUrl: string
   setRedirectUrl: (v: string) => void
+  netquestTopicCode: string | null
+  setNetquestTopicCode: (v: string | null) => void
   adminKey: string
   isEditing?: boolean
+}
+
+export const NETQUEST_TOPIC_CODES: { value: string; label: string }[] = [
+  { value: "1", label: "1 — Immigration" },
+  { value: "2", label: "2 — Climate change" },
+]
+
+export function topicCodeLabel(code: string | null | undefined): string {
+  if (!code) return "None (internal, token links only)"
+  return NETQUEST_TOPIC_CODES.find((c) => c.value === code)?.label ?? code
 }
 
 export default function StepExperiment({
@@ -29,6 +41,8 @@ export default function StepExperiment({
   setEndsAt,
   redirectUrl,
   setRedirectUrl,
+  netquestTopicCode,
+  setNetquestTopicCode,
   adminKey,
   isEditing = false,
 }: StepExperimentProps) {
@@ -63,7 +77,7 @@ export default function StepExperiment({
             type="text"
             value={experimentId}
             onChange={(e) => setExperimentId(e.target.value)}
-            placeholder="e.g. Bloque_1_Alejandro"
+            placeholder="e.g. fieldwork-immigration"
             disabled={isEditing}
             className={`w-full px-3 py-2 border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:ring-1 ${
               isDuplicate
@@ -133,6 +147,38 @@ export default function StepExperiment({
               <p className="text-xs text-red-400 mt-1">End date must be after start date.</p>
             )}
           </div>
+        </div>
+      </div>
+
+      <div className="bg-admin-surface rounded-lg border border-admin-border p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-admin-text">NetQuest Topic Code</h3>
+          <p className="text-xs text-admin-muted mt-1">
+            Panel participants arrive with a topic code (<code>e</code>) in their link. An arrival is routed to the
+            live experiment whose code matches. Leave it on &quot;None&quot; for internal or test experiments, which
+            only accept their own pre-generated token links. Two live experiments cannot share a code.
+          </p>
+        </div>
+        <div>
+          <label htmlFor="netquest-topic-code" className="block text-sm font-medium text-admin-text mb-1">
+            Topic code
+          </label>
+          <select
+            id="netquest-topic-code"
+            value={netquestTopicCode ?? ""}
+            onChange={(e) => setNetquestTopicCode(e.target.value || null)}
+            className="w-full px-3 py-2 border border-admin-border rounded-lg text-sm bg-admin-surface text-admin-text focus:outline-none focus:border-admin-accent focus:ring-1 focus:ring-admin-accent/30"
+          >
+            <option value="">{topicCodeLabel(null)}</option>
+            {NETQUEST_TOPIC_CODES.map((c) => (
+              <option key={c.value} value={c.value}>{c.label}</option>
+            ))}
+          </select>
+          {redirectUrl && !netquestTopicCode && (
+            <p className="text-xs text-admin-pastel-amber-text mt-1">
+              A redirect URL is set but no topic code: panel participants cannot be routed to this experiment.
+            </p>
+          )}
         </div>
       </div>
 

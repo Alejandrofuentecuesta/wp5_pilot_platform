@@ -14,18 +14,23 @@ export interface HandoffParams {
   token: string
   stance: ParticipantStance | null
   // Panel (NetQuest) links: hkey authenticates the token, g carries the
-  // randomised condition. Absent on internally issued token links.
+  // randomised condition, e the topic code that selects the experiment.
+  // Absent on internally issued token links.
   hkey?: string | null
   g?: string | null
+  e?: string | null
+}
+
+export interface PanelParams {
+  hkey?: string | null
+  g?: string | null
+  e?: string | null
 }
 
 interface LoginScreenProps {
   initialUsername: string
   handoff: HandoffParams | null
-  onPreview: (
-    token: string,
-    panel?: { hkey?: string | null; g?: string | null },
-  ) => Promise<SessionIntakeResponse>
+  onPreview: (token: string, panel?: PanelParams) => Promise<SessionIntakeResponse>
   onStart: (token: string, username: string, stance: ParticipantStance) => Promise<void>
   onRejoin: (sessionId: string, token?: string) => void
 }
@@ -75,7 +80,7 @@ export default function LoginScreen({
       setStatus("invalid")
       return
     }
-    onPreview(handoff.token, { hkey: handoff.hkey, g: handoff.g })
+    onPreview(handoff.token, { hkey: handoff.hkey, g: handoff.g, e: handoff.e })
       .then((resp) => {
         if (cancelled) return
         if (resp.rejoin_session_id) {

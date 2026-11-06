@@ -170,13 +170,23 @@ _experiment_id: str = ""
 
 
 def get_experiment_id() -> str:
-    """Return the active experiment ID, or raise if none is set."""
+    """Return the default experiment ID for admin views, or raise if none is live."""
     if not _experiment_id:
         raise HTTPException(
             status_code=409,
-            detail="No experiment is active. Use the admin wizard to configure one.",
+            detail="No experiment is live. Use the admin wizard to configure one.",
         )
     return _experiment_id
+
+
+async def _refresh_default_experiment(pool) -> None:
+    """Recompute the admin default (newest unpaused experiment).
+
+    Called at startup and after every activate, pause and delete. Panel
+    arrivals do not use it: they are routed by the topic code in the link.
+    """
+    global _experiment_id
+    _experiment_id = await config_repo.newest_unpaused_experiment_id(pool) or ""
 
 
 ADMIN_PASSPHRASE = os.environ.get("ADMIN_PASSPHRASE", "")
@@ -276,20 +286,11 @@ async def lifespan(_app: FastAPI):  # noqa: F841 — FastAPI requires the parame
     print(f"Redis ready ({REDIS_URL})")
     await synthetic_batches.recover()
 
-    # Restore the live experiment so participants can join without the
-    # researcher re-activating after a restart. Activation pauses every other
-    # experiment, so at most one row qualifies; the ordering only matters for
-    # databases predating that rule.
-    global _experiment_id
-    async with pool.acquire() as conn:
-        row = await conn.fetchval(
-            "SELECT experiment_id FROM experiments "
-            "WHERE paused IS NOT TRUE "
-            "ORDER BY created_at DESC LIMIT 1"
-        )
-    if row:
-        _experiment_id = row
-        print(f"Auto-activated experiment: {_experiment_id}")
+    # Experiments keep their paused flag across restarts: every unpaused one
+    # accepts its own panel arrivals (routed by topic code), nothing needs
+    # re-activating. The newest live one is only the default for admin views.
+    await _refresh_default_experiment(pool)
+    print(f"Default experiment for admin views: {_experiment_id or '(none live)'}")
 
     # Warn about missing LLM API keys (they're only needed at runtime,
     # but an early heads-up saves debugging time).
@@ -417,10 +418,12 @@ class SessionStartResponse(BaseModel):
 class SessionIntakeRequest(BaseModel):
     token: str
     # Panel entry (NetQuest): hkey authenticates the token, g carries the
-    # randomised condition. Both required to mint an unknown token; ignored
-    # for tokens that already exist.
+    # randomised condition, e the topic code that picks the experiment. All
+    # three required to mint an unknown token; ignored for tokens that
+    # already exist.
     hkey: Optional[str] = None
     g: Optional[str] = None
+    e: Optional[str] = None
 
 
 class SessionIntakeResponse(BaseModel):
@@ -555,29 +558,37 @@ def _resolve_group_topic_template_id(experiment_config: Dict[str, Any], treatmen
 
 # ── HTTP endpoints ────────────────────────────────────────────────────────────
 
-async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str]):
+async def _try_panel_mint(
+    pool, token: str, hkey: Optional[str], g: Optional[str], e: Optional[str],
+):
     """Mint a token row for a first-time panel (NetQuest) arrival.
 
-    Admits an unknown token only when the active experiment opts in
-    (`panel_entry: true` in its experimental config) and the link is
-    well-formed: hkey must equal sha256(token) — an integrity check against
-    truncated or mistyped URLs — and g must name one of the agreed
-    conditions. Returns the minted token row, or None if any check fails
-    (caller then 401s as usual).
+    The topic code ``e`` picks the experiment: the one whose
+    ``experimental.netquest_topic_code`` equals it (a live one first). The
+    link must be well-formed: hkey must equal sha256(token) — an integrity
+    check against truncated or mistyped URLs — and g must name one of the
+    agreed conditions, present in that experiment. Returns the minted token
+    row, or None if any check fails (caller then 401s as usual).
 
     A well-formed arrival at an experiment that is paused or outside its
     participation window raises 403 rather than returning None, so the
     participant is told the study is closed instead of being told their
     link is invalid. Nothing is minted in that case.
     """
-    if not (_experiment_id and hkey and g):
+    if not (hkey and g and e):
         return None
     if not _PANEL_TOKEN_RE.match(token):
         return None
-    cfg = await config_repo.get_experiment_config(pool, _experiment_id)
-    experimental = (cfg or {}).get("experimental") or {}
-    if not experimental.get("panel_entry"):
+    code = e.strip()
+    if code not in config_repo.NETQUEST_TOPIC_CODES:
+        print(f"[PANEL_MINT] rejected token={token[:12]}... (bad e={e!r})")
         return None
+    experiment_id = await config_repo.find_experiment_by_topic_code(pool, code)
+    if not experiment_id:
+        print(f"[PANEL_MINT] rejected token={token[:12]}... (no experiment with topic code {code})")
+        return None
+    cfg = await config_repo.get_experiment_config(pool, experiment_id)
+    experimental = (cfg or {}).get("experimental") or {}
     expected = hashlib.sha256(token.encode("utf-8")).hexdigest()
     if expected != hkey.strip().lower():
         print(f"[PANEL_MINT] rejected token={token[:12]}... (bad hkey)")
@@ -588,14 +599,14 @@ async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str
         return None
     # Checked before seeding: a closed experiment must not accumulate token
     # rows for arrivals it is going to turn away.
-    unavailable = await config_repo.check_experiment_availability(pool, _experiment_id)
+    unavailable = await config_repo.check_experiment_availability(pool, experiment_id)
     if unavailable:
         print(f"[PANEL_MINT] refused token={token[:12]}... (experiment unavailable: {unavailable})")
         raise HTTPException(status_code=403, detail=unavailable)
     # Mint ceiling: fabricated-but-well-formed links must not grow the token
     # table (and the LLM bill) without bound.
     limit = _panel_mint_limit(experimental)
-    existing = await token_repo.count_tokens(pool, _experiment_id)
+    existing = await token_repo.count_tokens(pool, experiment_id)
     if existing >= limit:
         print(f"[PANEL_MINT] refused token={token[:12]}... (mint limit {limit} reached)")
         raise HTTPException(
@@ -603,8 +614,8 @@ async def _try_panel_mint(pool, token: str, hkey: Optional[str], g: Optional[str
             detail="This study has ended and is no longer accepting participants.",
         )
     # Idempotent — a concurrent duplicate arrival is skipped, not duplicated.
-    await token_manager.seed_tokens(pool, _experiment_id, {group: [token]})
-    print(f"[PANEL_MINT] minted token={token} group={group} experiment={_experiment_id}")
+    await token_manager.seed_tokens(pool, experiment_id, {group: [token]})
+    print(f"[PANEL_MINT] minted token={token} group={group} e={code} experiment={experiment_id}")
     return await token_repo.get_token_status(pool, token)
 
 
@@ -615,7 +626,9 @@ async def preview_session_intake(request: SessionIntakeRequest, http_request: Re
     pool = _get_pool()
     token_row = await token_repo.get_token_status(pool, request.token)
     if not token_row:
-        token_row = await _try_panel_mint(pool, request.token, request.hkey, request.g)
+        token_row = await _try_panel_mint(
+            pool, request.token, request.hkey, request.g, request.e,
+        )
     if not token_row:
         raise HTTPException(status_code=401, detail="Invalid or already-used token")
 
@@ -2154,6 +2167,21 @@ async def admin_update_config(experiment_id: str, body: dict, x_admin_key: str =
         raise HTTPException(status_code=422, detail="ends_at must be after starts_at")
 
     pool = _get_pool()
+    # A live experiment must not be edited into the topic code of another live
+    # one: activation checks this, so editing must too.
+    code = exp.get("netquest_topic_code")
+    if code:
+        current = await config_repo.get_experiment(pool, experiment_id)
+        if current and not current.get("paused"):
+            clash = await config_repo.find_live_experiment_with_code(
+                pool, code, excluding_experiment_id=experiment_id,
+            )
+            if clash:
+                raise HTTPException(
+                    status_code=422,
+                    detail=f"Experiment '{clash}' is live with NetQuest topic code {code}; "
+                           "two live experiments cannot share a topic code.",
+                )
     config_blob = {"simulation": sim, "experimental": exp}
     try:
         await config_repo.update_experiment_config(
@@ -2233,68 +2261,79 @@ async def admin_clone_experiment(experiment_id: str, body: dict, x_admin_key: st
 
 
 # Serialises activation: with a single worker process this rules out two
-# concurrent switches interleaving their DB updates and pointer writes.
+# concurrent activations both passing the same-code check.
 _activation_lock = asyncio.Lock()
 
+NO_TOPIC_CODE_WARNING = (
+    "This experiment has a completion redirect URL but no NetQuest topic code, "
+    "so panel participants cannot be routed to it. Set the topic code if it is "
+    "meant to receive NetQuest arrivals."
+)
 
-async def _make_experiment_live(experiment_id: str) -> int:
-    """Guarded, exclusive activation shared by activate and resume.
 
-    Exactly one experiment accepts participants at a time, so an unknown
-    panel token has only one possible destination. The switch is refused
-    while another experiment still has sessions running, because pausing
-    an experiment freezes its participants mid-conversation. The target's
-    own sessions never block it — activation can only help them — and any
-    of them frozen by an earlier pause are unfrozen here.
+async def _make_experiment_live(experiment_id: str) -> tuple[int, Optional[str]]:
+    """Activation shared by activate and resume.
 
-    Returns the number of in-memory sessions unfrozen.
+    Several experiments may be live at once; each receives the panel
+    arrivals carrying its topic code. Activation therefore leaves the other
+    experiments alone and only refuses when another live experiment carries
+    the same code, which would make an arrival ambiguous. Any of the target's
+    own sessions frozen by an earlier pause are unfrozen here.
+
+    Returns the number of in-memory sessions unfrozen and a warning for the
+    operator, if any.
     """
-    global _experiment_id
-
     pool = _get_pool()
     exists = await config_repo.get_experiment_config(pool, experiment_id)
     if not exists:
         raise HTTPException(status_code=404, detail=f"Experiment '{experiment_id}' not found")
     if exists.get("synthetic"):
         raise HTTPException(status_code=409, detail="Synthetic experiments cannot be activated for human participants")
+    experimental = exists.get("experimental") or {}
+    code = experimental.get("netquest_topic_code")
 
     async with _activation_lock:
-        live = await session_repo.count_live_sessions_by_experiment(
-            pool, excluding_experiment_id=experiment_id,
-        )
-        if live:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "reason": "sessions_in_progress",
-                    "message": (
-                        "Cannot switch experiments while sessions are in progress. "
-                        "Switching pauses the current experiment, which freezes "
-                        "participants mid-session."
-                    ),
-                    "live_sessions": [
-                        {"experiment_id": row["experiment_id"], "count": row["live"]}
-                        for row in live
-                    ],
-                    "total": sum(row["live"] for row in live),
-                },
+        if code:
+            clash = await config_repo.find_live_experiment_with_code(
+                pool, code, excluding_experiment_id=experiment_id,
             )
-
+            if clash:
+                raise HTTPException(
+                    status_code=409,
+                    detail={
+                        "reason": "topic_code_in_use",
+                        "message": (
+                            f"Experiment '{clash}' is live with NetQuest topic code {code}. "
+                            "Two live experiments cannot share a topic code: pause it first."
+                        ),
+                        "experiment_id": clash,
+                        "topic_code": code,
+                    },
+                )
         try:
-            await config_repo.activate_exclusively(pool, experiment_id)
+            await config_repo.set_paused(pool, experiment_id, False)
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc))
+        await _refresh_default_experiment(pool)
+        resumed = await session_manager.set_experiment_paused(experiment_id, False)
 
-        _experiment_id = experiment_id
-        return await session_manager.set_experiment_paused(experiment_id, False)
+    warning = None
+    if experimental.get("redirect_url") and not code:
+        warning = NO_TOPIC_CODE_WARNING
+    return resumed, warning
 
 
 @app.post("/admin/experiment/{experiment_id}/activate")
 async def admin_activate_experiment(experiment_id: str, x_admin_key: str = Header(None)):
-    """Make one experiment the live one, pausing every other."""
+    """Make an experiment live; other experiments are left as they are."""
     _require_admin(x_admin_key)
-    resumed = await _make_experiment_live(experiment_id)
-    return {"status": "activated", "experiment_id": experiment_id, "sessions_resumed": resumed}
+    resumed, warning = await _make_experiment_live(experiment_id)
+    return {
+        "status": "activated",
+        "experiment_id": experiment_id,
+        "sessions_resumed": resumed,
+        "warning": warning,
+    }
 
 
 @app.post("/admin/experiment/{experiment_id}/pause")
@@ -2329,21 +2368,23 @@ async def admin_pause_experiment(
         await config_repo.set_paused(pool, experiment_id, True)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+    await _refresh_default_experiment(pool)
     affected = await session_manager.set_experiment_paused(experiment_id, True)
     return {"status": "paused", "experiment_id": experiment_id, "sessions_paused": affected}
 
 
 @app.post("/admin/experiment/{experiment_id}/resume")
 async def admin_resume_experiment(experiment_id: str, x_admin_key: str = Header(None)):
-    """Resume a paused experiment by making it the live one.
-
-    Same rules as activation: resuming pauses everything else, and is
-    refused while another experiment has sessions running. Without this,
-    resume was a side door that could leave two experiments unpaused.
-    """
+    """Resume a paused experiment: the same routine as activation, so the
+    same-topic-code check applies and frozen sessions are unfrozen."""
     _require_admin(x_admin_key)
-    resumed = await _make_experiment_live(experiment_id)
-    return {"status": "resumed", "experiment_id": experiment_id, "sessions_resumed": resumed}
+    resumed, warning = await _make_experiment_live(experiment_id)
+    return {
+        "status": "resumed",
+        "experiment_id": experiment_id,
+        "sessions_resumed": resumed,
+        "warning": warning,
+    }
 
 
 @app.post("/admin/tokens/generate")
@@ -2388,6 +2429,8 @@ async def admin_list_experiments(x_admin_key: str = Header(None)):
                 e.ends_at,
                 e.paused,
                 (e.config->'synthetic' IS NOT NULL) AS synthetic,
+                e.config->'experimental'->>'netquest_topic_code' AS netquest_topic_code,
+                (COALESCE(e.config->'experimental'->>'redirect_url', '') <> '') AS has_redirect_url,
                 COALESCE(s.session_count, 0)  AS sessions,
                 COALESCE(m.message_count, 0)  AS messages,
                 COALESCE(t.token_count, 0)    AS tokens,
@@ -2419,6 +2462,8 @@ async def admin_list_experiments(x_admin_key: str = Header(None)):
                 "ends_at": r["ends_at"].isoformat() if r["ends_at"] else None,
                 "paused": r["paused"] or False,
                 "synthetic": r["synthetic"],
+                "netquest_topic_code": r["netquest_topic_code"],
+                "has_redirect_url": r["has_redirect_url"],
                 "sessions": r["sessions"],
                 "messages": r["messages"],
                 "tokens": r["tokens"],
@@ -2993,7 +3038,6 @@ async def admin_reset_db(
 ):
     """Delete an experiment and all its data from the database."""
     _require_admin(x_admin_key)
-    global _experiment_id
     body = body or {}
     target_id = body.get("experiment_id", "").strip()
     if not target_id:
@@ -3064,9 +3108,7 @@ async def admin_reset_db(
     for sid in session_ids:
         await redis_client.invalidate_session(r, sid)
 
-    # Clear active experiment if it was the deleted one.
-    if _experiment_id == target_id:
-        _experiment_id = ""
+    await _refresh_default_experiment(pool)
 
     return {"status": "experiment_deleted", "experiment_id": target_id}
 

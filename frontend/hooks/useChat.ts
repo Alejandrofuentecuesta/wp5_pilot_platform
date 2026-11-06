@@ -466,7 +466,7 @@ export function useChat() {
   // Session intake preview (token validation + topic survey).
   const previewSessionIntake = async (
     token: string,
-    panel?: { hkey?: string | null; g?: string | null },
+    panel?: { hkey?: string | null; g?: string | null; e?: string | null },
   ): Promise<SessionIntakeResponse> => {
     return apiPreviewSessionIntake(token, panel)
   }

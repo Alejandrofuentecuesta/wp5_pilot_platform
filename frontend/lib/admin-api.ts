@@ -141,39 +141,47 @@ export async function updateConfig(
   return res.json()
 }
 
-/** Raised when sessions are still running, so switching is refused. */
+/** Raised when another live experiment already carries the same NetQuest
+ * topic code, so activating this one is refused. */
 export class ActivationBlockedError extends Error {
-  liveSessions: { experiment_id: string; count: number }[]
-  total: number
+  experimentId: string
+  topicCode: string
 
-  constructor(
-    message: string,
-    liveSessions: { experiment_id: string; count: number }[],
-    total: number,
-  ) {
+  constructor(message: string, experimentId: string, topicCode: string) {
     super(message)
     this.name = "ActivationBlockedError"
-    this.liveSessions = liveSessions
-    this.total = total
+    this.experimentId = experimentId
+    this.topicCode = topicCode
   }
+}
+
+export interface ActivationResult {
+  status: string
+  experiment_id: string
+  sessions_resumed?: number
+  // Operator warning, e.g. a return URL is set but no topic code.
+  warning?: string | null
 }
 
 export async function activateExperiment(
   key: string,
   experimentId: string,
-): Promise<{ status: string; experiment_id: string; sessions_resumed?: number }> {
+): Promise<ActivationResult> {
   const res = await adminFetch(`/admin/experiment/${encodeURIComponent(experimentId)}/activate`, key, {
     method: "POST",
   })
   if (!res.ok) {
     const err = await res.json().catch(() => ({ detail: "Activation failed" }))
     const detail = err.detail
-    if (res.status === 409 && detail && typeof detail === "object") {
+    if (res.status === 409 && detail && typeof detail === "object" && detail.reason === "topic_code_in_use") {
       throw new ActivationBlockedError(
-        detail.message || "Sessions are still in progress.",
-        Array.isArray(detail.live_sessions) ? detail.live_sessions : [],
-        typeof detail.total === "number" ? detail.total : 0,
+        detail.message || "Another live experiment has the same NetQuest topic code.",
+        typeof detail.experiment_id === "string" ? detail.experiment_id : "",
+        typeof detail.topic_code === "string" ? detail.topic_code : "",
       )
+    }
+    if (detail && typeof detail === "object" && typeof detail.message === "string") {
+      throw new Error(detail.message)
     }
     throw new Error(typeof detail === "string" ? detail : "Activation failed")
   }
@@ -269,6 +277,9 @@ export interface ExperimentSummary {
   ends_at: string | null
   paused: boolean
   synthetic?: boolean
+  // NetQuest topic code ("1" immigration, "2" climate) or null (internal).
+  netquest_topic_code?: string | null
+  has_redirect_url?: boolean
   sessions: number
   messages: number
   tokens: number

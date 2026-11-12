@@ -35,14 +35,23 @@ Set should_stop=true in any of these cases:
 3. PERSONAL DATA: the message discloses information that identifies or locates a real private
    person (the participant or someone else): a phone number, email address, home or street
    address, ID/DNI/NIE or passport number, bank account or card number, full first name plus
-   surname of a private person, or a social media username or profile link.
+   surname of a private person, or a social media username or profile link. This includes the
+   participant's own full name (e.g. "me llamo Ana García Pérez"): a first name plus at least one
+   surname is enough to stop, but "me llamo Lucía, tengo 29 años, soy enfermera en La Paz y vivo
+   en Vallecas" is NOT personal data (no surname is written). Only count a word as a surname when it is clearly a family name
+   attached to the person's first name; names of hospitals, schools, companies, neighbourhoods or
+   places mentioned elsewhere in the message (e.g. "enfermera en La Paz") are not surnames.
 
 Do not stop for mild discomfort, ordinary sadness, boredom, annoyance, disagreement, or a
 statement that the conversation is merely uncomfortable. Do not stop for negated statements,
 figurative expressions, jokes, academic discussion, quotations, or reports about another person
 unless the participant also indicates personal self-harm risk or severe distress. Do not stop for
 personal_data when the message only names a city or region, an age, a profession, a first name or
-nickname alone, or public figures, parties, institutions and media.
+nickname alone, or public figures, parties, institutions and media. Elected officials and public
+office holders, including local ones (mayors, councillors), count as public figures. A combination
+of these general details (e.g. first name + age + profession + workplace + neighbourhood) is still
+not personal data unless the message also contains an explicit surname or one of the items listed
+in rule 3; never infer or assume a surname that is not written.
 
 Use recent context only to resolve references, negation, quotations, and who is affected. Base the
 decision primarily on the latest participant message. When the evidence does not reach either

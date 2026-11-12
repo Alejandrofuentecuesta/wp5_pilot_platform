@@ -71,6 +71,9 @@ class SafetyScreen:
         # hold is deliberately not tracked here: a safety-model outage must
         # still count as silence.
         self._unsafe_holds: Set[str] = set()
+        # The session's personal-data filter, set by the session: applied to
+        # what a flag stores, never to what the classifier sees.
+        self.persist_filter = None
 
     # ── pending-review blocking ──────────────────────────────────────────
 
@@ -261,6 +264,16 @@ class SafetyScreen:
         displayed_at: Optional[datetime],
     ) -> Optional[str]:
         flag_id = str(uuid.uuid4())
+        raw_output = verdict.raw or None
+        rationale = verdict.rationale
+        reasoning = verdict.reasoning
+        data_filter = self.persist_filter
+        if data_filter is not None and data_filter.active:
+            content = data_filter.apply(content)
+            context = data_filter.apply(context)
+            raw_output = data_filter.apply(raw_output)
+            rationale = data_filter.apply(rationale)
+            reasoning = data_filter.apply(reasoning)
         try:
             pool = db_conn.get_pool()
             await safety_repo.insert_flag(
@@ -275,9 +288,9 @@ class SafetyScreen:
                 context_user_turn=context,
                 verdict=verdict.status,
                 categories=verdict.categories,
-                raw_output=verdict.raw or None,
-                rationale=verdict.rationale,
-                reasoning=verdict.reasoning,
+                raw_output=raw_output,
+                rationale=rationale,
+                reasoning=reasoning,
                 policy_version=verdict.policy_version,
                 model=verdict.model or None,
                 prompt_hash=verdict.prompt_hash,

@@ -129,6 +129,9 @@ export function useChat() {
   // reload loses the local reminder, and only the participant can lift the
   // pause, so the reminder is shown again from this flag.
   const [serverIdlePaused, setServerIdlePaused] = useState(false)
+  // Set when the server pauses the room after a message with personal data:
+  // the privacy reminder stays up until the participant confirms it.
+  const [privacyPaused, setPrivacyPaused] = useState(false)
   const [exitModalOpen, setExitModalOpen] = useState(false)
   const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
   const [initialMessageDone, setInitialMessageDone] = useState(false)
@@ -327,6 +330,7 @@ export function useChat() {
       setEmotionsCheckupIsShort(Boolean(obj.is_short ?? true))
       setEmotionsCheckupOpen(true)
     } else if (obj && obj.event_type === "session_paused") {
+      if (obj.trigger === "privacy") setPrivacyPaused(true)
       if (obj.trigger === "hold") {
         setSafetyHoldNotice(typeof obj.notice === "string" && obj.notice ? obj.notice : "La sala está en pausa por un momento técnico. Volverá en breve.")
       }
@@ -342,6 +346,7 @@ export function useChat() {
         setSafetyHoldNotice(null)
       }
       setServerIdlePaused(Boolean(obj.idle_paused))
+      setPrivacyPaused(Boolean(obj.privacy_paused))
       setBehaviorConfig({
         behaviorTrackingEnabled: Boolean(obj.behavior_tracking_enabled),
         idlePromptEnabled: Boolean(obj.idle_prompt_enabled),
@@ -431,6 +436,15 @@ export function useChat() {
     send({ type: "resume" } as any)
     noteActivity()
     setServerIdlePaused(false)
+  }, [send, noteActivity])
+
+  // Confirming the privacy reminder resumes the room. If the message is lost
+  // to a reconnect gap, the server still reports the pause on reconnect and
+  // the reminder comes back.
+  const resumeFromPrivacy = useCallback(() => {
+    send({ type: "privacy_resume" } as any)
+    noteActivity()
+    setPrivacyPaused(false)
   }, [send, noteActivity])
 
   // Per-message composition metrics (time spent typing, edit effort).
@@ -1016,6 +1030,8 @@ export function useChat() {
     idlePromptVisible,
     safetyHoldNotice,
     resumeFromIdle,
+    privacyPaused,
+    resumeFromPrivacy,
     // Session end
     sessionEnded,
     safetyIntervention,

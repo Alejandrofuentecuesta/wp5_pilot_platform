@@ -1279,6 +1279,10 @@ async def websocket_endpoint(websocket: WebSocket, session_id: str):
                 # Participant dismissed the reminder: unfreeze and credit the
                 # paused time back to the session clock (idle pauses only).
                 await session.resume_from_idle()
+            elif data.get("type") == "privacy_resume":
+                # Participant confirmed the personal-data reminder: unfreeze and
+                # credit the paused time back (privacy pauses only).
+                await session.resume_from_privacy()
             elif data.get("type") == "emotions_checkup_response":
                 await session.handle_emotions_checkup_response(data)
             elif data.get("type") == "user_exit":

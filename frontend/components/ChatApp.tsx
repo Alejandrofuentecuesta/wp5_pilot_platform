@@ -6,6 +6,7 @@ import { useChat } from "@/hooks/useChat"
 import LoginScreen, { type HandoffParams } from "./LoginScreen"
 import ChatRoom from "./ChatRoom"
 import IdleReminderBanner from "./IdleReminderBanner"
+import PrivacyReminder from "./PrivacyReminder"
 import SafetyHoldOverlay from "./SafetyHoldOverlay"
 import ThankYouScreen from "./ThankYouScreen"
 import SafetyInterventionScreen from "./SafetyInterventionScreen"
@@ -115,8 +116,12 @@ export default function ChatApp() {
   return (
     <>
       <SafetyHoldOverlay notice={chat.safetyHoldNotice} />
+      <PrivacyReminder
+        visible={chat.privacyPaused && !chat.safetyHoldNotice}
+        onConfirm={chat.resumeFromPrivacy}
+      />
       <IdleReminderBanner
-        visible={chat.idlePromptVisible && !chat.safetyHoldNotice}
+        visible={chat.idlePromptVisible && !chat.privacyPaused && !chat.safetyHoldNotice}
         onDismiss={chat.resumeFromIdle}
       />
       <ChatRoom
@@ -125,7 +130,7 @@ export default function ChatApp() {
       displayName={chat.username}
       isConnected={chat.isConnected}
       inputValue={chat.inputValue}
-      inputDisabled={Boolean(chat.safetyHoldNotice)}
+      inputDisabled={Boolean(chat.safetyHoldNotice) || chat.privacyPaused}
       setInputValue={chat.setInputValue}
       replyTo={chat.replyTo}
       setReplyTo={chat.setReplyTo}

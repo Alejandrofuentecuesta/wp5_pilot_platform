@@ -635,60 +635,6 @@ class TestParticipantSafety:
             session.stop.assert_awaited_once_with(reason="participant_safety")
 
     @pytest.mark.asyncio
-    async def test_personal_data_classification_drops_rationale_and_passes_message(self):
-        with _patch_externals():
-            session, _ = _create_session()
-            session.running = True
-            session.classifier_llm.generate_response = AsyncMock(return_value=json.dumps({
-                "should_stop": True,
-                "category": "personal_data",
-                "confidence": "high",
-                "rationale": "Phone number 612345678",
-            }))
-            session._trigger_safety_intervention = AsyncMock()
-            message = Message.create(sender=session.state.user_name, content="Llamadme al 612345678")
-
-            await session._run_participant_safety_check(message, [message])
-
-            classification, passed = session._trigger_safety_intervention.await_args.args
-            assert classification["category"] == "personal_data"
-            assert classification["rationale"] == ""
-            assert passed is message
-
-    @pytest.mark.asyncio
-    @pytest.mark.parametrize("category,redacts", [("personal_data", True), ("severe_distress", False)])
-    async def test_trigger_redacts_only_for_personal_data(self, category, redacts):
-        with _patch_externals(), \
-             patch("platforms.chatroom.event_repo") as mock_event_repo, \
-             patch("platforms.chatroom.asyncio.sleep", new=AsyncMock()):
-            mock_event_repo.insert_event_strict = AsyncMock()
-            session, _ = _create_session()
-            session.running = True
-            session._publish_session_end = AsyncMock()
-            session.stop = AsyncMock()
-            session._redact_personal_data = AsyncMock()
-            message = Message.create(sender=session.state.user_name, content="Llamadme al 612345678")
-
-            await session._trigger_safety_intervention({"category": category}, message)
-
-            session.stop.assert_awaited_once_with(reason="participant_safety")
-            assert session._redact_personal_data.await_count == (1 if redacts else 0)
-
-    @pytest.mark.asyncio
-    async def test_redact_personal_data_scrubs_message_and_storage(self):
-        with _patch_externals(), \
-             patch("platforms.chatroom.redact_participant_message", new=AsyncMock()) as mock_redact:
-            session, _ = _create_session()
-            message = Message.create(sender=session.state.user_name, content="Llamadme al 612345678")
-
-            await session._redact_personal_data(message)
-
-            assert mock_redact.await_args.kwargs["content"] == "Llamadme al 612345678"
-            assert mock_redact.await_args.kwargs["message_id"] == message.message_id
-            assert "612345678" not in message.content
-            assert message.metadata["personal_data_redacted"] is True
-
-    @pytest.mark.asyncio
     async def test_completed_agent_result_is_discarded_after_safety_trigger(self):
         with _patch_externals():
             session, _ = _create_session()

@@ -30,6 +30,7 @@ class AgentManager:
         turn_lock=None,
         task_registry=None,
         on_message_shown=None,
+        persist_filter=None,
     ) -> None:
         self.state = state
         self.orchestrator = orchestrator
@@ -51,6 +52,10 @@ class AgentManager:
         self.session_active = session_active
         self.turn_lock = turn_lock
         self.task_registry = task_registry
+        # The session's personal-data filter (``utils.personal_data_filter``):
+        # applied to what is written to the database, never to the message
+        # shown in the room.
+        self.persist_filter = persist_filter
 
     async def _handle_message(self, result: TurnResult, *, skip_safety: bool = False) -> None:
         """Screen, persist and broadcast a generated agent message."""
@@ -86,6 +91,14 @@ class AgentManager:
         })
         if isinstance(message.metadata, dict) and message.metadata.get("stance_confidence") is not None:
             metadata["stance_confidence"] = message.metadata["stance_confidence"]
+        stored_content = message.content
+        stored_quoted_text = message.quoted_text
+        stored_rationale = message.classification_rationale
+        if self.persist_filter is not None and self.persist_filter.active:
+            stored_content = self.persist_filter.apply(stored_content)
+            stored_quoted_text = self.persist_filter.apply(stored_quoted_text)
+            stored_rationale = self.persist_filter.apply(stored_rationale)
+            metadata = self.persist_filter.apply(metadata)
         try:
             pool = db_conn.get_pool()
             await message_repo.insert_message(
@@ -94,15 +107,15 @@ class AgentManager:
                 session_id=self.session_id,
                 experiment_id=self.experiment_id,
                 sender=message.sender,
-                content=message.content,
+                content=stored_content,
                 sent_at=message.timestamp,
                 reply_to=message.reply_to,
-                quoted_text=message.quoted_text,
+                quoted_text=stored_quoted_text,
                 mentions=message.mentions,
                 is_incivil=message.is_incivil,
                 is_like_minded=message.is_like_minded,
                 inferred_participant_stance=message.inferred_participant_stance,
-                classification_rationale=message.classification_rationale,
+                classification_rationale=stored_rationale,
                 metadata=metadata,
             )
         except Exception as exc:

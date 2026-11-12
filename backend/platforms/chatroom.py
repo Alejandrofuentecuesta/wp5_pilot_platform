@@ -2,10 +2,11 @@ import asyncio
 import os
 import random
 import re
+import json
 import time
 
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional
 
 from models import Message, Agent, SessionState
@@ -23,9 +24,10 @@ from agents.STAGE.orchestrator import Orchestrator
 from features import load_features
 from db import connection as db_conn
 from db.repositories import session_repo, message_repo, config_repo, event_repo, safety_repo, token_repo
-from db.repositories.redaction_repo import PERSONAL_DATA_PLACEHOLDER, redact_participant_message
+from db.repositories import redaction_repo
 from db.repositories.config_repo import validate_safety_config
 from platforms.safety_screen import SafetyScreen
+from utils.personal_data_filter import MIN_SUBSTRING_LENGTH, PersonalDataFilter
 from utils.safety import SafetyClient
 from cache import redis_client
 
@@ -37,6 +39,10 @@ REJOIN_WINDOW_MINUTES = int(os.getenv("REJOIN_WINDOW_MINUTES", "60"))
 # failed (r=4) or stalled (r=2). Per-experiment override:
 # simulation.silence_failure_seconds. Agreed with UB at 240 s (2026-10-30).
 SILENCE_FAILURE_DEFAULT_SECONDS = 240
+# Rows written up to this long before a flagged message's own timestamp are
+# included when its stored copies are erased (clock differences between the
+# app and the database).
+PERSONAL_DATA_SINCE_MARGIN = timedelta(seconds=5)
 
 _REPLACEMENT_AGENT_NAMES = [
     "Raúl", "Alba", "Sergio", "Inés", "Hugo", "Nerea", "Iván", "Marina",
@@ -313,6 +319,12 @@ class SimulationSession:
         self.session_id = session_id
         self.experiment_id = experiment_id
         self.logger = Logger(session_id, experiment_id)
+        # Personal data a participant disclosed: the message stays in the room
+        # and in the agents' context, but its text is kept out of every
+        # database write of this session (see ``_handle_personal_data``).
+        self._personal_data_filter = PersonalDataFilter()
+        self._personal_data_since: Optional[datetime] = None
+        self.logger.redact = self._personal_data_filter.apply
         # Set while the researcher has paused the whole experiment from the
         # dashboard: an operator freeze like the safety hold (see
         # ``pause_for_experiment``).
@@ -558,6 +570,7 @@ class SimulationSession:
         # and for operations that apply to the whole session (e.g. rebuild_roster).
         # The safety gate sits between the orchestrators and publication.
         self.safety_screen = self._build_safety_screen(experimental_full)
+        self.safety_screen.persist_filter = self._personal_data_filter
 
         self.agent_manager = AgentManager(
             state=self.state,
@@ -571,6 +584,7 @@ class SimulationSession:
             turn_lock=self._turn_lock,
             task_registry=self._safety_tasks,
             on_message_shown=self._note_agent_message_shown,
+            persist_filter=self._personal_data_filter,
         )
 
         # Researcher-initiated hold (Safety tab). Independent of the
@@ -1034,6 +1048,11 @@ class SimulationSession:
             {current_task} if current_task is not None else set()
         )
 
+        # Every write of the session has finished: confirm no stored row still
+        # holds text the participant disclosed as personal data.
+        await self.logger.drain()
+        await self._final_personal_data_check()
+
         self.logger.log_session_end(reason)
         # Flush any pending fire-and-forget log tasks before closing DB connection.
         await self.logger.drain()
@@ -1062,7 +1081,7 @@ class SimulationSession:
         if reason == "session_failed":
             await self._reopen_token()
         if reason in (
-            "abandoned", "no_first_message", "idle_timeout",
+            "abandoned", "no_first_message", "idle_timeout", "privacy_timeout",
             "participant_safety", "safety_stop",
             "session_failed", "session_stalled",
         ):
@@ -1246,20 +1265,20 @@ class SimulationSession:
                     await asyncio.sleep(tick_interval)
                     continue
 
-                # Participant disconnected or idle: freeze everything and
-                # enforce the rejoin window. A rejoin clears a disconnect
-                # pause; only the participant clears an idle pause.
+                # Participant disconnected, idle or at the privacy reminder:
+                # freeze everything and enforce the rejoin window. A rejoin
+                # clears a disconnect pause; only the participant clears an
+                # idle or privacy pause.
                 if self._pause_started_monotonic is not None:
                     away_seconds = time.monotonic() - self._pause_started_monotonic
                     if away_seconds >= REJOIN_WINDOW_MINUTES * 60:
-                        # Both end as a non-complete (r=2); the reason differs
-                        # so the data separates an idle time-out from a genuine
-                        # disconnect.
-                        end_reason = (
-                            "idle_timeout"
-                            if self._pause_trigger == "idle"
-                            else "abandoned"
-                        )
+                        # All end as a non-complete (r=2); the reason differs
+                        # so the data separates an idle or privacy-reminder
+                        # time-out from a genuine disconnect.
+                        end_reason = {
+                            "idle": "idle_timeout",
+                            "privacy": "privacy_timeout",
+                        }.get(self._pause_trigger, "abandoned")
                         await self._publish_session_end(end_reason)
                         await asyncio.sleep(0.5)
                         await self.stop(reason=end_reason)
@@ -1702,18 +1721,19 @@ class SimulationSession:
         # Persist to DB (awaited — user messages are primary research data).
         try:
             pool = db_conn.get_pool()
+            data_filter = self._personal_data_filter
             await message_repo.insert_message(
                 pool,
                 message_id=message.message_id,
                 session_id=self.session_id,
                 experiment_id=self.experiment_id,
                 sender=message.sender,
-                content=message.content,
+                content=data_filter.apply(message.content),
                 sent_at=message.timestamp,
                 reply_to=message.reply_to,
-                quoted_text=message.quoted_text,
+                quoted_text=data_filter.apply(message.quoted_text),
                 mentions=message.mentions,
-                metadata=message.metadata,
+                metadata=data_filter.apply(message.metadata),
             )
         except Exception as exc:
             self.logger.log_error("persist_user_message", str(exc))
@@ -1792,22 +1812,46 @@ class SimulationSession:
         except Exception as exc:
             self.logger.log_error("participant_safety_classifier_call", str(exc))
 
+        decision = None
+        parse_error = None
+        if raw:
+            try:
+                decision = parse_participant_safety_response(raw)
+            except ValueError as exc:
+                parse_error = exc
+        flagged_personal_data = bool(
+            decision
+            and decision["should_stop"]
+            and decision["category"] == "personal_data"
+        )
+        # A synthetic participant is a language model: no real person's data
+        # and nobody to read a reminder, so the flag is only logged.
+        personal_data = flagged_personal_data and not self.simulation_config.get(
+            "synthetic_participant"
+        )
+        logged_response = raw
+        if personal_data:
+            # Registered before anything below is logged, so the prompt of this
+            # very call is written without the text. The model's rationale may
+            # quote the data, so the logged response leaves it out.
+            self._personal_data_filter.add(message.content)
+            logged_response = json.dumps(
+                {k: v for k, v in decision.items() if k != "rationale"},
+                ensure_ascii=False,
+            )
+
         self.logger.log_llm_call(
             agent_name="__participant_safety_classifier__",
             prompt=(
                 f"[SYSTEM]\n{PARTICIPANT_SAFETY_SYSTEM_PROMPT}"
                 f"\n\n[USER]\n{prompt}"
             ),
-            response=raw,
+            response=logged_response,
             error=None if raw else "Safety classifier LLM returned no response",
         )
-        if not raw or not self.running or self._safety_intervention_triggered:
-            return
-
-        try:
-            decision = parse_participant_safety_response(raw)
-        except ValueError as exc:
-            self.logger.log_error("participant_safety_classifier_parse", str(exc))
+        if parse_error is not None:
+            self.logger.log_error("participant_safety_classifier_parse", str(parse_error))
+        if decision is None:
             return
 
         classification_data = {
@@ -1818,18 +1862,23 @@ class SimulationSession:
             # The rationale may quote the disclosed data, so it is not stored.
             "rationale": "" if decision["category"] == "personal_data" else decision["rationale"],
         }
+        if flagged_personal_data:
+            # Never ends the session. Handled even if the session ended while
+            # the classifier ran: the stored copies must go either way.
+            self.logger.log_event("participant_safety_classification", classification_data)
+            if personal_data:
+                await self._handle_personal_data(message, classification_data)
+            return
+        if not self.running or self._safety_intervention_triggered:
+            return
         self.logger.log_event(
             "participant_safety_classification",
             classification_data,
         )
         if decision["should_stop"]:
-            await self._trigger_safety_intervention(classification_data, message)
+            await self._trigger_safety_intervention(classification_data)
 
-    async def _trigger_safety_intervention(
-        self,
-        classification: Dict[str, object],
-        message: Optional[Message] = None,
-    ) -> None:
+    async def _trigger_safety_intervention(self, classification: Dict[str, object]) -> None:
         """Atomically end the experiment after a positive safety decision."""
         async with self._safety_stop_lock:
             if self._safety_intervention_triggered or not self.running:
@@ -1868,40 +1917,87 @@ class SimulationSession:
             await asyncio.sleep(0.5)
             await self.stop(reason="participant_safety")
 
-            if classification.get("category") == "personal_data" and message is not None:
-                await self._redact_personal_data(message)
+    # ── Personal data: privacy pause and storage ──────────────────────────────
 
-    async def _redact_personal_data(self, message: Message) -> None:
-        """Scrub a message that disclosed personal data from every stored copy.
+    async def _handle_personal_data(
+        self, message: Message, classification: Dict[str, object]
+    ) -> None:
+        """Respond to a participant message the classifier found to disclose personal data.
 
-        The session end, the trigger event and the message row stay, so the
-        incident remains visible; only the text is replaced. Runs after stop(),
-        once the participant screen and pending log writes have finished, so
-        no copy is written after the scrub.
+        The participant is paused and shown a privacy reminder; the session
+        then continues. The message stays in the room and in the agents'
+        context, because it has already been sent to the model providers.
+        Storage is what changes: the filter (registered by the caller) keeps
+        the text out of every write from here on, and the copies written
+        before the verdict are erased.
         """
-        content = message.content
-        pending = [t for t in self._participant_screen_tasks if t is not asyncio.current_task()]
-        if pending:
-            await asyncio.wait(pending, timeout=60)
+        if self._personal_data_since is None or message.timestamp < self._personal_data_since:
+            self._personal_data_since = message.timestamp
+        if self.running:
+            await self.pause_for_privacy()
+        await self._erase_personal_data(message, classification)
+
+    async def _erase_personal_data(
+        self, message: Message, classification: Dict[str, object]
+    ) -> None:
+        """Erase the copies of a flagged message written before the verdict."""
+        # Log writes queued before the filter was registered are filtered when
+        # they run; draining lets any already running finish before the read.
         await self.logger.drain()
-        message.content = PERSONAL_DATA_PLACEHOLDER
-        message.metadata["personal_data_redacted"] = True
         try:
-            await redact_participant_message(
+            counts = await redaction_repo.erase_personal_data(
                 db_conn.get_pool(),
                 session_id=self.session_id,
+                data_filter=self._personal_data_filter,
+                since=message.timestamp - PERSONAL_DATA_SINCE_MARGIN,
                 message_id=message.message_id,
-                content=content,
+            )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.logger.log_error("personal_data_erasure", str(exc))
+            return
+        self.logger.log_event(
+            "personal_data_redacted",
+            {
+                "message_id": message.message_id,
+                "confidence": classification.get("confidence"),
+                "text_length": len(message.content),
+                "whole_value_only": len(message.content) < MIN_SUBSTRING_LENGTH,
+                "rows_changed": counts,
+            },
+        )
+
+    async def _final_personal_data_check(self) -> None:
+        """At session end, confirm that no stored row still holds a flagged text.
+
+        Normally the count is zero and nothing is written. A copy can only
+        remain if a write that started before a verdict committed after the
+        erasure; any such copy is erased now and logged as an anomaly.
+        """
+        if not self._personal_data_filter.active or self._personal_data_since is None:
+            return
+        since = self._personal_data_since - PERSONAL_DATA_SINCE_MARGIN
+        try:
+            pool = db_conn.get_pool()
+            remaining = await redaction_repo.count_personal_data_copies(
+                pool,
+                session_id=self.session_id,
+                data_filter=self._personal_data_filter,
+                since=since,
+            )
+            if not any(remaining.values()):
+                return
+            counts = await redaction_repo.erase_personal_data(
+                pool,
+                session_id=self.session_id,
+                data_filter=self._personal_data_filter,
+                since=since,
             )
         except Exception as exc:
-            self.logger.log_error("personal_data_redaction", str(exc))
+            self.logger.log_error("personal_data_final_check", str(exc))
             return
-        try:
-            await redis_client.invalidate_session(redis_client.get_redis(), self.session_id)
-        except Exception as exc:
-            self.logger.log_error("personal_data_redaction_redis", str(exc))
-        self.logger.log_event("personal_data_redacted", {"message_id": message.message_id})
-        await self.logger.drain()
+        self.logger.log_event("personal_data_redaction_anomaly", {"rows_changed": counts})
 
 
     # ── Researcher freezes: safety hold and experiment pause ─────────────────
@@ -2084,8 +2180,54 @@ class SimulationSession:
         self.logger.log_event("session_paused", {"trigger": "idle"})
         print(f"Session {self.session_id} paused (participant idle)")
 
+    async def pause_for_privacy(self) -> None:
+        """Freeze the session while the participant reads the privacy reminder.
+
+        The same participant pause as ``pause_for_idle``: no turns, the session
+        countdown and the silence clock stop, and the frozen time is credited
+        back on resume. Like the idle pause it is lifted only by the
+        participant, through the reminder's button (``resume_from_privacy``);
+        a reconnect does not lift it, and a rejoin shows the reminder again.
+        If the participant was already away or idle, that pause becomes a
+        privacy pause and keeps its start, so the away-clock is not reset.
+        """
+        if not self.running:
+            return
+        if self._pause_started_monotonic is None:
+            self._pause_started_monotonic = time.monotonic()
+            self._sync_freeze()
+        self._pause_trigger = "privacy"
+        self.logger.log_event("session_paused", {"trigger": "privacy"})
+        print(f"Session {self.session_id} paused (personal data reminder)")
+        try:
+            await redis_client.publish_event(
+                redis_client.get_redis(),
+                self.session_id,
+                {
+                    "event_type": "session_paused",
+                    "trigger": "privacy",
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        except Exception as exc:
+            self.logger.log_error("publish_privacy_pause", str(exc))
+
+    async def resume_from_privacy(self) -> None:
+        """Lift a privacy pause when the participant confirms the reminder,
+        and persist the credited time (as ``resume_from_idle``)."""
+        if self._pause_trigger != "privacy":
+            return
+        credited = self.resume_from_pause()
+        if credited:
+            try:
+                await session_repo.add_paused_seconds(
+                    db_conn.get_pool(), self.session_id, credited
+                )
+            except Exception as exc:
+                self.logger.log_error("persist_paused_seconds", str(exc))
+
     def resume_from_pause(self) -> float:
-        """Lift the participant pause (disconnect or idle).
+        """Lift the participant pause (disconnect, idle or privacy).
 
         Returns the seconds credited to the session clock by this call: the
         frozen time, once no other reason (a researcher hold) keeps the
@@ -2251,6 +2393,8 @@ class SimulationSession:
                 # which loses the client's reminder) must show the reminder
                 # again: only the participant can lift the pause.
                 "idle_paused": self._pause_trigger == "idle",
+                # Same for the privacy reminder after a personal-data flag.
+                "privacy_paused": self._pause_trigger == "privacy",
             })
         except Exception as exc:
             self.logger.log_error("send_session_config", str(exc))

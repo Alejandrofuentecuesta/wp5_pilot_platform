@@ -24,6 +24,7 @@ from agents.STAGE.orchestrator import Orchestrator
 from features import load_features
 from db import connection as db_conn
 from db.repositories import session_repo, message_repo, config_repo, event_repo, safety_repo
+from db.repositories.redaction_repo import PERSONAL_DATA_PLACEHOLDER, redact_participant_message
 from db.repositories.config_repo import validate_safety_config
 from platforms.safety_screen import SafetyScreen
 from utils.safety import SafetyClient
@@ -1764,16 +1765,21 @@ class SimulationSession:
             "should_stop": decision["should_stop"],
             "category": decision["category"],
             "confidence": decision["confidence"],
-            "rationale": decision["rationale"],
+            # The rationale may quote the disclosed data, so it is not stored.
+            "rationale": "" if decision["category"] == "personal_data" else decision["rationale"],
         }
         self.logger.log_event(
             "participant_safety_classification",
             classification_data,
         )
         if decision["should_stop"]:
-            await self._trigger_safety_intervention(classification_data)
+            await self._trigger_safety_intervention(classification_data, message)
 
-    async def _trigger_safety_intervention(self, classification: Dict[str, object]) -> None:
+    async def _trigger_safety_intervention(
+        self,
+        classification: Dict[str, object],
+        message: Optional[Message] = None,
+    ) -> None:
         """Atomically end the experiment after a positive safety decision."""
         async with self._safety_stop_lock:
             if self._safety_intervention_triggered or not self.running:
@@ -1811,6 +1817,41 @@ class SimulationSession:
             # subscriber is torn down, matching other terminal flows.
             await asyncio.sleep(0.5)
             await self.stop(reason="participant_safety")
+
+            if classification.get("category") == "personal_data" and message is not None:
+                await self._redact_personal_data(message)
+
+    async def _redact_personal_data(self, message: Message) -> None:
+        """Scrub a message that disclosed personal data from every stored copy.
+
+        The session end, the trigger event and the message row stay, so the
+        incident remains visible; only the text is replaced. Runs after stop(),
+        once the participant screen and pending log writes have finished, so
+        no copy is written after the scrub.
+        """
+        content = message.content
+        pending = [t for t in self._participant_screen_tasks if t is not asyncio.current_task()]
+        if pending:
+            await asyncio.wait(pending, timeout=60)
+        await self.logger.drain()
+        message.content = PERSONAL_DATA_PLACEHOLDER
+        message.metadata["personal_data_redacted"] = True
+        try:
+            await redact_participant_message(
+                db_conn.get_pool(),
+                session_id=self.session_id,
+                message_id=message.message_id,
+                content=content,
+            )
+        except Exception as exc:
+            self.logger.log_error("personal_data_redaction", str(exc))
+            return
+        try:
+            await redis_client.invalidate_session(redis_client.get_redis(), self.session_id)
+        except Exception as exc:
+            self.logger.log_error("personal_data_redaction_redis", str(exc))
+        self.logger.log_event("personal_data_redacted", {"message_id": message.message_id})
+        await self.logger.drain()
 
 
     # ── Researcher freezes: safety hold and experiment pause ─────────────────

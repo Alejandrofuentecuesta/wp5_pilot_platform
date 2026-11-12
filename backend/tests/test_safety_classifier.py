@@ -22,7 +22,7 @@ def test_prompt_marks_latest_message_and_labels_speakers():
     assert '"latest_participant_message": "Me siento realmente mal"' in prompt
 
 
-@pytest.mark.parametrize("category", ["self_harm", "severe_distress"])
+@pytest.mark.parametrize("category", ["self_harm", "severe_distress", "personal_data"])
 def test_parse_positive_safety_decision(category):
     result = parse_participant_safety_response(
         f'```json\n{{"should_stop": true, "category": "{category}", '

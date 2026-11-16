@@ -19,7 +19,7 @@ import json
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 # ContextVar set by parallel pipeline tasks so every log call within a task
 # automatically carries its pipeline slot id (1, 2, …).  When unset (sequential
@@ -51,6 +51,12 @@ class Logger:
 
         # Track pending fire-and-forget tasks so drain() can await them.
         self._pending_tasks: set = set()
+
+        # Optional transformation applied to every event's data at the moment
+        # it is written (not when it is queued), so a filter registered after
+        # an event was logged still applies to it. Used to keep a participant
+        # message that disclosed personal data out of storage.
+        self.redact: Optional[Callable[[Any], Any]] = None
 
     # ── Public interface ──────────────────────────────────────────────────────
 
@@ -145,6 +151,8 @@ class Logger:
         try:
             from db.connection import get_pool
             from db.repositories.event_repo import insert_event
+            if self.redact is not None:
+                data = self.redact(data)
             await insert_event(
                 get_pool(),
                 session_id=self.session_id,

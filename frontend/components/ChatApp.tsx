@@ -6,6 +6,7 @@ import { useChat } from "@/hooks/useChat"
 import LoginScreen, { type HandoffParams } from "./LoginScreen"
 import ChatRoom from "./ChatRoom"
 import IdleReminderBanner from "./IdleReminderBanner"
+import PrivacyReminder from "./PrivacyReminder"
 import SafetyHoldOverlay from "./SafetyHoldOverlay"
 import ThankYouScreen from "./ThankYouScreen"
 import SafetyInterventionScreen from "./SafetyInterventionScreen"
@@ -21,11 +22,13 @@ function parseHandoffParams(): HandoffParams | null {
   const s = (params.get("s") || "").trim()
   const stance: ParticipantStance | null =
     s === "1" ? "pro_topic" : s === "2" ? "anti_topic" : null
-  // Panel (NetQuest) links additionally carry hkey (token authentication)
-  // and g (randomised condition); passed through to the intake call.
+  // Panel (NetQuest) links additionally carry hkey (token authentication),
+  // g (randomised condition) and e (topic code, which picks the experiment);
+  // all passed through to the intake call.
   const hkey = (params.get("hkey") || "").trim() || null
   const g = (params.get("g") || "").trim() || null
-  return { token, stance, hkey, g }
+  const e = (params.get("e") || "").trim() || null
+  return { token, stance, hkey, g, e }
 }
 
 export default function ChatApp() {
@@ -113,8 +116,12 @@ export default function ChatApp() {
   return (
     <>
       <SafetyHoldOverlay notice={chat.safetyHoldNotice} />
+      <PrivacyReminder
+        visible={chat.privacyPaused && !chat.safetyHoldNotice}
+        onConfirm={chat.resumeFromPrivacy}
+      />
       <IdleReminderBanner
-        visible={chat.idlePromptVisible && !chat.safetyHoldNotice}
+        visible={chat.idlePromptVisible && !chat.privacyPaused && !chat.safetyHoldNotice}
         onDismiss={chat.resumeFromIdle}
       />
       <ChatRoom
@@ -123,7 +130,7 @@ export default function ChatApp() {
       displayName={chat.username}
       isConnected={chat.isConnected}
       inputValue={chat.inputValue}
-      inputDisabled={Boolean(chat.safetyHoldNotice)}
+      inputDisabled={Boolean(chat.safetyHoldNotice) || chat.privacyPaused}
       setInputValue={chat.setInputValue}
       replyTo={chat.replyTo}
       setReplyTo={chat.setReplyTo}

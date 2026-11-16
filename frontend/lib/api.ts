@@ -3,11 +3,12 @@ import type { AgentImpression, FinalReportBlockSurvey, ParticipantStance, Sessio
 
 export async function previewSessionIntake(
   token: string,
-  panel?: { hkey?: string | null; g?: string | null },
+  panel?: { hkey?: string | null; g?: string | null; e?: string | null },
 ): Promise<SessionIntakeResponse> {
   const body: Record<string, string> = { token }
   if (panel?.hkey) body.hkey = panel.hkey
   if (panel?.g) body.g = panel.g
+  if (panel?.e) body.e = panel.e
   const res = await fetch(`${API_BASE}/session/intake`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },

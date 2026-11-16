@@ -151,6 +151,9 @@ export interface ExperimentalConfig {
   incivility_framework: string
   ecological_validity_criteria: string
   redirect_url: string
+  // Which NetQuest arrivals (link parameter e) this experiment receives:
+  // "1" immigration, "2" climate change, null for internal token-only use.
+  netquest_topic_code?: string | null
   groups: Record<string, TreatmentGroup>
   agent_pool?: PoolAgent[]
   narrative_pool?: NarrativePoolCell[]

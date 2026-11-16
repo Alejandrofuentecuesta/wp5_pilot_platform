@@ -129,6 +129,9 @@ export function useChat() {
   // reload loses the local reminder, and only the participant can lift the
   // pause, so the reminder is shown again from this flag.
   const [serverIdlePaused, setServerIdlePaused] = useState(false)
+  // Set when the server pauses the room after a message with personal data:
+  // the privacy reminder stays up until the participant confirms it.
+  const [privacyPaused, setPrivacyPaused] = useState(false)
   const [exitModalOpen, setExitModalOpen] = useState(false)
   const [isInitialNewsRead, setIsInitialNewsRead] = useState(false)
   const [initialMessageDone, setInitialMessageDone] = useState(false)
@@ -272,6 +275,18 @@ export function useChat() {
       setEmotionsCheckupOpen(false)
       const feedbackAlreadySubmitted = Boolean(obj.agent_feedback_submitted)
       setSessionEndReason(reason)
+      if (reason === "session_failed" && obj.reentry === true) {
+        // Late return to a session that failed before any agent spoke: its
+        // token was reopened, so this visit is a recontact. Forget the old
+        // session and let the handoff flow run intake again, which starts a
+        // fresh session on the same link.
+        setTypingCount(0)
+        setSessionEnded(false)
+        setFinalEmotionsCheckupOpen(false)
+        setAgentImpressionSurveyOpen(false)
+        concludeSession()
+        return
+      }
       if (reason === "participant_safety") {
         setTypingCount(0)
         setRedirectUrl(url || null)
@@ -315,6 +330,7 @@ export function useChat() {
       setEmotionsCheckupIsShort(Boolean(obj.is_short ?? true))
       setEmotionsCheckupOpen(true)
     } else if (obj && obj.event_type === "session_paused") {
+      if (obj.trigger === "privacy") setPrivacyPaused(true)
       if (obj.trigger === "hold") {
         setSafetyHoldNotice(typeof obj.notice === "string" && obj.notice ? obj.notice : "La sala está en pausa por un momento técnico. Volverá en breve.")
       }
@@ -330,6 +346,7 @@ export function useChat() {
         setSafetyHoldNotice(null)
       }
       setServerIdlePaused(Boolean(obj.idle_paused))
+      setPrivacyPaused(Boolean(obj.privacy_paused))
       setBehaviorConfig({
         behaviorTrackingEnabled: Boolean(obj.behavior_tracking_enabled),
         idlePromptEnabled: Boolean(obj.idle_prompt_enabled),
@@ -421,6 +438,15 @@ export function useChat() {
     setServerIdlePaused(false)
   }, [send, noteActivity])
 
+  // Confirming the privacy reminder resumes the room. If the message is lost
+  // to a reconnect gap, the server still reports the pause on reconnect and
+  // the reminder comes back.
+  const resumeFromPrivacy = useCallback(() => {
+    send({ type: "privacy_resume" } as any)
+    noteActivity()
+    setPrivacyPaused(false)
+  }, [send, noteActivity])
+
   // Per-message composition metrics (time spent typing, edit effort).
   const composeRef = useRef({ startedAt: 0, keystrokes: 0, backspaces: 0, pasted: false })
 
@@ -466,7 +492,7 @@ export function useChat() {
   // Session intake preview (token validation + topic survey).
   const previewSessionIntake = async (
     token: string,
-    panel?: { hkey?: string | null; g?: string | null },
+    panel?: { hkey?: string | null; g?: string | null; e?: string | null },
   ): Promise<SessionIntakeResponse> => {
     return apiPreviewSessionIntake(token, panel)
   }
@@ -1004,6 +1030,8 @@ export function useChat() {
     idlePromptVisible,
     safetyHoldNotice,
     resumeFromIdle,
+    privacyPaused,
+    resumeFromPrivacy,
     // Session end
     sessionEnded,
     safetyIntervention,

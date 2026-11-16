@@ -258,6 +258,7 @@ async def test_pause_endpoint_asks_for_confirmation_while_sessions_are_live():
     with patch.object(main, "_require_admin", lambda key: None), \
          patch.object(main, "_get_pool", lambda: None), \
          patch.object(main.config_repo, "set_paused", AsyncMock()) as set_paused, \
+         patch.object(main.config_repo, "newest_unpaused_experiment_id", AsyncMock(return_value=None)), \
          patch.object(main.session_manager, "count_running", lambda _id: 2), \
          patch.object(main.session_manager, "set_experiment_paused", AsyncMock(return_value=2)) as freeze:
         with pytest.raises(HTTPException) as exc:

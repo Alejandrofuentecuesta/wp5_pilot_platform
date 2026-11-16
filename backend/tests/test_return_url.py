@@ -1,4 +1,5 @@
-"""Panel return URL: r=1 complete, r=2 non-complete, r=3 chose to leave.
+"""Panel return URL: r=1 complete, r=2 non-complete, r=3 chose to leave,
+r=4 failed before any agent message was shown (recontactable).
 
 `duration_expired_on_recovery` must map to r=2 — the session ran out of
 wall-clock time while the server was down and the participant disconnected,
@@ -23,6 +24,8 @@ TOKEN = "tok-123"
     ("no_first_message", "2"),
     ("idle_timeout", "2"),
     ("duration_expired_on_recovery", "2"),
+    ("session_failed", "4"),
+    ("session_stalled", "2"),
     ("", "2"),
 ])
 def test_r_codes(reason, expected_r):

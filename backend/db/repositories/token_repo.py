@@ -76,6 +76,26 @@ async def consume_token(
             return (row["treatment_group"], row["experiment_id"])
 
 
+async def reopen_token(pool: asyncpg.Pool, token: str, session_id: str) -> bool:
+    """Make a consumed token usable again after its session failed (r=4).
+
+    Only the session that consumed the token may reopen it: the UPDATE is
+    guarded on ``used AND session_id = $2``, so a token already reused by a
+    later session is left alone. Returns True if the token was reopened.
+    """
+    async with pool.acquire() as conn:
+        result = await conn.execute(
+            """
+            UPDATE tokens
+            SET    used = FALSE, used_at = NULL, session_id = NULL
+            WHERE  token = $1 AND used AND session_id = $2
+            """,
+            token,
+            session_id,
+        )
+    return result == "UPDATE 1"
+
+
 async def get_token_status(pool: asyncpg.Pool, token: str) -> Optional[dict]:
     """Return token row as dict, or None if not found."""
     async with pool.acquire() as conn:

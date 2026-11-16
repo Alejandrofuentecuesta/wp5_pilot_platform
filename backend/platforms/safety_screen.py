@@ -64,12 +64,26 @@ class SafetyScreen:
         # first one is reviewed, and approving the first afterwards makes two
         # messages from that agent appear back-to-back with no explanation.
         self._pending_review_agents: Dict[str, Set[str]] = {}
+        # Open withheld flags whose verdict was ``unsafe`` (as opposed to
+        # ``unavailable``): a message is waiting for a human. The silence clock
+        # that ends a session with no agent output does not run while one is
+        # open, since the quiet is the review, not a failure. An unavailable
+        # hold is deliberately not tracked here: a safety-model outage must
+        # still count as silence.
+        self._unsafe_holds: Set[str] = set()
+        # The session's personal-data filter, set by the session: applied to
+        # what a flag stores, never to what the classifier sees.
+        self.persist_filter = None
 
     # ── pending-review blocking ──────────────────────────────────────────
 
     def pending_review_agents(self) -> Set[str]:
         """Agent names that currently have at least one unreviewed withheld flag."""
         return {name for name, flags in self._pending_review_agents.items() if flags}
+
+    def unsafe_hold_open(self) -> bool:
+        """True while a withheld agent message with an unsafe verdict awaits review."""
+        return bool(self._unsafe_holds)
 
     def resolve_flag(self, flag_id: str, agent_name: Optional[str] = None) -> None:
         """Unblock the agent once a withheld flag has been reviewed (or auto-resolved).
@@ -79,6 +93,7 @@ class SafetyScreen:
         timeout. ``agent_name`` is an optional shortcut; without it every
         pending agent is scanned for the flag_id.
         """
+        self._unsafe_holds.discard(flag_id)
         if agent_name is not None:
             flags = self._pending_review_agents.get(agent_name)
             if flags is not None:
@@ -146,6 +161,8 @@ class SafetyScreen:
             )
             if flag_id:
                 self._pending_review_agents.setdefault(message.sender, set()).add(flag_id)
+                if verdict.status == "unsafe":
+                    self._unsafe_holds.add(flag_id)
             self._event(
                 "safety_turn_withheld",
                 {
@@ -247,6 +264,16 @@ class SafetyScreen:
         displayed_at: Optional[datetime],
     ) -> Optional[str]:
         flag_id = str(uuid.uuid4())
+        raw_output = verdict.raw or None
+        rationale = verdict.rationale
+        reasoning = verdict.reasoning
+        data_filter = self.persist_filter
+        if data_filter is not None and data_filter.active:
+            content = data_filter.apply(content)
+            context = data_filter.apply(context)
+            raw_output = data_filter.apply(raw_output)
+            rationale = data_filter.apply(rationale)
+            reasoning = data_filter.apply(reasoning)
         try:
             pool = db_conn.get_pool()
             await safety_repo.insert_flag(
@@ -261,9 +288,9 @@ class SafetyScreen:
                 context_user_turn=context,
                 verdict=verdict.status,
                 categories=verdict.categories,
-                raw_output=verdict.raw or None,
-                rationale=verdict.rationale,
-                reasoning=verdict.reasoning,
+                raw_output=raw_output,
+                rationale=rationale,
+                reasoning=reasoning,
                 policy_version=verdict.policy_version,
                 model=verdict.model or None,
                 prompt_hash=verdict.prompt_hash,

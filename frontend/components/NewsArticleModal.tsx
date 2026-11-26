@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { formatMessageTime } from "@/lib/dates"
+import { FIRST_MESSAGE_MIN_LETTERS, isValidFirstMessage } from "@/lib/first-message"
 import type { ParticipantStance } from "@/lib/types"
 import type { Message } from "@/lib/types"
 
@@ -40,9 +41,12 @@ export default function NewsArticleModal({
   const lead = paragraphs[0] || ""
   const articleParagraphs = paragraphs.slice(1)
 
+  const initialMessageValid = isValidFirstMessage(initialInput)
+  const showTooShortHint = initialInput.trim().length > 0 && !initialMessageValid
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    if (!initialInput.trim()) return
+    if (!isValidFirstMessage(initialInput)) return
     if (onSubmitInitialMessage) {
       onSubmitInitialMessage(initialInput.trim())
     } else {
@@ -135,6 +139,11 @@ export default function NewsArticleModal({
                   className="w-full rounded-xl border border-border bg-bg-surface p-3 text-sm text-primary transition-colors placeholder:text-tertiary focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent/30 resize-none"
                   autoFocus
                 />
+                {showTooShortHint && (
+                  <p className="mt-1 text-xs text-secondary">
+                    Escribe un mensaje con al menos {FIRST_MESSAGE_MIN_LETTERS} letras para unirte al debate.
+                  </p>
+                )}
               </div>
               <div className="flex items-center justify-end gap-3">
                 {!isConnected && (
@@ -142,7 +151,7 @@ export default function NewsArticleModal({
                 )}
                 <button
                   type="submit"
-                  disabled={!initialInput.trim() || !isConnected}
+                  disabled={!initialMessageValid || !isConnected}
                   className="rounded-xl bg-accent px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
                 >
                   Publicar y entrar al chat

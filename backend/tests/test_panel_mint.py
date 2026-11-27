@@ -68,6 +68,16 @@ class TestTopicCodeRouting:
             assert row["treatment_group"] == GROUP
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("code", ["3", "4"])
+    async def test_second_study_codes_select_their_experiment(self, code):
+        with _patched() as m:
+            row = await main._try_panel_mint(None, TOKEN, _hkey(), G_PARAM, code)
+
+            m.find.assert_awaited_once_with(None, code)
+            m.seed.assert_awaited_once_with(None, EXPERIMENT, {GROUP: [TOKEN]})
+            assert row["token"] == TOKEN
+
+    @pytest.mark.asyncio
     async def test_e_is_stripped_before_lookup(self):
         with _patched() as m:
             await main._try_panel_mint(None, TOKEN, _hkey(), G_PARAM, " 2 ")
@@ -85,7 +95,7 @@ class TestTopicCodeRouting:
             m.seed.assert_not_awaited()
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("bad_e", ["0", "3", "12", "immigration", "x"])
+    @pytest.mark.parametrize("bad_e", ["0", "5", "12", "immigration", "x"])
     async def test_unknown_e_returns_none_without_lookup(self, bad_e):
         with _patched() as m:
             assert await main._try_panel_mint(None, TOKEN, _hkey(), G_PARAM, bad_e) is None

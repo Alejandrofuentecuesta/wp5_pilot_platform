@@ -25,7 +25,7 @@ def _minimal_exp() -> dict:
 
 
 class TestNetquestTopicCode:
-    @pytest.mark.parametrize("code", ["1", "2", " 2 ", 1])
+    @pytest.mark.parametrize("code", ["1", "2", "3", "4", " 2 ", 1])
     def test_netquest_topic_code_accepted_and_normalised(self, code):
         cfg = _minimal_exp()
         cfg["netquest_topic_code"] = code
@@ -43,7 +43,7 @@ class TestNetquestTopicCode:
         result = config_repo.validate_experimental_config(_minimal_exp(), available_features=[])
         assert result["netquest_topic_code"] is None
 
-    @pytest.mark.parametrize("code", ["0", "3", "immigration", "12"])
+    @pytest.mark.parametrize("code", ["0", "5", "immigration", "12"])
     def test_netquest_topic_code_rejects_unknown_values(self, code):
         cfg = _minimal_exp()
         cfg["netquest_topic_code"] = code

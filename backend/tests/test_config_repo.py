@@ -7,6 +7,7 @@ import pytest_asyncio
 
 pytestmark = pytest.mark.asyncio(loop_scope="session")
 from db.repositories import config_repo
+from platforms.chatroom import build_return_url
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -382,6 +383,25 @@ async def test_find_by_topic_code_prefers_the_live_experiment(db_pool):
 
     assert await config_repo.find_experiment_by_topic_code(db_pool, "1") == "imm_live"
     assert await config_repo.find_experiment_by_topic_code(db_pool, "2") == "climate_live"
+
+
+async def test_each_topic_code_routes_to_its_own_experiment_and_return_url(db_pool):
+    """Two panel studies run side by side: codes 1/2 and 3/4 each select
+    their own live experiment, whose stored return URL is the one used."""
+    urls = {code: f"https://panel.example/study-{code}" for code in ("1", "2", "3", "4")}
+    for code, url in urls.items():
+        config = copy.deepcopy(FULL_CONFIG)
+        config["experimental"]["netquest_topic_code"] = code
+        config["experimental"]["redirect_url"] = url
+        await config_repo.save_experiment_config(db_pool, f"exp_code_{code}", config)
+        await config_repo.set_paused(db_pool, f"exp_code_{code}", False)
+
+    for code, url in urls.items():
+        experiment_id = await config_repo.find_experiment_by_topic_code(db_pool, code)
+        assert experiment_id == f"exp_code_{code}"
+        cfg = await config_repo.get_experiment_config(db_pool, experiment_id)
+        assert build_return_url(cfg["experimental"]["redirect_url"], "tok123", "duration_expired") \
+            == f"{url}?token=tok123&r=1"
 
 
 async def test_find_by_topic_code_falls_back_to_newest_paused(db_pool):

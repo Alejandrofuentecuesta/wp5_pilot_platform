@@ -23,6 +23,8 @@ interface StepExperimentProps {
 export const NETQUEST_TOPIC_CODES: { value: string; label: string }[] = [
   { value: "1", label: "1 — Immigration" },
   { value: "2", label: "2 — Climate change" },
+  { value: "3", label: "3 — Immigration (18–75 study)" },
+  { value: "4", label: "4 — Climate change (18–75 study)" },
 ]
 
 export function topicCodeLabel(code: string | null | undefined): string {

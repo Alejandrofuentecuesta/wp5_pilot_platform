@@ -302,8 +302,10 @@ def validate_experimental_config(
     return out
 
 
-# Agreed with NetQuest/UB: e=1 immigration, e=2 climate change.
-NETQUEST_TOPIC_CODES = ("1", "2")
+# Agreed with NetQuest/UB: e=1 immigration, e=2 climate change; e=3
+# immigration, e=4 climate change for a second panel study. Each code routes
+# to its own experiment, which holds that study's return URL.
+NETQUEST_TOPIC_CODES = ("1", "2", "3", "4")
 
 SAFETY_TRANSPORTS = ("openai_chat", "anthropic_messages")
 # Llama Guard settings saved before the switch to gpt-oss-safeguard. They are

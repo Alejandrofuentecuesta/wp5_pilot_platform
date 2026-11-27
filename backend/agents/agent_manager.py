@@ -29,12 +29,19 @@ class AgentManager:
         session_active=None,
         turn_lock=None,
         task_registry=None,
+        on_message_shown=None,
+        persist_filter=None,
     ) -> None:
         self.state = state
         self.orchestrator = orchestrator
         self.logger = logger
         self.session_id = session_id
         self.experiment_id = experiment_id
+        # Called once per agent message that reaches the room (including a
+        # withheld message released by a reviewer). The only place agent text
+        # is shown, so the session's silence clock hangs off it. Likes are not
+        # messages and do not count.
+        self.on_message_shown = on_message_shown
         # The safety gate. Every agent message is screened here before it is
         # added to state, persisted or broadcast; this is the only route by
         # which agent text reaches the participant.
@@ -45,6 +52,10 @@ class AgentManager:
         self.session_active = session_active
         self.turn_lock = turn_lock
         self.task_registry = task_registry
+        # The session's personal-data filter (``utils.personal_data_filter``):
+        # applied to what is written to the database, never to the message
+        # shown in the room.
+        self.persist_filter = persist_filter
 
     async def _handle_message(self, result: TurnResult, *, skip_safety: bool = False) -> None:
         """Screen, persist and broadcast a generated agent message."""
@@ -80,6 +91,14 @@ class AgentManager:
         })
         if isinstance(message.metadata, dict) and message.metadata.get("stance_confidence") is not None:
             metadata["stance_confidence"] = message.metadata["stance_confidence"]
+        stored_content = message.content
+        stored_quoted_text = message.quoted_text
+        stored_rationale = message.classification_rationale
+        if self.persist_filter is not None and self.persist_filter.active:
+            stored_content = self.persist_filter.apply(stored_content)
+            stored_quoted_text = self.persist_filter.apply(stored_quoted_text)
+            stored_rationale = self.persist_filter.apply(stored_rationale)
+            metadata = self.persist_filter.apply(metadata)
         try:
             pool = db_conn.get_pool()
             await message_repo.insert_message(
@@ -88,15 +107,15 @@ class AgentManager:
                 session_id=self.session_id,
                 experiment_id=self.experiment_id,
                 sender=message.sender,
-                content=message.content,
+                content=stored_content,
                 sent_at=message.timestamp,
                 reply_to=message.reply_to,
-                quoted_text=message.quoted_text,
+                quoted_text=stored_quoted_text,
                 mentions=message.mentions,
                 is_incivil=message.is_incivil,
                 is_like_minded=message.is_like_minded,
                 inferred_participant_stance=message.inferred_participant_stance,
-                classification_rationale=message.classification_rationale,
+                classification_rationale=stored_rationale,
                 metadata=metadata,
             )
         except Exception as exc:
@@ -122,6 +141,12 @@ class AgentManager:
             await redis_client.publish_event(r, self.session_id, message.to_dict())
         except Exception as exc:
             self.logger.log_error("publish_agent_message", str(exc))
+
+        if self.on_message_shown is not None:
+            try:
+                self.on_message_shown()
+            except Exception as exc:
+                self.logger.log_error("on_message_shown", str(exc))
 
     async def _auto_resolve_withheld(self, original: Message, outcome) -> None:
         """Close an unreviewed held turn as concern after two minutes."""

@@ -361,3 +361,65 @@ async def test_get_experiment_full_row(db_pool):
     assert row["description"] == "my desc"
     assert row["config"]["simulation"]["num_agents"] == 2
     assert row["created_at"] is not None
+
+
+# ── Topic-code routing queries ───────────────────────────────────────────────
+
+async def _save_coded(db_pool, experiment_id, code, *, paused, synthetic=False):
+    config = copy.deepcopy(FULL_CONFIG)
+    config["experimental"]["netquest_topic_code"] = code
+    if synthetic:
+        config["synthetic"] = {"batch_id": "b"}
+    await config_repo.save_experiment_config(db_pool, experiment_id, config)
+    await config_repo.set_paused(db_pool, experiment_id, paused)
+
+
+async def test_find_by_topic_code_prefers_the_live_experiment(db_pool):
+    await _save_coded(db_pool, "imm_old", "1", paused=True)
+    await _save_coded(db_pool, "imm_live", "1", paused=False)
+    await _save_coded(db_pool, "imm_newer_paused", "1", paused=True)
+    await _save_coded(db_pool, "climate_live", "2", paused=False)
+
+    assert await config_repo.find_experiment_by_topic_code(db_pool, "1") == "imm_live"
+    assert await config_repo.find_experiment_by_topic_code(db_pool, "2") == "climate_live"
+
+
+async def test_find_by_topic_code_falls_back_to_newest_paused(db_pool):
+    """No live experiment with the code: the newest paused one is returned,
+    so the arrival is told the study is closed rather than the link invalid."""
+    await _save_coded(db_pool, "imm_old", "1", paused=True)
+    await _save_coded(db_pool, "imm_new", "1", paused=True)
+
+    assert await config_repo.find_experiment_by_topic_code(db_pool, "1") == "imm_new"
+    assert await config_repo.find_experiment_by_topic_code(db_pool, "2") is None
+
+
+async def test_find_by_topic_code_ignores_synthetic_and_uncoded(db_pool):
+    await _save_coded(db_pool, "synthetic-x", "1", paused=False, synthetic=True)
+    await _save_coded(db_pool, "internal", None, paused=False)
+
+    assert await config_repo.find_experiment_by_topic_code(db_pool, "1") is None
+
+
+async def test_find_live_experiment_with_code_excludes_target_and_paused(db_pool):
+    await _save_coded(db_pool, "imm_a", "1", paused=False)
+    await _save_coded(db_pool, "imm_b", "1", paused=True)
+    await _save_coded(db_pool, "imm_c", "1", paused=False)
+
+    assert await config_repo.find_live_experiment_with_code(
+        db_pool, "1", excluding_experiment_id="imm_c") == "imm_a"
+    assert await config_repo.find_live_experiment_with_code(
+        db_pool, "1", excluding_experiment_id="imm_a") == "imm_c"
+    await config_repo.set_paused(db_pool, "imm_a", True)
+    assert await config_repo.find_live_experiment_with_code(
+        db_pool, "1", excluding_experiment_id="imm_c") is None
+
+
+async def test_newest_unpaused_experiment_id(db_pool):
+    assert await config_repo.newest_unpaused_experiment_id(db_pool) is None
+    await _save_coded(db_pool, "first", "1", paused=False)
+    await _save_coded(db_pool, "second", "2", paused=False)
+    await _save_coded(db_pool, "third_paused", None, paused=True)
+    await _save_coded(db_pool, "synthetic-y", None, paused=False, synthetic=True)
+
+    assert await config_repo.newest_unpaused_experiment_id(db_pool) == "second"
